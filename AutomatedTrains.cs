@@ -231,8 +231,12 @@ namespace Oxide.Plugins
 
             private static readonly Dictionary<string, Quaternion> StationRotations = new Dictionary<string, Quaternion>()
             {
+                ["station-sn-0"] = Quaternion.Euler(0, 180, 0),
+                ["station-sn-1"] = Quaternion.identity,
                 ["station-sn-2"] = Quaternion.Euler(0, 180, 0),
                 ["station-sn-3"] = Quaternion.identity,
+                ["station-we-0"] = Quaternion.Euler(0, 90, 0),
+                ["station-we-1"] = Quaternion.Euler(0, -90, 0),
                 ["station-we-2"] = Quaternion.Euler(0, 90, 0),
                 ["station-we-3"] = Quaternion.Euler(0, -90, 0),
             };
