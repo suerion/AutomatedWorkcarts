@@ -12,13 +12,13 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("Automated Trains", "WhiteThunder", "0.1.0")]
-    [Description("Spawns train conductor NPCs that drive trains between stations.")]
-    internal class AutomatedTrains : CovalencePlugin
+    [Info("Automated Workcarts", "WhiteThunder", "0.1.0")]
+    [Description("Spawns conductor NPCs that drive workcarts between stations.")]
+    internal class AutomatedWorkcarts : CovalencePlugin
     {
         #region Fields
 
-        private static AutomatedTrains _pluginInstance;
+        private static AutomatedWorkcarts _pluginInstance;
         private static Configuration _pluginConfig;
 
         private const string PlayerPrefab = "assets/prefabs/player/player.prefab";
