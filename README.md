@@ -22,8 +22,8 @@
     - `aw.addtrigger <track selection>` -- Adds a trigger that only affects track selection.
 - `aw.updatetrigger <id> <speed> <track selection>` -- Updates the speed and track selection of the specified trigger.
   - Both `<speed>` and `<track selection>` are optional, but at least one must be specified.
-    - `aw.updatetrigger <id> <speed>` -- Update only the speed of the trigger.
-    - `aw.updatetrigger <id> <track selection>` -- Update only the track selection of the trigger.
+    - `aw.updatetrigger <id> <speed>` -- Updates only the speed of the trigger.
+    - `aw.updatetrigger <id> <track selection>` -- Updates only the track selection of the trigger.
 - `aw.removetrigger <id>` -- Removes a trigger by id.
 - `aw.showtriggers` -- Shows all triggers, including id, speed and track selection.
   - You must be an admin to see them.
@@ -46,8 +46,8 @@ The following command aliases are also available:
 ```
 
 - `TimeAtStation` -- Number of seconds that trains should wait after stopping.
-  - For custom triggers, the timer starts as soon as the speed changes to zero.
-- `AutoDetectStations` (`true` or `false`) -- While `true`, the plugin will auto detect vanilla train stations and add triggers for them, causing automated workcarts to stop at them for the configured `TimeAtStation`.
+  - For custom triggers, the timer starts as soon as the workcart enters a trigger with speed `Zero`, not when the workcart actually stops.
+- `AutoDetectStations` (`true` or `false`) -- While `true`, the plugin will auto detect vanilla train stations and add triggers to them, causing automated workcarts to stop at them for the configured `TimeAtStation`.
   - Note: These triggers cannot be customized.
 - `DefaultSpeed` -- Default speed to use when a workcart starts being automated.
   - Basically this applies when the plugin loads, when toggling on with `aw.toggle`, or when a workcart spawns.
