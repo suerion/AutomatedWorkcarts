@@ -1374,7 +1374,6 @@ namespace Oxide.Plugins
         private class Lang
         {
             public const string ErrorNoPermission = "Error.NoPermission";
-            public const string ErrorNoWorkcartFound = "Error.NoWorkcartFound";
             public const string ErrorNoTriggers = "Error.NoTriggers";
             public const string ErrorTriggerNotFound = "Error.TriggerNotFound";
             public const string ErrorNoTrackFound = "Error.ErrorNoTrackFound";
@@ -1398,7 +1397,6 @@ namespace Oxide.Plugins
             lang.RegisterMessages(new Dictionary<string, string>
             {
                 [Lang.ErrorNoPermission] = "You don't have permission to do that.",
-                [Lang.ErrorNoWorkcartFound] = "Error: You must be on a workcart to do that.",
                 [Lang.ErrorNoTriggers] = "There are no workcart triggers on this map.",
                 [Lang.ErrorTriggerNotFound] = "Error: Trigger id #{0} not found.",
                 [Lang.ErrorNoTrackFound] = "Error: No track found nearby.",
