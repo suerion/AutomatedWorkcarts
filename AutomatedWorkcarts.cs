@@ -3,16 +3,17 @@ using Newtonsoft.Json.Linq;
 using Newtonsoft.Json.Serialization;
 using Oxide.Core;
 using Oxide.Core.Libraries.Covalence;
-using Oxide.Game.Rust.Cui;
 using Rust;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
+using static TrainEngine;
+using static TrainTrackSpline;
 
 namespace Oxide.Plugins
 {
-    [Info("Automated Workcarts", "WhiteThunder", "0.1.0")]
+    [Info("Automated Workcarts", "WhiteThunder", "0.2.0")]
     [Description("Spawns conductor NPCs that drive workcarts between stations.")]
     internal class AutomatedWorkcarts : CovalencePlugin
     {
@@ -20,12 +21,20 @@ namespace Oxide.Plugins
 
         private static AutomatedWorkcarts _pluginInstance;
         private static Configuration _pluginConfig;
+        private static StoredData _pluginData;
+
+        private const string PermissionManageStops = "automatedworkcarts.managetriggers";
 
         private const string PlayerPrefab = "assets/prefabs/player/player.prefab";
         private const string VendingMachineMapMarkerPrefab = "assets/prefabs/deployable/vendingmachine/vending_mapmarker.prefab";
         private const string DroneMapMarkerPrefab = "assets/prefabs/misc/marketplace/deliverydronemarker.prefab";
 
-        private List<TrainStation> _trainStations = new List<TrainStation>();
+        private static readonly Vector3 TriggerOffsetFromWorkcart = new Vector3(0, 1, 0);
+
+        private TrainStationManager _trainStationManager = new TrainStationManager();
+        private CustomTriggerManager _customTriggerManager = new CustomTriggerManager();
+
+        private bool _enabled = true;
 
         #endregion
 
@@ -34,34 +43,42 @@ namespace Oxide.Plugins
         private void Init()
         {
             _pluginInstance = this;
+            _pluginData = StoredData.Load();
+
+            permission.RegisterPermission(PermissionManageStops, this);
+
             Unsubscribe(nameof(OnEntitySpawned));
         }
 
         private void Unload()
         {
-            DestroyStations();
+            _trainStationManager.DestroyAll();
+            _customTriggerManager.DestroyAll();
+
             TrainController.DestroyAll();
-            _pluginInstance = null;
+
+            _pluginData = null;
             _pluginConfig = null;
+            _pluginInstance = null;
         }
 
         private void OnServerInitialized()
         {
-            CreateStations();
+            _customTriggerManager.CreateAll();
 
-            foreach (var entity in BaseNetworkable.serverEntities)
-            {
-                var workcart = entity as TrainEngine;
-                if (workcart != null)
-                    workcart.gameObject.AddComponent<TrainController>();
-            }
+            if (_pluginConfig.AutoDetectStations)
+                _trainStationManager.CreateAll();
+
+            if (_enabled)
+                TrainController.CreateAll();
 
             Subscribe(nameof(OnEntitySpawned));
         }
 
         private void OnEntitySpawned(TrainEngine workcart)
         {
-            TryAddTrainController(workcart);
+            if (_enabled)
+                TryAddTrainController(workcart);
         }
 
         private bool? OnEntityTakeDamage(TrainEngine workcart)
@@ -103,6 +120,18 @@ namespace Oxide.Plugins
             return null;
         }
 
+        private void OnEntityEnter(TriggerCustom trigger, TrainEngine workcart)
+        {
+            var trainController = workcart.GetComponent<TrainController>();
+            if (trainController == null)
+                return;
+
+            if (trigger.entityContents?.Contains(workcart) ?? false)
+                return;
+
+            trainController.HandleCustomTrigger(trigger.TriggerInfo);
+        }
+
         private void OnEntityEnter(TriggerStation trigger, TrainEngine workcart)
         {
             var trainController = workcart.GetComponent<TrainController>();
@@ -131,6 +160,162 @@ namespace Oxide.Plugins
                 return;
 
             trigger.StationTrack.OnTrainDepart(trainController);
+        }
+
+        #endregion
+
+        #region Commands
+
+        [Command("aw.toggle")]
+        private void CommandEnable(IPlayer player)
+        {
+            if (!player.IsServer && !player.HasPermission(PermissionManageStops))
+            {
+                ReplyToPlayer(player, Lang.ErrorNoPermission);
+                return;
+            }
+
+            _enabled = !_enabled;
+
+            if (_enabled)
+                TrainController.CreateAll();
+            else
+                TrainController.DestroyAll();
+        }
+
+        [Command("aw.addtrigger", "awt.add")]
+        private void CommandAddTrigger(IPlayer player, string cmd, string[] args)
+        {
+            if (player.IsServer)
+                return;
+
+            if (!player.HasPermission(PermissionManageStops))
+            {
+                ReplyToPlayer(player, Lang.ErrorNoPermission);
+                return;
+            }
+
+            var basePlayer = player.Object as BasePlayer;
+
+            Vector3 trackPosition;
+            if (!TryGetTrackPosition(basePlayer.transform.position, 5, out trackPosition))
+            {
+                ReplyToPlayer(player, Lang.ErrorNoTrackFound);
+                return;
+            }
+
+            var triggerInfo = new CustomTriggerInfo() { Position = trackPosition };
+
+            if (args.Length == 0)
+            {
+                triggerInfo.EngineSpeed = EngineSpeeds.Zero.ToString();
+            }
+            else
+            {
+                foreach (var arg in args)
+                {
+                    if (!TryParseArg(player, cmd, arg, triggerInfo, Lang.AddSyntax))
+                        return;
+                }
+            }
+
+            _customTriggerManager.AddTrigger(triggerInfo);
+            _customTriggerManager.ShowAllToPlayer(basePlayer);
+            ReplyToPlayer(player, Lang.AddSuccess, triggerInfo.Id);
+        }
+
+        [Command("aw.updatetrigger", "awt.update")]
+        private void CommandUpdateTrigger(IPlayer player, string cmd, string[] args)
+        {
+            if (player.IsServer)
+                return;
+
+            if (!player.HasPermission(PermissionManageStops))
+            {
+                ReplyToPlayer(player, Lang.ErrorNoPermission);
+                return;
+            }
+
+            int triggerId;
+            if (args.Length < 2 || !int.TryParse(args[0], out triggerId))
+            {
+                ReplyToPlayer(player, Lang.UpdateSyntax, cmd, GetEnumOptions<EngineSpeeds>(), GetEnumOptions<TrackSelection>());
+                return;
+            }
+
+            var basePlayer = player.Object as BasePlayer;
+            var triggerInfo = _customTriggerManager.FindTrigger(triggerId);
+            if (triggerInfo == null)
+            {
+                ReplyToPlayer(player, Lang.ErrorTriggerNotFound, triggerId);
+                _customTriggerManager.ShowAllToPlayer(player.Object as BasePlayer);
+                return;
+            }
+
+            foreach (var arg in args.Skip(1))
+            {
+                if (!TryParseArg(player, cmd, arg, triggerInfo, Lang.UpdateSyntax))
+                    return;
+            }
+
+            _customTriggerManager.UpdateTrigger(triggerInfo);
+            _customTriggerManager.ShowAllToPlayer(basePlayer);
+            ReplyToPlayer(player, Lang.UpdateSuccess, triggerInfo.Id);
+        }
+
+        [Command("aw.removetrigger", "awt.remove")]
+        private void CommandRemoveTrigger(IPlayer player, string cmd, string[] args)
+        {
+            if (player.IsServer)
+                return;
+
+            if (!player.HasPermission(PermissionManageStops))
+            {
+                ReplyToPlayer(player, Lang.ErrorNoPermission);
+                return;
+            }
+
+            int triggerId;
+            if (args.Length < 1 || !int.TryParse(args[0], out triggerId))
+            {
+                ReplyToPlayer(player, Lang.RemoveSyntax, cmd);
+                return;
+            }
+
+            var basePlayer = player.Object as BasePlayer;
+            var triggerInfo = _customTriggerManager.FindTrigger(triggerId);
+            if (triggerInfo == null)
+            {
+                ReplyToPlayer(player, Lang.ErrorTriggerNotFound, triggerId);
+                _customTriggerManager.ShowAllToPlayer(basePlayer);
+                return;
+            }
+
+            _customTriggerManager.RemoveTrigger(triggerInfo);
+            _customTriggerManager.ShowAllToPlayer(basePlayer);
+            ReplyToPlayer(player, Lang.RemoveSuccess, triggerId);
+        }
+
+        [Command("aw.showtriggers")]
+        private void CommandShowStops(IPlayer player, string cmd, string[] args)
+        {
+            if (player.IsServer)
+                return;
+
+            if (!player.HasPermission(PermissionManageStops))
+            {
+                ReplyToPlayer(player, Lang.ErrorNoPermission);
+                return;
+            }
+
+            var mapName = GetMapName();
+            if (_pluginData.CustomTriggers.Count == 0)
+            {
+                ReplyToPlayer(player, Lang.ErrorNoTriggers);
+                return;
+            }
+
+            _customTriggerManager.ShowAllToPlayer(player.Object as BasePlayer);
         }
 
         #endregion
@@ -174,6 +359,9 @@ namespace Oxide.Plugins
             return shortestDistance;
         }
 
+        private static string GetMapName() =>
+            World.SaveFileName.Substring(0, World.SaveFileName.LastIndexOf("."));
+
         private static string GetShortName(string prefabName)
         {
             var slashIndex = prefabName.LastIndexOf("/");
@@ -181,31 +369,390 @@ namespace Oxide.Plugins
             return baseName.Replace(".prefab", "");
         }
 
-        private void CreateStations()
+        private static bool TryParseEngineSpeed(string speedName, out EngineSpeeds engineSpeed)
         {
-            foreach (var dungeon in TerrainMeta.Path.DungeonCells)
-            {
-                if (dungeon == null)
-                    continue;
+            if (Enum.TryParse<EngineSpeeds>(speedName, true, out engineSpeed))
+                return true;
 
-                TrainStation track1, track2;
-                if (TrainStation.TryCreateStationTracks(dungeon, out track1, out track2))
-                {
-                    _trainStations.Add(track1);
-                    _trainStations.Add(track2);
-                }
-            }
+            engineSpeed = EngineSpeeds.Zero;
+            _pluginInstance.LogError($"Unrecognized engine speed: {speedName}");
+            return false;
         }
 
-        private void DestroyStations()
+        private static bool TryParseTrackSelection(string selectionName, out TrackSelection trackSelection)
         {
-            foreach (var station in _trainStations)
-                station.Destroy();
+            if (Enum.TryParse<TrackSelection>(selectionName, true, out trackSelection))
+                return true;
+
+            _pluginInstance.LogError($"Unrecognized track selection: {selectionName}");
+            trackSelection = TrackSelection.Default;
+            return false;
+        }
+
+        private static string GetEnumOptions<T>()
+        {
+            var names = Enum.GetNames(typeof(T));
+
+            for (var i = 0; i < names.Length; i++)
+                names[i] = $"<color=#fd4>{names[i]}</color>";
+
+            return string.Join(" | ", names);
+        }
+
+        private static bool TryGetTrackPosition(Vector3 position, float maxDistance, out Vector3 trackPosition)
+        {
+            TrainTrackSpline spline;
+            float distanceResult;
+            if (TrainTrackSpline.TryFindTrackNearby(position, maxDistance, out spline, out distanceResult))
+            {
+                trackPosition = spline.GetPosition(distanceResult);
+                return true;
+            }
+
+            trackPosition = Vector3.zero;
+            return false;
+        }
+
+        private bool TryParseArg(IPlayer player, string cmd, string arg, CustomTriggerInfo triggerInfo, string errorMessageName)
+        {
+            EngineSpeeds engineSpeed;
+            if (Enum.TryParse<EngineSpeeds>(arg, true, out engineSpeed))
+            {
+                triggerInfo.EngineSpeed = engineSpeed.ToString();
+                return true;
+            }
+
+            TrackSelection trackSelection;
+            if (Enum.TryParse<TrackSelection>(arg, true, out trackSelection))
+            {
+                triggerInfo.TrackSelection = trackSelection.ToString();
+                return true;
+            }
+
+            ReplyToPlayer(player, errorMessageName, cmd, GetEnumOptions<EngineSpeeds>(), GetEnumOptions<TrackSelection>());
+            return false;
         }
 
         #endregion
 
-        #region Classes
+        #region Custom Triggers
+
+        private class TriggerCustom : TriggerBase
+        {
+            public CustomTriggerInfo TriggerInfo;
+        }
+
+        private enum SpeedDirection { Forward, Reverse, None }
+
+        private class CustomTriggerInfo
+        {
+            [JsonProperty("Id")]
+            public int Id;
+
+            [JsonProperty("Position")]
+            public Vector3 Position;
+
+            [JsonProperty("EngineSpeed", DefaultValueHandling = DefaultValueHandling.Ignore)]
+            public string EngineSpeed;
+
+            [JsonProperty("TrackSelection", DefaultValueHandling = DefaultValueHandling.Ignore)]
+            public string TrackSelection;
+
+            private EngineSpeeds? _engineSpeed;
+            public bool TryGetEngineSpeed(out EngineSpeeds engineSpeed)
+            {
+                engineSpeed = EngineSpeeds.Zero;
+
+                if (string.IsNullOrEmpty(EngineSpeed))
+                    return false;
+
+                if (_engineSpeed != null)
+                {
+                    engineSpeed = (EngineSpeeds)_engineSpeed;
+                    return true;
+                }
+
+                if (TryParseEngineSpeed(EngineSpeed, out engineSpeed))
+                {
+                    _engineSpeed = engineSpeed;
+                    return true;
+                }
+
+                return false;
+            }
+
+            private TrackSelection? _trackSelection;
+            public bool TryGetTrackSelection(out TrackSelection trackSelection)
+            {
+                trackSelection = TrainTrackSpline.TrackSelection.Default;
+
+                if (string.IsNullOrEmpty(TrackSelection))
+                    return false;
+
+                if (_trackSelection != null)
+                {
+                    trackSelection = (TrackSelection)_trackSelection;
+                    return true;
+                }
+
+                if (TryParseTrackSelection(TrackSelection, out trackSelection))
+                {
+                    _trackSelection = trackSelection;
+                    return true;
+                }
+
+                return false;
+            }
+
+            public void InvalidateCache()
+            {
+                _engineSpeed = null;
+                _trackSelection = null;
+            }
+
+            public Color GetColor()
+            {
+                EngineSpeeds engineSpeed;
+                if (!TryGetEngineSpeed(out engineSpeed))
+                {
+                    TrackSelection trackSelection;
+                    if (TryGetTrackSelection(out trackSelection))
+                        return Color.magenta;
+                    else
+                        return Color.white;
+                }
+
+                switch (engineSpeed)
+                {
+                    case EngineSpeeds.Fwd_Hi:
+                        return Color.HSVToRGB(1 / 3f, 1, 1);
+                    case EngineSpeeds.Fwd_Med:
+                        return Color.HSVToRGB(1 / 3f, 0.75f, 1);
+                    case EngineSpeeds.Fwd_Lo:
+                        return Color.HSVToRGB(1 / 3f, 0.5f, 1);
+
+                    case EngineSpeeds.Rev_Hi:
+                        return Color.HSVToRGB(0, 1, 1);
+                    case EngineSpeeds.Rev_Med:
+                        return Color.HSVToRGB(0, 0.75f, 1);
+                    case EngineSpeeds.Rev_Lo:
+                        return Color.HSVToRGB(0, 0.5f, 1);
+
+                    default:
+                        return Color.white;
+                }
+            }
+
+            public SpeedDirection GetDirection(out int magnitude)
+            {
+                EngineSpeeds engineSpeed;
+                if (!TryGetEngineSpeed(out engineSpeed))
+                {
+                    magnitude = 0;
+                    return SpeedDirection.None;
+                }
+
+                switch (engineSpeed)
+                {
+                    case EngineSpeeds.Fwd_Hi:
+                        magnitude = 3;
+                        return SpeedDirection.Forward;
+
+                    case EngineSpeeds.Fwd_Med:
+                        magnitude = 2;
+                        return SpeedDirection.Forward;
+
+                    case EngineSpeeds.Fwd_Lo:
+                        magnitude = 1;
+                        return SpeedDirection.Forward;
+
+                    case EngineSpeeds.Rev_Hi:
+                        magnitude = 3;
+                        return SpeedDirection.Reverse;
+
+                    case EngineSpeeds.Rev_Med:
+                        magnitude = 2;
+                        return SpeedDirection.Reverse;
+
+                    case EngineSpeeds.Rev_Lo:
+                        magnitude = 1;
+                        return SpeedDirection.Reverse;
+
+                    default:
+                        magnitude = 0;
+                        return SpeedDirection.None;
+                }
+            }
+        }
+
+        private class CustomTriggerWrapper
+        {
+            private CustomTriggerInfo _triggerInfo;
+            private GameObject _gameObject;
+
+            public CustomTriggerWrapper(CustomTriggerInfo triggerInfo)
+            {
+                _triggerInfo = triggerInfo;
+                CreateTrigger();
+            }
+
+            private void CreateTrigger()
+            {
+                _gameObject = new GameObject();
+                _gameObject.transform.position = _triggerInfo.Position + TriggerOffsetFromWorkcart;
+
+                var sphereCollider = _gameObject.AddComponent<SphereCollider>();
+                sphereCollider.isTrigger = true;
+                sphereCollider.radius = 1;
+                sphereCollider.gameObject.layer = 6;
+
+                var trigger = _gameObject.AddComponent<TriggerCustom>();
+                trigger.TriggerInfo = _triggerInfo;
+                trigger.interestLayers = Layers.Mask.Vehicle_World;
+            }
+
+            public void Destroy()
+            {
+                UnityEngine.Object.Destroy(_gameObject);
+            }
+        }
+
+        private class CustomTriggerManager
+        {
+            private const float TriggerDisplayDuration = 1f;
+            private const float TriggerDisplayRadius = 1f;
+
+            private Dictionary<CustomTriggerInfo, CustomTriggerWrapper> _customTriggers = new Dictionary<CustomTriggerInfo, CustomTriggerWrapper>();
+            private Dictionary<ulong, Timer> _drawTimers = new Dictionary<ulong, Timer>();
+
+            private int GetHighestTriggerId()
+            {
+                var highestTriggerId = 0;
+
+                foreach (var triggerInfo in _customTriggers.Keys)
+                    highestTriggerId = Math.Max(highestTriggerId, triggerInfo.Id);
+
+                return highestTriggerId;
+            }
+
+            public CustomTriggerInfo FindTrigger(int triggerId)
+            {
+                foreach (var triggerInfo in _customTriggers.Keys)
+                {
+                    if (triggerInfo.Id == triggerId)
+                        return triggerInfo;
+                }
+
+                return null;
+            }
+
+            public void AddTrigger(CustomTriggerInfo triggerInfo)
+            {
+                if (triggerInfo.Id == 0)
+                    triggerInfo.Id = GetHighestTriggerId() + 1;
+
+                _customTriggers[triggerInfo] = new CustomTriggerWrapper(triggerInfo);
+                _pluginData.AddTrigger(triggerInfo);
+            }
+
+            public void UpdateTrigger(CustomTriggerInfo triggerInfo)
+            {
+                triggerInfo.InvalidateCache();
+                _pluginData.Save();
+            }
+
+            public void RemoveTrigger(CustomTriggerInfo triggerInfo)
+            {
+                CustomTriggerWrapper customTrigger;
+                if (_customTriggers.TryGetValue(triggerInfo, out customTrigger))
+                {
+                    customTrigger.Destroy();
+                    _customTriggers.Remove(triggerInfo);
+                }
+
+                _pluginData.RemoveTrigger(triggerInfo);
+            }
+
+            public void CreateAll()
+            {
+                foreach (var triggerInfo in _pluginData.CustomTriggers)
+                    _customTriggers[triggerInfo] = new CustomTriggerWrapper(triggerInfo);
+            }
+
+            public void DestroyAll()
+            {
+                foreach (var customTrigger in _customTriggers.Values)
+                    customTrigger.Destroy();
+            }
+
+            public void ShowAllToPlayer(BasePlayer player)
+            {
+                foreach (var triggerInfo in _customTriggers.Keys)
+                    ShowTrigger(player, triggerInfo);
+
+                Timer existingTimer;
+                if (_drawTimers.TryGetValue(player.userID, out existingTimer))
+                    existingTimer.Destroy();
+
+                _drawTimers[player.userID] = _pluginInstance.timer.Repeat(TriggerDisplayDuration - 0.1f, 60, () =>
+                {
+                    foreach (var triggerInfo in _customTriggers.Keys)
+                        ShowTrigger(player, triggerInfo);
+                });
+            }
+
+            private static void ShowTrigger(BasePlayer player, CustomTriggerInfo triggerInfo)
+            {
+                var color = triggerInfo.GetColor();
+
+                var spherePosition = triggerInfo.Position + TriggerOffsetFromWorkcart;
+                player.SendConsoleCommand("ddraw.sphere", TriggerDisplayDuration, color, spherePosition, TriggerDisplayRadius);
+
+                var infoLines = new List<string>() { _pluginInstance.GetMessage(player, Lang.InfoTrigger, triggerInfo.Id) };
+
+                EngineSpeeds engineSpeed;
+                if (triggerInfo.TryGetEngineSpeed(out engineSpeed))
+                    infoLines.Add(_pluginInstance.GetMessage(player, Lang.InfoTriggerSpeed, engineSpeed));
+
+                TrackSelection trackSelection;
+                if (triggerInfo.TryGetTrackSelection(out trackSelection))
+                    infoLines.Add(_pluginInstance.GetMessage(player, Lang.InfoTriggerTrackSelection, trackSelection));
+
+                var textPosition = triggerInfo.Position + Vector3.up * 2.5f;
+                player.SendConsoleCommand("ddraw.text", TriggerDisplayDuration, color, textPosition, string.Join("\n", infoLines));
+            }
+        }
+
+        #endregion
+
+        #region Train Stations
+
+        private class TrainStationManager
+        {
+            private List<TrainStation> _trainStations = new List<TrainStation>();
+
+            public void CreateAll()
+            {
+                foreach (var dungeon in TerrainMeta.Path.DungeonCells)
+                {
+                    if (dungeon == null)
+                        continue;
+
+                    TrainStation track1, track2;
+                    if (TrainStation.TryCreateStationTracks(dungeon, out track1, out track2))
+                    {
+                        _trainStations.Add(track1);
+                        _trainStations.Add(track2);
+                    }
+                }
+            }
+
+            public void DestroyAll()
+            {
+                foreach (var station in _trainStations)
+                    station.Destroy();
+            }
+        }
 
         private class TriggerStation : TriggerBase
         {
@@ -339,6 +886,10 @@ namespace Oxide.Plugins
             }
         }
 
+        #endregion
+
+        #region Train Controller
+
         private class TrainController : FacepunchBehaviour
         {
             private enum TrainState
@@ -347,6 +898,16 @@ namespace Oxide.Plugins
                 EnteringStation,
                 StoppedAtStation,
                 LeavingStation
+            }
+
+            public static void CreateAll()
+            {
+                foreach (var entity in BaseNetworkable.serverEntities)
+                {
+                    var workcart = entity as TrainEngine;
+                    if (workcart != null)
+                        TryAddTrainController(workcart);
+                }
             }
 
             public static void DestroyAll()
@@ -382,7 +943,32 @@ namespace Oxide.Plugins
             }
 
             private TrainState _trainState = TrainState.BetweenStations;
-            private TrainEngine.EngineSpeeds _nextSpeed;
+            private EngineSpeeds _nextSpeed;
+
+            public void HandleCustomTrigger(CustomTriggerInfo triggerInfo)
+            {
+                EngineSpeeds engineSpeed;
+                if (triggerInfo.TryGetEngineSpeed(out engineSpeed))
+                {
+                    SetThrottle(engineSpeed);
+
+                    if (engineSpeed == EngineSpeeds.Zero)
+                        Invoke(ScheduledDepartureForCustomTrigger, _pluginConfig.TimeAtStation);
+                    else
+                        CancelInvoke(ScheduledDepartureForCustomTrigger);
+                }
+
+                TrackSelection trackSelection;
+                if (triggerInfo.TryGetTrackSelection(out trackSelection))
+                {
+                    _workcart.SetTrackSelection(trackSelection);
+                }
+            }
+
+            public void ScheduledDepartureForCustomTrigger()
+            {
+                SetThrottle(_pluginConfig.GetDepartureSpeed());
+            }
 
             public void ArriveAtStation()
             {
@@ -392,9 +978,9 @@ namespace Oxide.Plugins
                 _trainState = TrainState.EnteringStation;
 
                 if (_workcart.TrackSpeed > 15)
-                    BrakeToSpeed(TrainEngine.EngineSpeeds.Fwd_Med, 1.7f);
+                    BrakeToSpeed(EngineSpeeds.Fwd_Med, 1.7f);
                 else
-                    SetThrottle(TrainEngine.EngineSpeeds.Fwd_Med);
+                    SetThrottle(EngineSpeeds.Fwd_Med);
             }
 
             public void StopAtStation(float stayDuration)
@@ -405,7 +991,7 @@ namespace Oxide.Plugins
 
                 _trainState = TrainState.StoppedAtStation;
 
-                BrakeToSpeed(TrainEngine.EngineSpeeds.Zero, 1.5f);
+                BrakeToSpeed(EngineSpeeds.Zero, 1.5f);
                 Invoke(ScheduledDeparture, stayDuration);
             }
 
@@ -420,7 +1006,7 @@ namespace Oxide.Plugins
                     return false;
 
                 _trainState = TrainState.LeavingStation;
-                SetThrottle(TrainEngine.EngineSpeeds.Fwd_Med);
+                SetThrottle(_pluginConfig.GetDepartureSpeed());
 
                 CancelInvoke(ScheduledDeparture);
                 return true;
@@ -429,13 +1015,13 @@ namespace Oxide.Plugins
             public void LeaveStation()
             {
                 _trainState = TrainState.BetweenStations;
-                SetThrottle(TrainEngine.EngineSpeeds.Fwd_Hi);
+                SetThrottle(_pluginConfig.GetDefaultSpeed());
             }
 
             // TODO: Automatically figure out break duration for target speed.
-            public void BrakeToSpeed(TrainEngine.EngineSpeeds nextSpeed, float duration)
+            public void BrakeToSpeed(EngineSpeeds nextSpeed, float duration)
             {
-                _workcart.SetThrottle(TrainEngine.EngineSpeeds.Rev_Lo);
+                _workcart.SetThrottle(EngineSpeeds.Rev_Lo);
                 _nextSpeed = nextSpeed;
                 Invoke(ScheduledSpeedChange, duration);
             }
@@ -445,7 +1031,7 @@ namespace Oxide.Plugins
                 _workcart.SetThrottle(_nextSpeed);
             }
 
-            public void SetThrottle(TrainEngine.EngineSpeeds throttleSpeed)
+            public void SetThrottle(EngineSpeeds throttleSpeed)
             {
                 CancelInvoke(ScheduledSpeedChange);
                 _workcart.SetThrottle(throttleSpeed);
@@ -478,12 +1064,12 @@ namespace Oxide.Plugins
             private void StartTrain()
             {
                 var initialSpeed = _workcart.FrontTrackSection.isStation
-                    ? TrainEngine.EngineSpeeds.Fwd_Med
-                    : TrainEngine.EngineSpeeds.Fwd_Hi;
+                    ? _pluginConfig.GetDepartureSpeed()
+                    : _pluginConfig.GetDefaultSpeed();
 
                 _workcart.engineController.FinishStartingEngine();
                 SetThrottle(initialSpeed);
-                _workcart.SetTrackSelection(TrainTrackSpline.TrackSelection.Left);
+                _workcart.SetTrackSelection(_pluginConfig.GetDefaultTrackSelection());
             }
 
             private void AddOutfit()
@@ -550,12 +1136,110 @@ namespace Oxide.Plugins
 
         #endregion
 
+        #region Data
+
+        private class StoredData
+        {
+            [JsonProperty("CustomTriggers")]
+            public List<CustomTriggerInfo> CustomTriggers = new List<CustomTriggerInfo>();
+
+            public static string Filename => $"{_pluginInstance.Name}/{GetMapName()}";
+
+            public static StoredData Load()
+            {
+                if (Interface.Oxide.DataFileSystem.ExistsDatafile(Filename))
+                    return Interface.Oxide.DataFileSystem.ReadObject<StoredData>(Filename) ?? new StoredData();
+
+                return new StoredData();
+            }
+
+            public StoredData Save()
+            {
+                Interface.Oxide.DataFileSystem.WriteObject(Filename, this);
+                return this;
+            }
+
+            public void AddTrigger(CustomTriggerInfo customTrigger)
+            {
+                CustomTriggers.Add(customTrigger);
+                Save();
+            }
+
+            public void RemoveTrigger(CustomTriggerInfo triggerInfo)
+            {
+                CustomTriggers.Remove(triggerInfo);
+                Save();
+            }
+        }
+
+        #endregion
+
         #region Configuration
 
         private class Configuration : SerializableConfiguration
         {
             [JsonProperty("TimeAtStation")]
             public float TimeAtStation = 30;
+
+            [JsonProperty("AutoDetectStations")]
+            public bool AutoDetectStations = true;
+
+            [JsonProperty("DefaultSpeed")]
+            public string DefaultSpeed = EngineSpeeds.Fwd_Hi.ToString();
+
+            [JsonProperty("DepartureSpeed")]
+            public string DepartureSpeed = EngineSpeeds.Fwd_Lo.ToString();
+
+            [JsonProperty("DefaultTrackSelection")]
+            public string DefaultTrackSelection = TrackSelection.Left.ToString();
+
+            private EngineSpeeds? _defaultSpeed;
+            public EngineSpeeds GetDefaultSpeed()
+            {
+                if (_defaultSpeed != null)
+                    return (EngineSpeeds)_defaultSpeed;
+
+                EngineSpeeds engineSpeed;
+                if (TryParseEngineSpeed(DefaultSpeed, out engineSpeed))
+                {
+                    _defaultSpeed = engineSpeed;
+                    return engineSpeed;
+                }
+
+                return EngineSpeeds.Fwd_Hi;
+            }
+
+            private EngineSpeeds? _departureSpeed;
+            public EngineSpeeds GetDepartureSpeed()
+            {
+                if (_departureSpeed != null)
+                    return (EngineSpeeds)_departureSpeed;
+
+                EngineSpeeds engineSpeed;
+                if (TryParseEngineSpeed(DepartureSpeed, out engineSpeed))
+                {
+                    _departureSpeed = engineSpeed;
+                    return engineSpeed;
+                }
+
+                return EngineSpeeds.Fwd_Lo;
+            }
+
+            private TrackSelection? _defaultTrackSelection;
+            public TrackSelection GetDefaultTrackSelection()
+            {
+                if (_defaultTrackSelection != null)
+                    return (TrackSelection)_defaultTrackSelection;
+
+                TrackSelection trackSelection;
+                if (TryParseTrackSelection(DefaultTrackSelection, out trackSelection))
+                {
+                    _defaultTrackSelection = trackSelection;
+                    return trackSelection;
+                }
+
+                return TrackSelection.Left;
+            }
         }
 
         private Configuration GetDefaultConfig() => new Configuration();
@@ -663,6 +1347,75 @@ namespace Oxide.Plugins
         {
             Log($"Configuration changes saved to {Name}.json");
             Config.WriteObject(_pluginConfig, true);
+        }
+
+        #endregion
+
+        #region Localization
+
+        private void ReplyToPlayer(IPlayer player, string messageName, params object[] args) =>
+            player.Reply(string.Format(GetMessage(player, messageName), args));
+
+        private void ChatMessage(BasePlayer player, string messageName, params object[] args) =>
+            player.ChatMessage(string.Format(GetMessage(player.IPlayer, messageName), args));
+
+        private string GetMessage(BasePlayer player, string messageName, params object[] args) =>
+            GetMessage(player.UserIDString, messageName, args);
+
+        private string GetMessage(IPlayer player, string messageName, params object[] args) =>
+            GetMessage(player.Id, messageName, args);
+
+        private string GetMessage(string playerId, string messageName, params object[] args)
+        {
+            var message = lang.GetMessage(messageName, this, playerId);
+            return args.Length > 0 ? string.Format(message, args) : message;
+        }
+
+        private class Lang
+        {
+            public const string ErrorNoPermission = "Error.NoPermission";
+            public const string ErrorNoWorkcartFound = "Error.NoWorkcartFound";
+            public const string ErrorNoTriggers = "Error.NoTriggers";
+            public const string ErrorTriggerNotFound = "Error.TriggerNotFound";
+            public const string ErrorNoTrackFound = "Error.ErrorNoTrackFound";
+
+            public const string AddSyntax = "Add.Syntax";
+            public const string AddSuccess = "Add.Success";
+
+            public const string UpdateSyntax = "Update.Syntax";
+            public const string UpdateSuccess = "Update.Success";
+
+            public const string RemoveSyntax = "Remove.Syntax";
+            public const string RemoveSuccess = "Success.TriggerRemoved";
+
+            public const string InfoTrigger = "Info.Trigger";
+            public const string InfoTriggerSpeed = "Info.Trigger.Speed";
+            public const string InfoTriggerTrackSelection = "Info.Trigger.TrackSelection";
+        }
+
+        protected override void LoadDefaultMessages()
+        {
+            lang.RegisterMessages(new Dictionary<string, string>
+            {
+                [Lang.ErrorNoPermission] = "You don't have permission to do that.",
+                [Lang.ErrorNoWorkcartFound] = "Error: You must be on a workcart to do that.",
+                [Lang.ErrorNoTriggers] = "There are no workcart triggers on this map.",
+                [Lang.ErrorTriggerNotFound] = "Error: Trigger id #{0} not found.",
+                [Lang.ErrorNoTrackFound] = "Error: No track found nearby.",
+
+                [Lang.AddSyntax] = "Syntax: <color=#fd4>{0} <speed> <track selection></color>\nSpeeds: {1}\nTrack selections: {2}",
+                [Lang.AddSuccess] = "Successfully added trigger #{0}.",
+
+                [Lang.UpdateSyntax] = "Syntax: <color=#fd4>{0} <id> <speed> <track selection></color>\nSpeeds: {1}\nTrack selections: {2}",
+                [Lang.UpdateSuccess] = "Successfully updated trigger #{0}",
+
+                [Lang.RemoveSyntax] = "Syntax: <color=#fd4>{0} <id></color>",
+                [Lang.RemoveSuccess] = "Trigger #{0} successfully removed.",
+
+                [Lang.InfoTrigger] = "Workcart Trigger #{0}",
+                [Lang.InfoTriggerSpeed] = "Speed: {0}",
+                [Lang.InfoTriggerTrackSelection] = "Track selection: {0}",
+            }, this, "en");
         }
 
         #endregion
