@@ -69,9 +69,26 @@ The following command aliases are also available:
 - `"Left"`
 - `"Right"`
 
-## Future plans
+## Localization
 
-- Properly account for `DefaultSpeed` at vanilla train stations when `AutoDetectStations` is `true`. For now, it's recommended to use `"Fwd_Hi"` unless you are using only custom triggers.
+```json
+{
+  "Error.NoPermission": "You don't have permission to do that.",
+  "Error.NoWorkcartFound": "Error: You must be on a workcart to do that.",
+  "Error.NoTriggers": "There are no workcart triggers on this map.",
+  "Error.TriggerNotFound": "Error: Trigger id #{0} not found.",
+  "Error.ErrorNoTrackFound": "Error: No track found nearby.",
+  "Add.Syntax": "Syntax: <color=#fd4>{0} <speed> <track selection></color>\nSpeeds: {1}\nTrack selections: {2}",
+  "Add.Success": "Successfully added trigger #{0}.",
+  "Update.Syntax": "Syntax: <color=#fd4>{0} <id> <speed> <track selection></color>\nSpeeds: {1}\nTrack selections: {2}",
+  "Update.Success": "Successfully updated trigger #{0}",
+  "Remove.Syntax": "Syntax: <color=#fd4>{0} <id></color>",
+  "Success.TriggerRemoved": "Trigger #{0} successfully removed.",
+  "Info.Trigger": "Workcart Trigger #{0}",
+  "Info.Trigger.Speed": "Speed: {0}",
+  "Info.Trigger.TrackSelection": "Track selection: {0}"
+}
+```
 
 ## Developer Hooks
 
