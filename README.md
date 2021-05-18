@@ -6,13 +6,13 @@
 
 ## Permission
 
+- `automatedworkcarts.toggle` -- Allows usage of the `aw.toggle` or `aw.toggleall` commands.
 - `automatedworkcarts.managetriggers` -- Allows adding and removing custom triggers.
 
 ## Commands
 
-- `aw.toggle` -- Toggles automated workcarts on or off.
-  - Workcarts are already automated by default on plugin load, so this command is mainly for users who want to toggle it off while they set up triggers.
-  - Note: Reloading the plugin will toggle them back on.
+- `aw.toggle` -- Toggles automation for the workcart you are standing on or looking at.
+  - This command is disabled while the `AutomateAllWorkcarts` configuration option is `true`.
 - `aw.addtrigger <speed> <track selection>` -- Adds a trigger at the nearest train track, with the specified speed and track selection.
   - When a workcart collides with this trigger, its speed and track selection will be adjusted accordingly.
   - See the configuration section for a list of possible speeds and track selections.
@@ -37,14 +37,16 @@ The following command aliases are also available:
 
 ```json
 {
-  "TimeAtStation": 30.0,
+  "AutomateAllWorkcarts": false,
   "AutoDetectStations": true,
+  "TimeAtStation": 30.0,
   "DefaultSpeed": "Fwd_Hi",
   "DepartureSpeed": "Fwd_Lo",
   "DefaultTrackSelection": "Left"
 }
 ```
 
+- `AutomateAllWorkcarts` (`true` or `false`) -- While `true`, all workcarts will be automated, except those blocked by other plugins; the `aw.toggle` command will be disabled. While false, you can either automate individual workcarts with `aw.toggle` or use custom triggers to automate workcarts that pass through them (or spawn on them).
 - `TimeAtStation` -- Number of seconds that trains should wait after stopping.
   - For custom triggers, the timer starts as soon as the workcart enters a trigger with speed `Zero`, not when the workcart actually stops.
 - `AutoDetectStations` (`true` or `false`) -- While `true`, the plugin will auto detect vanilla train stations and add triggers to them, causing automated workcarts to stop at them for the configured `TimeAtStation`.

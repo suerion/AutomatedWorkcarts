@@ -13,7 +13,7 @@ using static TrainTrackSpline;
 
 namespace Oxide.Plugins
 {
-    [Info("Automated Workcarts", "WhiteThunder", "0.2.0")]
+    [Info("Automated Workcarts", "WhiteThunder", "0.3.0")]
     [Description("Spawns conductor NPCs that drive workcarts between stations.")]
     internal class AutomatedWorkcarts : CovalencePlugin
     {
@@ -21,8 +21,10 @@ namespace Oxide.Plugins
 
         private static AutomatedWorkcarts _pluginInstance;
         private static Configuration _pluginConfig;
-        private static StoredData _pluginData;
+        private static StoredPluginData _pluginData;
+        private static StoredMapData _mapData;
 
+        private const string PermissionToggle = "automatedworkcarts.toggle";
         private const string PermissionManageStops = "automatedworkcarts.managetriggers";
 
         private const string PlayerPrefab = "assets/prefabs/player/player.prefab";
@@ -34,8 +36,6 @@ namespace Oxide.Plugins
         private TrainStationManager _trainStationManager = new TrainStationManager();
         private CustomTriggerManager _customTriggerManager = new CustomTriggerManager();
 
-        private bool _enabled = true;
-
         #endregion
 
         #region Hooks
@@ -43,8 +43,10 @@ namespace Oxide.Plugins
         private void Init()
         {
             _pluginInstance = this;
-            _pluginData = StoredData.Load();
+            _pluginData = StoredPluginData.Load();
+            _mapData = StoredMapData.Load();
 
+            permission.RegisterPermission(PermissionToggle, this);
             permission.RegisterPermission(PermissionManageStops, this);
 
             Unsubscribe(nameof(OnEntitySpawned));
@@ -57,6 +59,7 @@ namespace Oxide.Plugins
 
             TrainController.DestroyAll();
 
+            _mapData = null;
             _pluginData = null;
             _pluginConfig = null;
             _pluginInstance = null;
@@ -69,16 +72,30 @@ namespace Oxide.Plugins
             if (_pluginConfig.AutoDetectStations)
                 _trainStationManager.CreateAll();
 
-            if (_enabled)
-                TrainController.CreateAll();
+            foreach (var entity in BaseNetworkable.serverEntities)
+            {
+                var workcart = entity as TrainEngine;
+                if (workcart != null && (_pluginConfig.AutomateAllWorkcarts || _pluginData.AutomatedWorkcardIds.Contains(workcart.net.ID)))
+                    TryAddTrainController(workcart);
+            }
 
-            Subscribe(nameof(OnEntitySpawned));
+            if (_pluginConfig.AutomateAllWorkcarts)
+                Subscribe(nameof(OnEntitySpawned));
+        }
+
+        private void OnNewSave()
+        {
+            _pluginData = StoredPluginData.Clear();
         }
 
         private void OnEntitySpawned(TrainEngine workcart)
         {
-            if (_enabled)
-                TryAddTrainController(workcart);
+            // Delay so that other plugins that spawn workcarts can save its net id to allow blocking automation.
+            NextTick(() =>
+            {
+                if (workcart != null)
+                    TryAddTrainController(workcart);
+            });
         }
 
         private bool? OnEntityTakeDamage(TrainEngine workcart)
@@ -167,20 +184,49 @@ namespace Oxide.Plugins
         #region Commands
 
         [Command("aw.toggle")]
-        private void CommandEnable(IPlayer player)
+        private void CommandAutomateWorkcart(IPlayer player, string cmd, string[] args)
         {
-            if (!player.IsServer && !player.HasPermission(PermissionManageStops))
+            if (player.IsServer)
+                return;
+
+            if (!player.HasPermission(PermissionToggle))
             {
                 ReplyToPlayer(player, Lang.ErrorNoPermission);
                 return;
             }
 
-            _enabled = !_enabled;
+            if (_pluginConfig.AutomateAllWorkcarts)
+            {
+                ReplyToPlayer(player, Lang.ErrorFullyAutomated);
+                return;
+            }
 
-            if (_enabled)
-                TrainController.CreateAll();
+            var basePlayer = player.Object as BasePlayer;
+
+            var workcart = GetPlayerCart(basePlayer);
+            if (workcart == null)
+            {
+                ReplyToPlayer(player, Lang.ErrorNoWorkcartFound);
+                return;
+            }
+
+            var trainController = workcart.GetComponent<TrainController>();
+            if (trainController == null)
+            {
+                if (TryAddTrainController(workcart))
+                {
+                    _pluginData.AddWorkcart(workcart);
+                    ReplyToPlayer(player, Lang.ToggleOnSuccess);
+                }
+                else
+                    ReplyToPlayer(player, Lang.ErrorAutomateBlocked);
+            }
             else
-                TrainController.DestroyAll();
+            {
+                UnityEngine.Object.Destroy(trainController);
+                ReplyToPlayer(player, Lang.ToggleOffSuccess);
+                _pluginData.RemoveWorkcart(workcart);
+            }
         }
 
         [Command("aw.addtrigger", "awt.add")]
@@ -214,14 +260,14 @@ namespace Oxide.Plugins
             {
                 foreach (var arg in args)
                 {
-                    if (!TryParseArg(player, cmd, arg, triggerInfo, Lang.AddSyntax))
+                    if (!TryParseArg(player, cmd, arg, triggerInfo, Lang.AddTriggerSyntax))
                         return;
                 }
             }
 
             _customTriggerManager.AddTrigger(triggerInfo);
             _customTriggerManager.ShowAllToPlayer(basePlayer);
-            ReplyToPlayer(player, Lang.AddSuccess, triggerInfo.Id);
+            ReplyToPlayer(player, Lang.AddTriggerSuccess, triggerInfo.Id);
         }
 
         [Command("aw.updatetrigger", "awt.update")]
@@ -239,7 +285,7 @@ namespace Oxide.Plugins
             int triggerId;
             if (args.Length < 2 || !int.TryParse(args[0], out triggerId))
             {
-                ReplyToPlayer(player, Lang.UpdateSyntax, cmd, GetEnumOptions<EngineSpeeds>(), GetEnumOptions<TrackSelection>());
+                ReplyToPlayer(player, Lang.UpdateTriggerSyntax, cmd, GetEnumOptions<EngineSpeeds>(), GetEnumOptions<TrackSelection>());
                 return;
             }
 
@@ -254,13 +300,13 @@ namespace Oxide.Plugins
 
             foreach (var arg in args.Skip(1))
             {
-                if (!TryParseArg(player, cmd, arg, triggerInfo, Lang.UpdateSyntax))
+                if (!TryParseArg(player, cmd, arg, triggerInfo, Lang.UpdateTriggerSyntax))
                     return;
             }
 
             _customTriggerManager.UpdateTrigger(triggerInfo);
             _customTriggerManager.ShowAllToPlayer(basePlayer);
-            ReplyToPlayer(player, Lang.UpdateSuccess, triggerInfo.Id);
+            ReplyToPlayer(player, Lang.UpdateTriggerSuccess, triggerInfo.Id);
         }
 
         [Command("aw.removetrigger", "awt.remove")]
@@ -278,7 +324,7 @@ namespace Oxide.Plugins
             int triggerId;
             if (args.Length < 1 || !int.TryParse(args[0], out triggerId))
             {
-                ReplyToPlayer(player, Lang.RemoveSyntax, cmd);
+                ReplyToPlayer(player, Lang.RemoveTriggerSyntax, cmd);
                 return;
             }
 
@@ -293,7 +339,7 @@ namespace Oxide.Plugins
 
             _customTriggerManager.RemoveTrigger(triggerInfo);
             _customTriggerManager.ShowAllToPlayer(basePlayer);
-            ReplyToPlayer(player, Lang.RemoveSuccess, triggerId);
+            ReplyToPlayer(player, Lang.RemoveTriggerSuccess, triggerId);
         }
 
         [Command("aw.showtriggers")]
@@ -308,8 +354,7 @@ namespace Oxide.Plugins
                 return;
             }
 
-            var mapName = GetMapName();
-            if (_pluginData.CustomTriggers.Count == 0)
+            if (_mapData.CustomTriggers.Count == 0)
             {
                 ReplyToPlayer(player, Lang.ErrorNoTriggers);
                 return;
@@ -358,9 +403,6 @@ namespace Oxide.Plugins
 
             return shortestDistance;
         }
-
-        private static string GetMapName() =>
-            World.SaveFileName.Substring(0, World.SaveFileName.LastIndexOf("."));
 
         private static string GetShortName(string prefabName)
         {
@@ -432,6 +474,30 @@ namespace Oxide.Plugins
             ReplyToPlayer(player, errorMessageName, cmd, GetEnumOptions<EngineSpeeds>(), GetEnumOptions<TrackSelection>());
             return false;
         }
+
+        private static BaseEntity GetLookEntity(BasePlayer player, float maxDistance = 6)
+        {
+            RaycastHit hit;
+            return Physics.Raycast(player.eyes.HeadRay(), out hit, maxDistance, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore)
+                ? hit.GetEntity()
+                : null;
+        }
+
+        private static TrainEngine GetMountedCart(BasePlayer player)
+        {
+            var mountedWorkcart = player.GetMountedVehicle() as TrainEngine;
+            if (mountedWorkcart != null)
+                return mountedWorkcart;
+
+            var parentWorkcart = player.GetParentEntity() as TrainEngine;
+            if (parentWorkcart != null)
+                return parentWorkcart;
+
+            return null;
+        }
+
+        private static TrainEngine GetPlayerCart(BasePlayer player) =>
+            GetLookEntity(player) as TrainEngine ?? GetMountedCart(player);
 
         #endregion
 
@@ -652,13 +718,13 @@ namespace Oxide.Plugins
                     triggerInfo.Id = GetHighestTriggerId() + 1;
 
                 _customTriggers[triggerInfo] = new CustomTriggerWrapper(triggerInfo);
-                _pluginData.AddTrigger(triggerInfo);
+                _mapData.AddTrigger(triggerInfo);
             }
 
             public void UpdateTrigger(CustomTriggerInfo triggerInfo)
             {
                 triggerInfo.InvalidateCache();
-                _pluginData.Save();
+                _mapData.Save();
             }
 
             public void RemoveTrigger(CustomTriggerInfo triggerInfo)
@@ -670,12 +736,12 @@ namespace Oxide.Plugins
                     _customTriggers.Remove(triggerInfo);
                 }
 
-                _pluginData.RemoveTrigger(triggerInfo);
+                _mapData.RemoveTrigger(triggerInfo);
             }
 
             public void CreateAll()
             {
-                foreach (var triggerInfo in _pluginData.CustomTriggers)
+                foreach (var triggerInfo in _mapData.CustomTriggers)
                     _customTriggers[triggerInfo] = new CustomTriggerWrapper(triggerInfo);
             }
 
@@ -898,16 +964,6 @@ namespace Oxide.Plugins
                 EnteringStation,
                 StoppedAtStation,
                 LeavingStation
-            }
-
-            public static void CreateAll()
-            {
-                foreach (var entity in BaseNetworkable.serverEntities)
-                {
-                    var workcart = entity as TrainEngine;
-                    if (workcart != null)
-                        TryAddTrainController(workcart);
-                }
             }
 
             public static void DestroyAll()
@@ -1138,22 +1194,56 @@ namespace Oxide.Plugins
 
         #region Data
 
-        private class StoredData
+        private class StoredPluginData
+        {
+            [JsonProperty("AutomatedWorkcardIds")]
+            public List<uint> AutomatedWorkcardIds = new List<uint>();
+
+            public static string Filename => _pluginInstance.Name;
+
+            public static StoredPluginData Load() =>
+                Interface.Oxide.DataFileSystem.ReadObject<StoredPluginData>(Filename) ?? new StoredPluginData();
+
+            public static StoredPluginData Clear() => new StoredPluginData().Save();
+
+            public StoredPluginData Save()
+            {
+                Interface.Oxide.DataFileSystem.WriteObject<StoredPluginData>(Filename, this);
+                return this;
+            }
+
+            public void AddWorkcart(TrainEngine workcart)
+            {
+                AutomatedWorkcardIds.Add(workcart.net.ID);
+                Save();
+            }
+
+            public void RemoveWorkcart(TrainEngine workcart)
+            {
+                AutomatedWorkcardIds.Remove(workcart.net.ID);
+                Save();
+            }
+        }
+
+        private class StoredMapData
         {
             [JsonProperty("CustomTriggers")]
             public List<CustomTriggerInfo> CustomTriggers = new List<CustomTriggerInfo>();
 
+            private static string GetMapName() =>
+                World.SaveFileName.Substring(0, World.SaveFileName.LastIndexOf("."));
+
             public static string Filename => $"{_pluginInstance.Name}/{GetMapName()}";
 
-            public static StoredData Load()
+            public static StoredMapData Load()
             {
                 if (Interface.Oxide.DataFileSystem.ExistsDatafile(Filename))
-                    return Interface.Oxide.DataFileSystem.ReadObject<StoredData>(Filename) ?? new StoredData();
+                    return Interface.Oxide.DataFileSystem.ReadObject<StoredMapData>(Filename) ?? new StoredMapData();
 
-                return new StoredData();
+                return new StoredMapData();
             }
 
-            public StoredData Save()
+            public StoredMapData Save()
             {
                 Interface.Oxide.DataFileSystem.WriteObject(Filename, this);
                 return this;
@@ -1178,11 +1268,14 @@ namespace Oxide.Plugins
 
         private class Configuration : SerializableConfiguration
         {
-            [JsonProperty("TimeAtStation")]
-            public float TimeAtStation = 30;
+            [JsonProperty("AutomateAllWorkcarts")]
+            public bool AutomateAllWorkcarts = false;
 
             [JsonProperty("AutoDetectStations")]
             public bool AutoDetectStations = true;
+
+            [JsonProperty("TimeAtStation")]
+            public float TimeAtStation = 30;
 
             [JsonProperty("DefaultSpeed")]
             public string DefaultSpeed = EngineSpeeds.Fwd_Hi.ToString();
@@ -1377,15 +1470,21 @@ namespace Oxide.Plugins
             public const string ErrorNoTriggers = "Error.NoTriggers";
             public const string ErrorTriggerNotFound = "Error.TriggerNotFound";
             public const string ErrorNoTrackFound = "Error.ErrorNoTrackFound";
+            public const string ErrorNoWorkcartFound = "Error.NoWorkcartFound";
+            public const string ErrorFullyAutomated = "Error.FullyAutomated";
+            public const string ErrorAutomateBlocked = "Error.AutomateBlocked";
 
-            public const string AddSyntax = "Add.Syntax";
-            public const string AddSuccess = "Add.Success";
+            public const string ToggleOnSuccess = "Toggle.Success.On";
+            public const string ToggleOffSuccess = "Toggle.Success.Off";
 
-            public const string UpdateSyntax = "Update.Syntax";
-            public const string UpdateSuccess = "Update.Success";
+            public const string AddTriggerSyntax = "AddTrigger.Syntax";
+            public const string AddTriggerSuccess = "AddTrigger.Success";
 
-            public const string RemoveSyntax = "Remove.Syntax";
-            public const string RemoveSuccess = "Success.TriggerRemoved";
+            public const string UpdateTriggerSyntax = "UpdateTrigger.Syntax";
+            public const string UpdateTriggerSuccess = "UpdateTrigger.Success";
+
+            public const string RemoveTriggerSyntax = "RemoveTrigger.Syntax";
+            public const string RemoveTriggerSuccess = "RemoveTrigger.Success";
 
             public const string InfoTrigger = "Info.Trigger";
             public const string InfoTriggerSpeed = "Info.Trigger.Speed";
@@ -1400,15 +1499,21 @@ namespace Oxide.Plugins
                 [Lang.ErrorNoTriggers] = "There are no workcart triggers on this map.",
                 [Lang.ErrorTriggerNotFound] = "Error: Trigger id #{0} not found.",
                 [Lang.ErrorNoTrackFound] = "Error: No track found nearby.",
+                [Lang.ErrorNoWorkcartFound] = "Error: No workcart found.",
+                [Lang.ErrorFullyAutomated] = "Error: You cannot do that while full automation is on.",
+                [Lang.ErrorAutomateBlocked] = "Error: Another plugin blocked automating that workcart.",
 
-                [Lang.AddSyntax] = "Syntax: <color=#fd4>{0} <speed> <track selection></color>\nSpeeds: {1}\nTrack selections: {2}",
-                [Lang.AddSuccess] = "Successfully added trigger #{0}.",
+                [Lang.ToggleOnSuccess] = "That workcart is now automated.",
+                [Lang.ToggleOffSuccess] = "That workcart is no longer automated.",
 
-                [Lang.UpdateSyntax] = "Syntax: <color=#fd4>{0} <id> <speed> <track selection></color>\nSpeeds: {1}\nTrack selections: {2}",
-                [Lang.UpdateSuccess] = "Successfully updated trigger #{0}",
+                [Lang.AddTriggerSyntax] = "Syntax: <color=#fd4>{0} <speed> <track selection></color>\nSpeeds: {1}\nTrack selections: {2}",
+                [Lang.AddTriggerSuccess] = "Successfully added trigger #{0}.",
 
-                [Lang.RemoveSyntax] = "Syntax: <color=#fd4>{0} <id></color>",
-                [Lang.RemoveSuccess] = "Trigger #{0} successfully removed.",
+                [Lang.UpdateTriggerSyntax] = "Syntax: <color=#fd4>{0} <id> <speed> <track selection></color>\nSpeeds: {1}\nTrack selections: {2}",
+                [Lang.UpdateTriggerSuccess] = "Successfully updated trigger #{0}",
+
+                [Lang.RemoveTriggerSyntax] = "Syntax: <color=#fd4>{0} <id></color>",
+                [Lang.RemoveTriggerSuccess] = "Trigger #{0} successfully removed.",
 
                 [Lang.InfoTrigger] = "Workcart Trigger #{0}",
                 [Lang.InfoTriggerSpeed] = "Speed: {0}",
