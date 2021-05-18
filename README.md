@@ -13,7 +13,7 @@
 
 - `aw.toggle` -- Toggles automation for the workcart you are standing on or looking at.
   - This command is disabled while the `AutomateAllWorkcarts` configuration option is `true`.
-- `aw.addtrigger <speed> <track selection>` -- Adds a trigger at the nearest train track, with the specified speed and track selection.
+- `aw.addtrigger <speed> <track selection>` -- Adds a trigger to the track position where the player is aiming, with the specified speed and track selection.
   - When a workcart collides with this trigger, its speed and track selection will be adjusted accordingly.
   - See the configuration section for a list of possible speeds and track selections.
   - Both `<speed>` and `<track selection>` are optional.
@@ -24,12 +24,14 @@
   - Both `<speed>` and `<track selection>` are optional, but at least one must be specified.
     - `aw.updatetrigger <id> <speed>` -- Updates only the speed of the trigger.
     - `aw.updatetrigger <id> <track selection>` -- Updates only the track selection of the trigger.
+- `aw.movetrigger <id>` -- Moves the specified trigger to the track position where the player is aiming.
 - `aw.removetrigger <id>` -- Removes a trigger by id.
 - `aw.showtriggers` -- Shows all triggers, including id, speed and track selection.
   - You must be an admin to see them.
 
 The following command aliases are also available:
 - `aw.addtrigger` -> `awt.add`
+- `aw.movetrigger` -> `awt.move`
 - `aw.updatetrigger` -> `awt.update`
 - `aw.removetrigger` -> `awt.remove`
 
@@ -76,16 +78,21 @@ The following command aliases are also available:
 ```json
 {
   "Error.NoPermission": "You don't have permission to do that.",
-  "Error.NoWorkcartFound": "Error: You must be on a workcart to do that.",
   "Error.NoTriggers": "There are no workcart triggers on this map.",
   "Error.TriggerNotFound": "Error: Trigger id #{0} not found.",
   "Error.ErrorNoTrackFound": "Error: No track found nearby.",
-  "Add.Syntax": "Syntax: <color=#fd4>{0} <speed> <track selection></color>\nSpeeds: {1}\nTrack selections: {2}",
-  "Add.Success": "Successfully added trigger #{0}.",
-  "Update.Syntax": "Syntax: <color=#fd4>{0} <id> <speed> <track selection></color>\nSpeeds: {1}\nTrack selections: {2}",
-  "Update.Success": "Successfully updated trigger #{0}",
-  "Remove.Syntax": "Syntax: <color=#fd4>{0} <id></color>",
-  "Success.TriggerRemoved": "Trigger #{0} successfully removed.",
+  "Error.NoWorkcartFound": "Error: No workcart found.",
+  "Error.FullyAutomated": "Error: You cannot do that while full automation is on.",
+  "Error.AutomateBlocked": "Error: Another plugin blocked automating that workcart.",
+  "Toggle.Success.On": "That workcart is now automated.",
+  "Toggle.Success.Off": "That workcart is no longer automated.",
+  "AddTrigger.Syntax": "Syntax: <color=#fd4>{0} <speed> <track selection></color>\nSpeeds: {1}\nTrack selections: {2}",
+  "AddTrigger.Success": "Successfully added trigger #{0}.",
+  "UpdateTrigger.Syntax": "Syntax: <color=#fd4>{0} <id> <speed> <track selection></color>\nSpeeds: {1}\nTrack selections: {2}",
+  "MoveTrigger.Success": "Successfully moved trigger #{0}",
+  "UpdateTrigger.Success": "Successfully updated trigger #{0}",
+  "RemoveTrigger.Syntax": "Syntax: <color=#fd4>{0} <id></color>",
+  "RemoveTrigger.Success": "Trigger #{0} successfully removed.",
   "Info.Trigger": "Workcart Trigger #{0}",
   "Info.Trigger.Speed": "Speed: {0}",
   "Info.Trigger.TrackSelection": "Track selection: {0}"

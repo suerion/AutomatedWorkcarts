@@ -25,7 +25,7 @@ namespace Oxide.Plugins
         private static StoredMapData _mapData;
 
         private const string PermissionToggle = "automatedworkcarts.toggle";
-        private const string PermissionManageStops = "automatedworkcarts.managetriggers";
+        private const string PermissionManageTriggers = "automatedworkcarts.managetriggers";
 
         private const string PlayerPrefab = "assets/prefabs/player/player.prefab";
         private const string VendingMachineMapMarkerPrefab = "assets/prefabs/deployable/vendingmachine/vending_mapmarker.prefab";
@@ -47,7 +47,7 @@ namespace Oxide.Plugins
             _mapData = StoredMapData.Load();
 
             permission.RegisterPermission(PermissionToggle, this);
-            permission.RegisterPermission(PermissionManageStops, this);
+            permission.RegisterPermission(PermissionManageTriggers, this);
 
             Unsubscribe(nameof(OnEntitySpawned));
         }
@@ -232,14 +232,9 @@ namespace Oxide.Plugins
         [Command("aw.addtrigger", "awt.add")]
         private void CommandAddTrigger(IPlayer player, string cmd, string[] args)
         {
-            if (player.IsServer)
+            if (player.IsServer
+                || !VerifyPermission(player, PermissionManageTriggers))
                 return;
-
-            if (!player.HasPermission(PermissionManageStops))
-            {
-                ReplyToPlayer(player, Lang.ErrorNoPermission);
-                return;
-            }
 
             var basePlayer = player.Object as BasePlayer;
 
@@ -273,14 +268,9 @@ namespace Oxide.Plugins
         [Command("aw.updatetrigger", "awt.update")]
         private void CommandUpdateTrigger(IPlayer player, string cmd, string[] args)
         {
-            if (player.IsServer)
+            if (player.IsServer
+                || !VerifyPermission(player, PermissionManageTriggers))
                 return;
-
-            if (!player.HasPermission(PermissionManageStops))
-            {
-                ReplyToPlayer(player, Lang.ErrorNoPermission);
-                return;
-            }
 
             int triggerId;
             if (args.Length < 2 || !int.TryParse(args[0], out triggerId))
@@ -290,13 +280,10 @@ namespace Oxide.Plugins
             }
 
             var basePlayer = player.Object as BasePlayer;
-            var triggerInfo = _customTriggerManager.FindTrigger(triggerId);
-            if (triggerInfo == null)
-            {
-                ReplyToPlayer(player, Lang.ErrorTriggerNotFound, triggerId);
-                _customTriggerManager.ShowAllToPlayer(player.Object as BasePlayer);
+
+            CustomTriggerInfo triggerInfo;
+            if (!VerifyTriggerExists(player, triggerId, out triggerInfo))
                 return;
-            }
 
             foreach (var arg in args.Skip(1))
             {
@@ -309,17 +296,42 @@ namespace Oxide.Plugins
             ReplyToPlayer(player, Lang.UpdateTriggerSuccess, triggerInfo.Id);
         }
 
+        [Command("aw.movetrigger", "awt.move")]
+        private void CommandMoveTrigger(IPlayer player, string cmd, string[] args)
+        {
+            if (player.IsServer
+                || !VerifyPermission(player, PermissionManageTriggers))
+                return;
+
+            int triggerId;
+            if (args.Length < 1 || !int.TryParse(args[0], out triggerId))
+            {
+                ReplyToPlayer(player, Lang.RemoveTriggerSyntax, cmd);
+                return;
+            }
+
+            var basePlayer = player.Object as BasePlayer;
+
+            CustomTriggerInfo triggerInfo;
+            Vector3 trackPosition;
+
+            if (!VerifyTriggerExists(player, triggerId, out triggerInfo)
+                || !VerifyTrackPosition(player, out trackPosition))
+                return;
+
+            triggerInfo.Position = trackPosition;
+
+            _customTriggerManager.UpdateTrigger(triggerInfo);
+            _customTriggerManager.ShowAllToPlayer(basePlayer);
+            ReplyToPlayer(player, Lang.MoveTriggerSuccess, triggerInfo.Id);
+        }
+
         [Command("aw.removetrigger", "awt.remove")]
         private void CommandRemoveTrigger(IPlayer player, string cmd, string[] args)
         {
-            if (player.IsServer)
+            if (player.IsServer
+                || !VerifyPermission(player, PermissionManageTriggers))
                 return;
-
-            if (!player.HasPermission(PermissionManageStops))
-            {
-                ReplyToPlayer(player, Lang.ErrorNoPermission);
-                return;
-            }
 
             int triggerId;
             if (args.Length < 1 || !int.TryParse(args[0], out triggerId))
@@ -345,14 +357,9 @@ namespace Oxide.Plugins
         [Command("aw.showtriggers")]
         private void CommandShowStops(IPlayer player, string cmd, string[] args)
         {
-            if (player.IsServer)
+            if (player.IsServer
+                || !VerifyPermission(player, PermissionManageTriggers))
                 return;
-
-            if (!player.HasPermission(PermissionManageStops))
-            {
-                ReplyToPlayer(player, Lang.ErrorNoPermission);
-                return;
-            }
 
             if (_mapData.CustomTriggers.Count == 0)
             {
@@ -361,6 +368,39 @@ namespace Oxide.Plugins
             }
 
             _customTriggerManager.ShowAllToPlayer(player.Object as BasePlayer);
+        }
+
+        #endregion
+
+        #region Helper Methods - Command Checks
+
+        private bool VerifyPermission(IPlayer player, string permissionName)
+        {
+            if (player.HasPermission(permissionName))
+                return true;
+
+            ReplyToPlayer(player, Lang.ErrorNoPermission);
+            return false;
+        }
+
+        private bool VerifyTriggerExists(IPlayer player, int triggerId, out CustomTriggerInfo triggerInfo)
+        {
+            triggerInfo = _customTriggerManager.FindTrigger(triggerId);
+            if (triggerInfo != null)
+                return true;
+
+            ReplyToPlayer(player, Lang.ErrorTriggerNotFound, triggerId);
+            _customTriggerManager.ShowAllToPlayer(player.Object as BasePlayer);
+            return false;
+        }
+
+        private bool VerifyTrackPosition(IPlayer player, out Vector3 trackPosition, float distanceFromHit = 0)
+        {
+            if (TryGetTrackPosition(player.Object as BasePlayer, out trackPosition, distanceFromHit))
+                return true;
+
+            ReplyToPlayer(player, Lang.ErrorNoTrackFound);
+            return false;
         }
 
         #endregion
@@ -454,7 +494,7 @@ namespace Oxide.Plugins
             return false;
         }
 
-        private static bool TryGetTrackPosition(BasePlayer player, out Vector3 trackPosition, float maxDistance = 20)
+        private static bool TryGetTrackPosition(BasePlayer player, out Vector3 trackPosition, float distanceFromHit = 0, float maxDistance = 20)
         {
             Vector3 hitPosition;
             if (!TryGetHitPosition(player, out hitPosition, maxDistance))
@@ -465,13 +505,13 @@ namespace Oxide.Plugins
 
             TrainTrackSpline spline;
             float distanceResult;
-            if (!TrainTrackSpline.TryFindTrackNearby(hitPosition, maxDistance, out spline, out distanceResult))
+            if (!TrainTrackSpline.TryFindTrackNearby(hitPosition, 5, out spline, out distanceResult))
             {
                 trackPosition = Vector3.zero;
                 return false;
             }
 
-            trackPosition = spline.GetPosition(distanceResult);
+            trackPosition = spline.GetPosition(distanceResult + distanceFromHit);
             return true;
         }
 
@@ -1499,10 +1539,9 @@ namespace Oxide.Plugins
 
             public const string AddTriggerSyntax = "AddTrigger.Syntax";
             public const string AddTriggerSuccess = "AddTrigger.Success";
-
+            public const string MoveTriggerSuccess = "MoveTrigger.Success";
             public const string UpdateTriggerSyntax = "UpdateTrigger.Syntax";
             public const string UpdateTriggerSuccess = "UpdateTrigger.Success";
-
             public const string RemoveTriggerSyntax = "RemoveTrigger.Syntax";
             public const string RemoveTriggerSuccess = "RemoveTrigger.Success";
 
@@ -1525,13 +1564,11 @@ namespace Oxide.Plugins
 
                 [Lang.ToggleOnSuccess] = "That workcart is now automated.",
                 [Lang.ToggleOffSuccess] = "That workcart is no longer automated.",
-
                 [Lang.AddTriggerSyntax] = "Syntax: <color=#fd4>{0} <speed> <track selection></color>\nSpeeds: {1}\nTrack selections: {2}",
                 [Lang.AddTriggerSuccess] = "Successfully added trigger #{0}.",
-
                 [Lang.UpdateTriggerSyntax] = "Syntax: <color=#fd4>{0} <id> <speed> <track selection></color>\nSpeeds: {1}\nTrack selections: {2}",
                 [Lang.UpdateTriggerSuccess] = "Successfully updated trigger #{0}",
-
+                [Lang.MoveTriggerSuccess] = "Successfully moved trigger #{0}",
                 [Lang.RemoveTriggerSyntax] = "Syntax: <color=#fd4>{0} <id></color>",
                 [Lang.RemoveTriggerSuccess] = "Trigger #{0} successfully removed.",
 
