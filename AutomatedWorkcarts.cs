@@ -990,7 +990,7 @@ namespace Oxide.Plugins
 
             public void OnTrainReachStop(TrainController trainController)
             {
-                trainController.StopAtStation(_pluginConfig.TimeAtStation);
+                trainController.StopAtStation(_pluginConfig.EngineOffDuration);
             }
 
             public void OnTrainDepart(TrainController trainController)
@@ -1116,7 +1116,7 @@ namespace Oxide.Plugins
                     SetThrottle(engineSpeed);
 
                     if (engineSpeed == EngineSpeeds.Zero)
-                        Invoke(ScheduledDepartureForCustomTrigger, _pluginConfig.TimeAtStation);
+                        Invoke(ScheduledDepartureForCustomTrigger, _pluginConfig.EngineOffDuration);
                     else
                         CancelInvoke(ScheduledDepartureForCustomTrigger);
                 }
@@ -1386,8 +1386,8 @@ namespace Oxide.Plugins
             [JsonProperty("AutoDetectStations")]
             public bool AutoDetectStations = true;
 
-            [JsonProperty("TimeAtStation")]
-            public float TimeAtStation = 30;
+            [JsonProperty("EngineOffDuration")]
+            public float EngineOffDuration = 30;
 
             [JsonProperty("DefaultSpeed")]
             public string DefaultSpeed = EngineSpeeds.Fwd_Hi.ToString();

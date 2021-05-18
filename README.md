@@ -18,7 +18,7 @@
   - Track selection options:  `Default` | `Left` | `Right`.
   - Passing the `Start` option will cause any workcart that passes through (or spawns on) the trigger to become an automated workcart. Useful if you have configured the plugin with `AutomateAllWorkcarts` set to `false`.
   - Examples:
-    - `aw.addtrigger` -- Creates a trigger with speed `Zero`. This causes the workcart to turn its engine off for the duration of the `TimeAtStation` configuration option.
+    - `aw.addtrigger` -- Creates a trigger with speed `Zero`. This causes the workcart to turn its engine off for the duration of the `EngineOffDuration` configuration option.
     - `aw.addtrigger Rev_Hi` -- Creates a trigger that will cause workcarts to select max speed.
     - `aw.addtrigger Rev_Hi` -- Creates a trigger that will cause workcarts to turn left at every intersection until another trigger changes the selection.
     - `aw.addtrigger Start Rev_Hi Left` -- Creates a trigger with max forward speed and left track selection.
@@ -40,7 +40,7 @@ The following command aliases are also available:
 {
   "AutomateAllWorkcarts": false,
   "AutoDetectStations": true,
-  "TimeAtStation": 30.0,
+  "EngineOffDuration": 30.0,
   "DefaultSpeed": "Fwd_Hi",
   "DepartureSpeed": "Fwd_Lo",
   "DefaultTrackSelection": "Left"
@@ -48,9 +48,9 @@ The following command aliases are also available:
 ```
 
 - `AutomateAllWorkcarts` (`true` or `false`) -- While `true`, all workcarts will be automated, except those blocked by other plugins; the `aw.toggle` command will be disabled. While false, you can either automate individual workcarts with `aw.toggle` or use custom triggers to automate workcarts that pass through them (or spawn on them).
-- `TimeAtStation` -- Number of seconds that trains should wait after stopping.
+- `EngineOffDuration` -- Number of seconds that trains should wait after stopping.
   - For custom triggers, the timer starts as soon as the workcart enters a trigger with speed `Zero`, not when the workcart actually stops.
-- `AutoDetectStations` (`true` or `false`) -- While `true`, the plugin will auto detect vanilla train stations and add triggers to them, causing automated workcarts to stop at them for the configured `TimeAtStation`.
+- `AutoDetectStations` (`true` or `false`) -- While `true`, the plugin will auto detect vanilla train stations and add triggers to them, causing automated workcarts to stop at them for the configured `EngineOffDuration`.
   - Note: These triggers cannot be customized.
 - `DefaultSpeed` -- Default speed to use when a workcart starts being automated.
   - Basically this applies when the plugin loads, when toggling on with `aw.toggle`, or when a workcart spawns.
