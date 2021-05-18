@@ -475,7 +475,7 @@ namespace Oxide.Plugins
             return false;
         }
 
-        private static BaseEntity GetLookEntity(BasePlayer player, float maxDistance = 6)
+        private static BaseEntity GetLookEntity(BasePlayer player, float maxDistance = 20)
         {
             RaycastHit hit;
             return Physics.Raycast(player.eyes.HeadRay(), out hit, maxDistance, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore)
