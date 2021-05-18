@@ -324,9 +324,7 @@ namespace Oxide.Plugins
                 || !VerifyTrackPosition(player, out trackPosition))
                 return;
 
-            triggerInfo.Position = trackPosition;
-
-            _customTriggerManager.UpdateTrigger(triggerInfo);
+            _customTriggerManager.MoveTrigger(triggerInfo, trackPosition);
             _customTriggerManager.ShowAllToPlayer(basePlayer);
             ReplyToPlayer(player, Lang.MoveTriggerSuccess, triggerInfo.Id);
         }
@@ -757,6 +755,11 @@ namespace Oxide.Plugins
                 trigger.interestLayers = Layers.Mask.Vehicle_World;
             }
 
+            public void Move(Vector3 position)
+            {
+                _gameObject.transform.position = position;
+            }
+
             public void Destroy()
             {
                 UnityEngine.Object.Destroy(_gameObject);
@@ -805,6 +808,16 @@ namespace Oxide.Plugins
             {
                 triggerInfo.InvalidateCache();
                 _mapData.Save();
+            }
+
+            public void MoveTrigger(CustomTriggerInfo triggerInfo, Vector3 position)
+            {
+                triggerInfo.Position = position;
+                _mapData.Save();
+
+                CustomTriggerWrapper customTrigger;
+                if (_customTriggers.TryGetValue(triggerInfo, out customTrigger))
+                    customTrigger.Move(position);
             }
 
             public void RemoveTrigger(CustomTriggerInfo triggerInfo)
