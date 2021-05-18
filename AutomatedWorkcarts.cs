@@ -1104,8 +1104,11 @@ namespace Oxide.Plugins
                     initialSpeed = _pluginConfig.GetDefaultSpeed();
 
                 CancelInvoke(ScheduledStartTrain);
-                Invoke(() => StartTrain(initialSpeed), 1);
-                HandleCustomTrigger(triggerInfo);
+                Invoke(() =>
+                {
+                    StartTrain(initialSpeed);
+                    HandleCustomTrigger(triggerInfo);
+                }, 1);
             }
 
             public void HandleCustomTrigger(CustomTriggerInfo triggerInfo)
