@@ -1309,7 +1309,7 @@ namespace Oxide.Plugins
         private class StoredPluginData
         {
             [JsonProperty("AutomatedWorkcardIds")]
-            public List<uint> AutomatedWorkcardIds = new List<uint>();
+            public HashSet<uint> AutomatedWorkcardIds = new HashSet<uint>();
 
             public static string Filename => _pluginInstance.Name;
 
