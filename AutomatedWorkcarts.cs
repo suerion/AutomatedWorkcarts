@@ -244,7 +244,7 @@ namespace Oxide.Plugins
             var basePlayer = player.Object as BasePlayer;
 
             Vector3 trackPosition;
-            if (!TryGetTrackPosition(basePlayer.transform.position, 5, out trackPosition))
+            if (!TryGetTrackPosition(basePlayer, out trackPosition))
             {
                 ReplyToPlayer(player, Lang.ErrorNoTrackFound);
                 return;
@@ -441,18 +441,38 @@ namespace Oxide.Plugins
             return string.Join(" | ", names);
         }
 
-        private static bool TryGetTrackPosition(Vector3 position, float maxDistance, out Vector3 trackPosition)
+        private static bool TryGetHitPosition(BasePlayer player, out Vector3 position, float maxDistance)
         {
-            TrainTrackSpline spline;
-            float distanceResult;
-            if (TrainTrackSpline.TryFindTrackNearby(position, maxDistance, out spline, out distanceResult))
+            RaycastHit hit;
+            if (Physics.Raycast(player.eyes.HeadRay(), out hit, maxDistance, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore))
             {
-                trackPosition = spline.GetPosition(distanceResult);
+                position = hit.point;
                 return true;
             }
 
-            trackPosition = Vector3.zero;
+            position = Vector3.zero;
             return false;
+        }
+
+        private static bool TryGetTrackPosition(BasePlayer player, out Vector3 trackPosition, float maxDistance = 20)
+        {
+            Vector3 hitPosition;
+            if (!TryGetHitPosition(player, out hitPosition, maxDistance))
+            {
+                trackPosition = Vector3.zero;
+                return false;
+            }
+
+            TrainTrackSpline spline;
+            float distanceResult;
+            if (!TrainTrackSpline.TryFindTrackNearby(hitPosition, maxDistance, out spline, out distanceResult))
+            {
+                trackPosition = Vector3.zero;
+                return false;
+            }
+
+            trackPosition = spline.GetPosition(distanceResult);
+            return true;
         }
 
         private bool TryParseArg(IPlayer player, string cmd, string arg, CustomTriggerInfo triggerInfo, string errorMessageName)
