@@ -141,7 +141,12 @@ namespace Oxide.Plugins
         {
             var trainController = workcart.GetComponent<TrainController>();
             if (trainController == null)
+            {
+                if (trigger.TriggerInfo.StartsAutomation)
+                    TryAddTrainController(workcart, trigger.TriggerInfo);
+
                 return;
+            }
 
             if (trigger.entityContents?.Contains(workcart) ?? false)
                 return;
@@ -413,12 +418,15 @@ namespace Oxide.Plugins
             return hookResult is bool && (bool)hookResult == false;
         }
 
-        private static bool TryAddTrainController(TrainEngine workcart)
+        private static bool TryAddTrainController(TrainEngine workcart, CustomTriggerInfo triggerInfo = null)
         {
             if (AutomationWasBlocked(workcart))
                 return false;
 
-            workcart.gameObject.AddComponent<TrainController>();
+            var trainController = workcart.gameObject.AddComponent<TrainController>();
+            if (triggerInfo != null)
+                trainController.StartImmediately(triggerInfo);
+
             workcart.SetHealth(workcart.MaxHealth());
             Interface.CallHook("OnWorkcartSafeZoneCreated", workcart);
 
@@ -517,6 +525,12 @@ namespace Oxide.Plugins
 
         private bool TryParseArg(IPlayer player, string cmd, string arg, CustomTriggerInfo triggerInfo, string errorMessageName)
         {
+            if (arg.ToLower() == "start")
+            {
+                triggerInfo.StartsAutomation = true;
+                return true;
+            }
+
             EngineSpeeds engineSpeed;
             if (Enum.TryParse<EngineSpeeds>(arg, true, out engineSpeed))
             {
@@ -578,6 +592,9 @@ namespace Oxide.Plugins
             [JsonProperty("Position")]
             public Vector3 Position;
 
+            [JsonProperty("StartsAutomation", DefaultValueHandling = DefaultValueHandling.Ignore)]
+            public bool StartsAutomation = false;
+
             [JsonProperty("EngineSpeed", DefaultValueHandling = DefaultValueHandling.Ignore)]
             public string EngineSpeed;
 
@@ -638,12 +655,15 @@ namespace Oxide.Plugins
 
             public Color GetColor()
             {
+                if (StartsAutomation)
+                    return Color.cyan;
+
                 EngineSpeeds engineSpeed;
                 if (!TryGetEngineSpeed(out engineSpeed))
                 {
                     TrackSelection trackSelection;
                     if (TryGetTrackSelection(out trackSelection))
-                        return Color.magenta;
+                        return Color.yellow;
                     else
                         return Color.white;
                 }
@@ -835,6 +855,9 @@ namespace Oxide.Plugins
                 player.SendConsoleCommand("ddraw.sphere", TriggerDisplayDuration, color, spherePosition, TriggerDisplayRadius);
 
                 var infoLines = new List<string>() { _pluginInstance.GetMessage(player, Lang.InfoTrigger, triggerInfo.Id) };
+
+                if (triggerInfo.StartsAutomation)
+                    infoLines.Add(_pluginInstance.GetMessage(player, Lang.InfoStart));
 
                 EngineSpeeds engineSpeed;
                 if (triggerInfo.TryGetEngineSpeed(out engineSpeed))
@@ -1054,12 +1077,23 @@ namespace Oxide.Plugins
 
                 // AddMapMarker();
                 Invoke(AddConductor, 0);
-                Invoke(StartTrain, UnityEngine.Random.Range(1f, 3f));
+                Invoke(ScheduledStartTrain, UnityEngine.Random.Range(1f, 3f));
                 EnableUnlimitedFuel();
             }
 
             private TrainState _trainState = TrainState.BetweenStations;
             private EngineSpeeds _nextSpeed;
+
+            public void StartImmediately(CustomTriggerInfo triggerInfo)
+            {
+                EngineSpeeds initialSpeed;
+                if (!triggerInfo.TryGetEngineSpeed(out initialSpeed))
+                    initialSpeed = _pluginConfig.GetDefaultSpeed();
+
+                CancelInvoke(ScheduledStartTrain);
+                Invoke(() => StartTrain(initialSpeed), 1);
+                HandleCustomTrigger(triggerInfo);
+            }
 
             public void HandleCustomTrigger(CustomTriggerInfo triggerInfo)
             {
@@ -1177,15 +1211,20 @@ namespace Oxide.Plugins
                 _workcart.AttemptMount(Conductor, false);
             }
 
-            private void StartTrain()
+            private void StartTrain(EngineSpeeds initialSpeed)
+            {
+                _workcart.engineController.FinishStartingEngine();
+                SetThrottle(initialSpeed);
+                _workcart.SetTrackSelection(_pluginConfig.GetDefaultTrackSelection());
+            }
+
+            private void ScheduledStartTrain()
             {
                 var initialSpeed = _workcart.FrontTrackSection.isStation
                     ? _pluginConfig.GetDepartureSpeed()
                     : _pluginConfig.GetDefaultSpeed();
 
-                _workcart.engineController.FinishStartingEngine();
-                SetThrottle(initialSpeed);
-                _workcart.SetTrackSelection(_pluginConfig.GetDefaultTrackSelection());
+                StartTrain(initialSpeed);
             }
 
             private void AddOutfit()
@@ -1546,6 +1585,7 @@ namespace Oxide.Plugins
             public const string RemoveTriggerSuccess = "RemoveTrigger.Success";
 
             public const string InfoTrigger = "Info.Trigger";
+            public const string InfoStart = "Info.Trigger.Start";
             public const string InfoTriggerSpeed = "Info.Trigger.Speed";
             public const string InfoTriggerTrackSelection = "Info.Trigger.TrackSelection";
         }
@@ -1573,6 +1613,7 @@ namespace Oxide.Plugins
                 [Lang.RemoveTriggerSuccess] = "Trigger #{0} successfully removed.",
 
                 [Lang.InfoTrigger] = "Workcart Trigger #{0}",
+                [Lang.InfoStart] = "Starts automation",
                 [Lang.InfoTriggerSpeed] = "Speed: {0}",
                 [Lang.InfoTriggerTrackSelection] = "Track selection: {0}",
             }, this, "en");
