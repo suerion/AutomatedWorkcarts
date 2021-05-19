@@ -774,6 +774,7 @@ namespace Oxide.Plugins
         {
             private const float TriggerDisplayDuration = 1f;
             private const float TriggerDisplayRadius = 1f;
+            private const float TriggerDrawDistance = 150;
 
             private Dictionary<CustomTriggerInfo, CustomTriggerWrapper> _customTriggers = new Dictionary<CustomTriggerInfo, CustomTriggerWrapper>();
             private Dictionary<ulong, Timer> _drawTimers = new Dictionary<ulong, Timer>();
@@ -850,8 +851,10 @@ namespace Oxide.Plugins
 
             public void ShowAllToPlayer(BasePlayer player)
             {
+                var playerPosition = player.transform.position;
+
                 foreach (var triggerInfo in _customTriggers.Keys)
-                    ShowTrigger(player, triggerInfo);
+                    ShowTrigger(player, playerPosition, triggerInfo);
 
                 Timer existingTimer;
                 if (_drawTimers.TryGetValue(player.userID, out existingTimer))
@@ -859,13 +862,18 @@ namespace Oxide.Plugins
 
                 _drawTimers[player.userID] = _pluginInstance.timer.Repeat(TriggerDisplayDuration - 0.1f, 60, () =>
                 {
+                    playerPosition = player.transform.position;
+
                     foreach (var triggerInfo in _customTriggers.Keys)
-                        ShowTrigger(player, triggerInfo);
+                        ShowTrigger(player, playerPosition, triggerInfo);
                 });
             }
 
-            private static void ShowTrigger(BasePlayer player, CustomTriggerInfo triggerInfo)
+            private static void ShowTrigger(BasePlayer player, Vector3 playerPosition, CustomTriggerInfo triggerInfo)
             {
+                if (Vector3.Distance(playerPosition, triggerInfo.Position) > TriggerDrawDistance)
+                    return;
+
                 var color = triggerInfo.GetColor();
 
                 var spherePosition = triggerInfo.Position + TriggerOffsetFromWorkcart;
