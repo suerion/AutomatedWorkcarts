@@ -143,7 +143,11 @@ namespace Oxide.Plugins
             if (trainController == null)
             {
                 if (trigger.TriggerInfo.StartsAutomation)
+                {
                     TryAddTrainController(workcart, trigger.TriggerInfo);
+                    if (!_pluginConfig.AutomateAllWorkcarts)
+                        _pluginData.AddWorkcart(workcart);
+                }
 
                 return;
             }
