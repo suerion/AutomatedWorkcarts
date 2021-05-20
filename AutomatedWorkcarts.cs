@@ -287,10 +287,7 @@ namespace Oxide.Plugins
             string[] optionArgs;
 
             if (!VerifyValidTrigger(player, cmd, args, Lang.UpdateTriggerSyntax, out triggerInfo, out optionArgs))
-            {
-                _customTriggerManager.ShowAllToPlayer(basePlayer);
                 return;
-            }
 
             if (optionArgs.Length == 0)
             {
@@ -304,6 +301,40 @@ namespace Oxide.Plugins
                     return;
             }
 
+            _customTriggerManager.UpdateTrigger(triggerInfo);
+            _customTriggerManager.ShowAllToPlayer(basePlayer);
+            ReplyToPlayer(player, Lang.UpdateTriggerSuccess, triggerInfo.Id);
+        }
+
+        [Command("aw.replacetrigger", "awt.replace")]
+        private void CommandReplaceTrigger(IPlayer player, string cmd, string[] args)
+        {
+            if (player.IsServer
+                || !VerifyPermission(player, PermissionManageTriggers)
+                || !VerifyAnyTriggers(player))
+                return;
+
+            var basePlayer = player.Object as BasePlayer;
+            CustomTriggerInfo triggerInfo;
+            string[] optionArgs;
+
+            if (!VerifyValidTrigger(player, cmd, args, Lang.UpdateTriggerSyntax, out triggerInfo, out optionArgs))
+                return;
+
+            if (optionArgs.Length == 0)
+            {
+                ReplyToPlayer(player, Lang.UpdateTriggerSyntax, cmd, GetTriggerOptions(player));
+                return;
+            }
+
+            var newTriggerInfo = new CustomTriggerInfo();
+            foreach (var arg in optionArgs)
+            {
+                if (!TryParseArg(player, cmd, arg, newTriggerInfo, Lang.UpdateTriggerSyntax))
+                    return;
+            }
+
+            triggerInfo.CopyFrom(newTriggerInfo);
             _customTriggerManager.UpdateTrigger(triggerInfo);
             _customTriggerManager.ShowAllToPlayer(basePlayer);
             ReplyToPlayer(player, Lang.UpdateTriggerSuccess, triggerInfo.Id);
@@ -777,6 +808,14 @@ namespace Oxide.Plugins
                 _speed = null;
                 _direction = null;
                 _trackSelection = null;
+            }
+
+            public void CopyFrom(CustomTriggerInfo triggerInfo)
+            {
+                StartsAutomation = triggerInfo.StartsAutomation;
+                Speed = triggerInfo.Speed;
+                Direction = triggerInfo.Direction;
+                TrackSelection = triggerInfo.TrackSelection;
             }
 
             public Color GetColor()

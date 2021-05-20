@@ -24,6 +24,7 @@
     - `aw.addtrigger Rev Hi` -- Creates a trigger that will cause workcarts to turn left at every intersection until another trigger changes the selection.
     - `aw.addtrigger Start Rev Hi Left` -- Creates a trigger with max forward speed and left track selection, which automatically enables automation for any workcart that enters it.
 - `aw.updatetrigger <id> <option1> <option2> ...` -- Updates the options of the specified trigger. Options are the same as for `aw.addtrigger`.
+- `aw.replacetrigger <id> <option1> <option2> ...` -- Replaces all options on the specified trigger with the options specified, without moving the trigger. Options are the same as for `aw.addtrigger`. This is useful for removing options from a trigger which `aw.updatetrigger` does not allow.
 - `aw.movetrigger <id>` -- Moves the specified trigger to the track position where the player is aiming.
 - `aw.removetrigger <id>` -- Removes the specified trigger.
 - `aw.showtriggers` -- Shows all triggers, including id, speed and track selection. This lasts 60 seconds, but is extended any time you add, update, move or remove a trigger.
@@ -31,8 +32,9 @@
 
 The following command aliases are also available:
 - `aw.addtrigger` -> `awt.add`
-- `aw.movetrigger` -> `awt.move`
 - `aw.updatetrigger` -> `awt.update`
+- `aw.replacetrigger` -> `awt.replace`
+- `aw.movetrigger` -> `awt.move`
 - `aw.removetrigger` -> `awt.remove`
 
 ## Configuration
