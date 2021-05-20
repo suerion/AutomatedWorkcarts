@@ -16,7 +16,7 @@
 - `aw.addtrigger <option1> <option2> ...` -- Adds a trigger to the track position where the player is aiming, with the specified options. Automated workcarts that pass through the trigger will be affected by the trigger's options.
   - Speed options: `Hi` | `Med` | `Lo` | `Zero`.
   - Direction options: `Fwd` | `Rev` | `Invert`.
-  - Track selection options:  `Left` | `Default` | `Right`.
+  - Track selection options: `Default` | `Left` | `Right` | `Swap`.
   - Passing the `Start` option will enable automation for any workcart that enters the trigger. This is useful if you have set `AutomateAllWorkcarts` set to `false` but don't want to manually automate individual workcarts. The recommendation is to place this on specific workcart spawn points.
   - Examples:
     - `aw.addtrigger` -- Creates a trigger with speed `Zero`. This causes the workcart to turn its engine off for the duration of the `EngineOffDuration` configuration option.

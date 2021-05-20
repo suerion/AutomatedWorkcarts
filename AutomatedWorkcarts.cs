@@ -603,8 +603,8 @@ namespace Oxide.Plugins
                 return true;
             }
 
-            TrackSelection trackSelection;
-            if (Enum.TryParse<TrackSelection>(arg, true, out trackSelection))
+            WorkcartTrackSelection trackSelection;
+            if (Enum.TryParse<WorkcartTrackSelection>(arg, true, out trackSelection))
             {
                 triggerInfo.TrackSelection = trackSelection.ToString();
                 return true;
@@ -664,11 +664,6 @@ namespace Oxide.Plugins
 
         #region Custom Triggers
 
-        private class TriggerCustom : TriggerBase
-        {
-            public CustomTriggerInfo TriggerInfo;
-        }
-
         // Don't rename these since the names are persisted in data files.
         private enum WorkcartSpeed
         {
@@ -684,6 +679,15 @@ namespace Oxide.Plugins
             Fwd,
             Rev,
             Invert
+        }
+
+        // Don't rename these since the names are persisted in data files.
+        private enum WorkcartTrackSelection
+        {
+            Default,
+            Left,
+            Right,
+            Swap
         }
 
         private static int EngineSpeedToNumber(EngineSpeeds engineSpeed)
@@ -723,7 +727,7 @@ namespace Oxide.Plugins
             var unsignedSpeed = Math.Abs(signedSpeed);
 
             // 1 or -1
-            var sign = signedSpeed == 0 ? 1 : signedSpeed / Math.Abs(signedSpeed);
+            var sign = signedSpeed == 0 ? 1 : signedSpeed / unsignedSpeed;
 
             if (desiredDirection == WorkcartDirection.Fwd)
                 sign = 1;
@@ -742,6 +746,36 @@ namespace Oxide.Plugins
                 unsignedSpeed = 0;
 
             return EngineSpeedFromNumber(sign * unsignedSpeed);
+        }
+
+        private static TrackSelection GetNextTrackSelection(TrackSelection trackSelection, WorkcartTrackSelection? desiredTrackSelection)
+        {
+            switch (desiredTrackSelection)
+            {
+                case WorkcartTrackSelection.Default:
+                    return TrackSelection.Default;
+
+                case WorkcartTrackSelection.Left:
+                    return TrackSelection.Left;
+
+                case WorkcartTrackSelection.Right:
+                    return TrackSelection.Right;
+
+                case WorkcartTrackSelection.Swap:
+                    return trackSelection == TrackSelection.Left
+                        ? TrackSelection.Right
+                        : trackSelection == TrackSelection.Right
+                        ? TrackSelection.Left
+                        : trackSelection;
+
+                default:
+                    return trackSelection;
+            }
+        }
+
+        private class TriggerCustom : TriggerBase
+        {
+            public CustomTriggerInfo TriggerInfo;
         }
 
         private class CustomTriggerInfo
@@ -790,13 +824,13 @@ namespace Oxide.Plugins
                 return _direction;
             }
 
-            private TrackSelection? _trackSelection;
-            public TrackSelection? GetTrackSelection()
+            private WorkcartTrackSelection? _trackSelection;
+            public WorkcartTrackSelection? GetTrackSelection()
             {
                 if (_trackSelection == null && !string.IsNullOrWhiteSpace(TrackSelection))
                 {
-                    TrackSelection trackSelection;
-                    if (Enum.TryParse<TrackSelection>(TrackSelection, out trackSelection))
+                    WorkcartTrackSelection trackSelection;
+                    if (Enum.TryParse<WorkcartTrackSelection>(TrackSelection, out trackSelection))
                         _trackSelection = trackSelection;
                 }
 
@@ -1248,16 +1282,14 @@ namespace Oxide.Plugins
             public void HandleCustomTrigger(CustomTriggerInfo triggerInfo)
             {
                 var engineSpeed = GetNextVelocity(_workcart.CurThrottleSetting, triggerInfo.GetSpeed(), triggerInfo.GetDirection());
-
                 SetThrottle(engineSpeed);
+
                 if (engineSpeed == EngineSpeeds.Zero)
                     Invoke(ScheduledDepartureForCustomTrigger, _pluginConfig.EngineOffDuration);
                 else
                     CancelInvoke(ScheduledDepartureForCustomTrigger);
 
-                var trackSelection = triggerInfo.GetTrackSelection();
-                if (trackSelection != null)
-                    _workcart.SetTrackSelection((TrackSelection)trackSelection);
+                _workcart.SetTrackSelection(GetNextTrackSelection(_workcart.curTrackSelection, triggerInfo.GetTrackSelection()));
             }
 
             public void ScheduledDepartureForCustomTrigger()
@@ -1712,7 +1744,7 @@ namespace Oxide.Plugins
         {
             var speedOptions = GetMessage(player, Lang.HelpSpeedOptions, GetEnumOptions<WorkcartSpeed>());
             var directionOptions = GetMessage(player, Lang.HelpDirectionOptions, GetEnumOptions<WorkcartDirection>());
-            var trackSelectionOptions = GetMessage(player, Lang.HelpTrackSelectionOptions, GetEnumOptions<TrackSelection>());
+            var trackSelectionOptions = GetMessage(player, Lang.HelpTrackSelectionOptions, GetEnumOptions<WorkcartTrackSelection>());
             var otherOptions = GetMessage(player, Lang.HelpOtherOptions);
 
             return $"{speedOptions}\n{directionOptions}\n{trackSelectionOptions}\n{otherOptions}";
