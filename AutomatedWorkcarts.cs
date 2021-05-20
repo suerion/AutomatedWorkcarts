@@ -13,7 +13,7 @@ using static TrainTrackSpline;
 
 namespace Oxide.Plugins
 {
-    [Info("Automated Workcarts", "WhiteThunder", "0.3.0")]
+    [Info("Automated Workcarts", "WhiteThunder", "0.4.0")]
     [Description("Spawns conductor NPCs that drive workcarts between stations.")]
     internal class AutomatedWorkcarts : CovalencePlugin
     {
@@ -258,7 +258,7 @@ namespace Oxide.Plugins
 
             if (args.Length == 0)
             {
-                triggerInfo.EngineSpeed = EngineSpeeds.Zero.ToString();
+                triggerInfo.Speed = EngineSpeeds.Zero.ToString();
             }
             else
             {
@@ -284,7 +284,7 @@ namespace Oxide.Plugins
             int triggerId;
             if (args.Length < 2 || !int.TryParse(args[0], out triggerId))
             {
-                ReplyToPlayer(player, Lang.UpdateTriggerSyntax, cmd, GetEnumOptions<EngineSpeeds>(), GetEnumOptions<TrackSelection>());
+                ReplyToPlayer(player, Lang.UpdateTriggerSyntax, cmd, GetTriggerOptions(player));
                 return;
             }
 
@@ -533,10 +533,17 @@ namespace Oxide.Plugins
                 return true;
             }
 
-            EngineSpeeds engineSpeed;
-            if (Enum.TryParse<EngineSpeeds>(arg, true, out engineSpeed))
+            WorkcartSpeed speed;
+            if (Enum.TryParse<WorkcartSpeed>(arg, true, out speed))
             {
-                triggerInfo.EngineSpeed = engineSpeed.ToString();
+                triggerInfo.Speed = speed.ToString();
+                return true;
+            }
+
+            WorkcartDirection direction;
+            if (Enum.TryParse<WorkcartDirection>(arg, true, out direction))
+            {
+                triggerInfo.Direction = direction.ToString();
                 return true;
             }
 
@@ -547,7 +554,7 @@ namespace Oxide.Plugins
                 return true;
             }
 
-            ReplyToPlayer(player, errorMessageName, cmd, GetEnumOptions<EngineSpeeds>(), GetEnumOptions<TrackSelection>());
+            ReplyToPlayer(player, errorMessageName, cmd, GetTriggerOptions(player));
             return false;
         }
 
@@ -584,7 +591,80 @@ namespace Oxide.Plugins
             public CustomTriggerInfo TriggerInfo;
         }
 
-        private enum SpeedDirection { Forward, Reverse, None }
+        // Don't rename these since the names are persisted in data files.
+        private enum WorkcartSpeed
+        {
+            Zero = 0,
+            Lo = 1,
+            Med = 2,
+            Hi = 3
+        }
+
+        // Don't rename these since the names are persisted in data files.
+        private enum WorkcartDirection
+        {
+            Fwd,
+            Rev,
+            Invert
+        }
+
+        private static int EngineSpeedToNumber(EngineSpeeds engineSpeed)
+        {
+            switch (engineSpeed)
+            {
+                case EngineSpeeds.Fwd_Hi: return 3;
+                case EngineSpeeds.Fwd_Med: return 2;
+                case EngineSpeeds.Fwd_Lo: return 1;
+                case EngineSpeeds.Rev_Lo: return -1;
+                case EngineSpeeds.Rev_Med: return -2;
+                case EngineSpeeds.Rev_Hi: return -3;
+                default: return 0;
+            }
+        }
+
+        private static EngineSpeeds EngineSpeedFromNumber(int speedNumber)
+        {
+            switch (speedNumber)
+            {
+                case 3: return EngineSpeeds.Fwd_Hi;
+                case 2: return EngineSpeeds.Fwd_Med;
+                case 1: return EngineSpeeds.Fwd_Lo;
+                case -1: return EngineSpeeds.Rev_Lo;
+                case -2: return EngineSpeeds.Rev_Med;
+                case -3: return EngineSpeeds.Rev_Hi;
+                default: return 0;
+            }
+        }
+
+        private static EngineSpeeds GetNextVelocity(EngineSpeeds throttleSpeed, WorkcartSpeed? desiredSpeed, WorkcartDirection? desiredDirection)
+        {
+            // -3 to 3
+            var signedSpeed = EngineSpeedToNumber(throttleSpeed);
+
+            // 0, 1, 2, 3
+            var unsignedSpeed = Math.Abs(signedSpeed);
+
+            // 1 or -1
+            var sign = signedSpeed == 0 ? 1 : signedSpeed / Math.Abs(signedSpeed);
+
+            if (desiredDirection == WorkcartDirection.Fwd)
+                sign = 1;
+            else if (desiredDirection == WorkcartDirection.Rev)
+                sign = -1;
+            else if (desiredDirection == WorkcartDirection.Invert)
+                sign *= -1;
+
+            if (desiredSpeed == WorkcartSpeed.Hi)
+                unsignedSpeed = 3;
+            else if (desiredSpeed == WorkcartSpeed.Med)
+                unsignedSpeed = 2;
+            else if (desiredSpeed == WorkcartSpeed.Lo)
+                unsignedSpeed = 1;
+            else if (desiredSpeed == WorkcartSpeed.Zero)
+                unsignedSpeed = 0;
+
+            return EngineSpeedFromNumber(sign * unsignedSpeed);
+        }
 
         private class CustomTriggerInfo
         {
@@ -597,61 +677,58 @@ namespace Oxide.Plugins
             [JsonProperty("StartsAutomation", DefaultValueHandling = DefaultValueHandling.Ignore)]
             public bool StartsAutomation = false;
 
-            [JsonProperty("EngineSpeed", DefaultValueHandling = DefaultValueHandling.Ignore)]
-            public string EngineSpeed;
+            [JsonProperty("Speed", DefaultValueHandling = DefaultValueHandling.Ignore)]
+            public string Speed;
+
+            [JsonProperty("Direction", DefaultValueHandling = DefaultValueHandling.Ignore)]
+            public string Direction;
 
             [JsonProperty("TrackSelection", DefaultValueHandling = DefaultValueHandling.Ignore)]
             public string TrackSelection;
 
-            private EngineSpeeds? _engineSpeed;
-            public bool TryGetEngineSpeed(out EngineSpeeds engineSpeed)
+            private WorkcartSpeed? _speed;
+            public WorkcartSpeed? GetSpeed()
             {
-                engineSpeed = EngineSpeeds.Zero;
-
-                if (string.IsNullOrEmpty(EngineSpeed))
-                    return false;
-
-                if (_engineSpeed != null)
+                if (_speed == null && !string.IsNullOrWhiteSpace(Speed))
                 {
-                    engineSpeed = (EngineSpeeds)_engineSpeed;
-                    return true;
+                    WorkcartSpeed speed;
+                    if (Enum.TryParse<WorkcartSpeed>(Speed, out speed))
+                        _speed = speed;
                 }
 
-                if (TryParseEngineSpeed(EngineSpeed, out engineSpeed))
+                return _speed;
+            }
+
+            private WorkcartDirection? _direction;
+            public WorkcartDirection? GetDirection()
+            {
+                if (_direction == null && !string.IsNullOrWhiteSpace(Direction))
                 {
-                    _engineSpeed = engineSpeed;
-                    return true;
+                    WorkcartDirection direction;
+                    if (Enum.TryParse<WorkcartDirection>(Direction, out direction))
+                        _direction = direction;
                 }
 
-                return false;
+                return _direction;
             }
 
             private TrackSelection? _trackSelection;
-            public bool TryGetTrackSelection(out TrackSelection trackSelection)
+            public TrackSelection? GetTrackSelection()
             {
-                trackSelection = TrainTrackSpline.TrackSelection.Default;
-
-                if (string.IsNullOrEmpty(TrackSelection))
-                    return false;
-
-                if (_trackSelection != null)
+                if (_trackSelection == null && !string.IsNullOrWhiteSpace(TrackSelection))
                 {
-                    trackSelection = (TrackSelection)_trackSelection;
-                    return true;
+                    TrackSelection trackSelection;
+                    if (Enum.TryParse<TrackSelection>(TrackSelection, out trackSelection))
+                        _trackSelection = trackSelection;
                 }
 
-                if (TryParseTrackSelection(TrackSelection, out trackSelection))
-                {
-                    _trackSelection = trackSelection;
-                    return true;
-                }
-
-                return false;
+                return _trackSelection;
             }
 
             public void InvalidateCache()
             {
-                _engineSpeed = null;
+                _speed = null;
+                _direction = null;
                 _trackSelection = null;
             }
 
@@ -660,76 +737,33 @@ namespace Oxide.Plugins
                 if (StartsAutomation)
                     return Color.cyan;
 
-                EngineSpeeds engineSpeed;
-                if (!TryGetEngineSpeed(out engineSpeed))
-                {
-                    TrackSelection trackSelection;
-                    if (TryGetTrackSelection(out trackSelection))
-                        return Color.yellow;
-                    else
-                        return Color.white;
-                }
+                var speed = GetSpeed();
+                var direction = GetDirection();
+                var trackSelection = GetTrackSelection();
 
-                switch (engineSpeed)
-                {
-                    case EngineSpeeds.Fwd_Hi:
-                        return Color.HSVToRGB(1 / 3f, 1, 1);
-                    case EngineSpeeds.Fwd_Med:
-                        return Color.HSVToRGB(1 / 3f, 0.75f, 1);
-                    case EngineSpeeds.Fwd_Lo:
-                        return Color.HSVToRGB(1 / 3f, 0.5f, 1);
+                if (speed == WorkcartSpeed.Zero)
+                    return Color.white;
 
-                    case EngineSpeeds.Rev_Hi:
-                        return Color.HSVToRGB(0, 1, 1);
-                    case EngineSpeeds.Rev_Med:
-                        return Color.HSVToRGB(0, 0.75f, 1);
-                    case EngineSpeeds.Rev_Lo:
-                        return Color.HSVToRGB(0, 0.5f, 1);
+                if (speed == null && direction == null && trackSelection != null)
+                    return Color.magenta;
 
-                    default:
-                        return Color.white;
-                }
-            }
+                var hue = direction == WorkcartDirection.Fwd
+                    ? 1/3f // Green
+                    : direction == WorkcartDirection.Rev
+                    ? 0 // Red
+                    : direction == WorkcartDirection.Invert
+                    ? 0.5f/6f // Orange
+                    : 1/6f; // Yellow
 
-            public SpeedDirection GetDirection(out int magnitude)
-            {
-                EngineSpeeds engineSpeed;
-                if (!TryGetEngineSpeed(out engineSpeed))
-                {
-                    magnitude = 0;
-                    return SpeedDirection.None;
-                }
+                var saturation = speed == WorkcartSpeed.Hi
+                    ? 1
+                    : speed == WorkcartSpeed.Med
+                    ? 0.8f
+                    : speed == WorkcartSpeed.Lo
+                    ? 0.6f
+                    : 1;
 
-                switch (engineSpeed)
-                {
-                    case EngineSpeeds.Fwd_Hi:
-                        magnitude = 3;
-                        return SpeedDirection.Forward;
-
-                    case EngineSpeeds.Fwd_Med:
-                        magnitude = 2;
-                        return SpeedDirection.Forward;
-
-                    case EngineSpeeds.Fwd_Lo:
-                        magnitude = 1;
-                        return SpeedDirection.Forward;
-
-                    case EngineSpeeds.Rev_Hi:
-                        magnitude = 3;
-                        return SpeedDirection.Reverse;
-
-                    case EngineSpeeds.Rev_Med:
-                        magnitude = 2;
-                        return SpeedDirection.Reverse;
-
-                    case EngineSpeeds.Rev_Lo:
-                        magnitude = 1;
-                        return SpeedDirection.Reverse;
-
-                    default:
-                        magnitude = 0;
-                        return SpeedDirection.None;
-                }
+                return Color.HSVToRGB(hue, saturation, 1);
             }
         }
 
@@ -884,12 +918,16 @@ namespace Oxide.Plugins
                 if (triggerInfo.StartsAutomation)
                     infoLines.Add(_pluginInstance.GetMessage(player, Lang.InfoStart));
 
-                EngineSpeeds engineSpeed;
-                if (triggerInfo.TryGetEngineSpeed(out engineSpeed))
-                    infoLines.Add(_pluginInstance.GetMessage(player, Lang.InfoTriggerSpeed, engineSpeed));
+                var speed = triggerInfo.GetSpeed();
+                if (speed != null)
+                    infoLines.Add(_pluginInstance.GetMessage(player, Lang.InfoTriggerSpeed, speed));
 
-                TrackSelection trackSelection;
-                if (triggerInfo.TryGetTrackSelection(out trackSelection))
+                var direction = triggerInfo.GetDirection();
+                if (direction != null)
+                    infoLines.Add(_pluginInstance.GetMessage(player, Lang.InfoTriggerDirection, direction));
+
+                var trackSelection = triggerInfo.GetTrackSelection();
+                if (trackSelection != null)
                     infoLines.Add(_pluginInstance.GetMessage(player, Lang.InfoTriggerTrackSelection, trackSelection));
 
                 var textPosition = triggerInfo.Position + Vector3.up * 2.5f;
@@ -1111,9 +1149,7 @@ namespace Oxide.Plugins
 
             public void StartImmediately(CustomTriggerInfo triggerInfo)
             {
-                EngineSpeeds initialSpeed;
-                if (!triggerInfo.TryGetEngineSpeed(out initialSpeed))
-                    initialSpeed = _pluginConfig.GetDefaultSpeed();
+                var initialSpeed = GetNextVelocity(EngineSpeeds.Zero, triggerInfo.GetSpeed(), triggerInfo.GetDirection());
 
                 CancelInvoke(ScheduledStartTrain);
                 Invoke(() =>
@@ -1125,22 +1161,17 @@ namespace Oxide.Plugins
 
             public void HandleCustomTrigger(CustomTriggerInfo triggerInfo)
             {
-                EngineSpeeds engineSpeed;
-                if (triggerInfo.TryGetEngineSpeed(out engineSpeed))
-                {
-                    SetThrottle(engineSpeed);
+                var engineSpeed = GetNextVelocity(_workcart.CurThrottleSetting, triggerInfo.GetSpeed(), triggerInfo.GetDirection());
 
-                    if (engineSpeed == EngineSpeeds.Zero)
-                        Invoke(ScheduledDepartureForCustomTrigger, _pluginConfig.EngineOffDuration);
-                    else
-                        CancelInvoke(ScheduledDepartureForCustomTrigger);
-                }
+                SetThrottle(engineSpeed);
+                if (engineSpeed == EngineSpeeds.Zero)
+                    Invoke(ScheduledDepartureForCustomTrigger, _pluginConfig.EngineOffDuration);
+                else
+                    CancelInvoke(ScheduledDepartureForCustomTrigger);
 
-                TrackSelection trackSelection;
-                if (triggerInfo.TryGetTrackSelection(out trackSelection))
-                {
-                    _workcart.SetTrackSelection(trackSelection);
-                }
+                var trackSelection = triggerInfo.GetTrackSelection();
+                if (trackSelection != null)
+                    _workcart.SetTrackSelection((TrackSelection)trackSelection);
             }
 
             public void ScheduledDepartureForCustomTrigger()
@@ -1209,10 +1240,10 @@ namespace Oxide.Plugins
                 _workcart.SetThrottle(_nextSpeed);
             }
 
-            public void SetThrottle(EngineSpeeds throttleSpeed)
+            public void SetThrottle(EngineSpeeds engineSpeed)
             {
                 CancelInvoke(ScheduledSpeedChange);
-                _workcart.SetThrottle(throttleSpeed);
+                _workcart.SetThrottle(engineSpeed);
             }
 
             private bool IsParked()
@@ -1591,6 +1622,16 @@ namespace Oxide.Plugins
             return args.Length > 0 ? string.Format(message, args) : message;
         }
 
+        private string GetTriggerOptions(IPlayer player)
+        {
+            var speedOptions = GetMessage(player, Lang.HelpSpeedOptions, GetEnumOptions<WorkcartSpeed>());
+            var directionOptions = GetMessage(player, Lang.HelpDirectionOptions, GetEnumOptions<WorkcartDirection>());
+            var trackSelectionOptions = GetMessage(player, Lang.HelpTrackSelectionOptions, GetEnumOptions<TrackSelection>());
+            var otherOptions = GetMessage(player, Lang.HelpOtherOptions);
+
+            return $"{speedOptions}\n{directionOptions}\n{trackSelectionOptions}\n{otherOptions}";
+        }
+
         private class Lang
         {
             public const string ErrorNoPermission = "Error.NoPermission";
@@ -1612,9 +1653,15 @@ namespace Oxide.Plugins
             public const string RemoveTriggerSyntax = "RemoveTrigger.Syntax";
             public const string RemoveTriggerSuccess = "RemoveTrigger.Success";
 
+            public const string HelpSpeedOptions = "Help.SpeedOptions";
+            public const string HelpDirectionOptions = "Help.DirectionOptions";
+            public const string HelpTrackSelectionOptions = "Help.TrackSelectionOptions";
+            public const string HelpOtherOptions = "Help.OtherOptions";
+
             public const string InfoTrigger = "Info.Trigger";
             public const string InfoStart = "Info.Trigger.Start";
             public const string InfoTriggerSpeed = "Info.Trigger.Speed";
+            public const string InfoTriggerDirection = "Info.Trigger.Direction";
             public const string InfoTriggerTrackSelection = "Info.Trigger.TrackSelection";
         }
 
@@ -1632,17 +1679,23 @@ namespace Oxide.Plugins
 
                 [Lang.ToggleOnSuccess] = "That workcart is now automated.",
                 [Lang.ToggleOffSuccess] = "That workcart is no longer automated.",
-                [Lang.AddTriggerSyntax] = "Syntax: <color=#fd4>{0} <speed> <track selection></color>\nSpeeds: {1}\nTrack selections: {2}",
+                [Lang.AddTriggerSyntax] = "Syntax: <color=#fd4>{0} <option1> <option2> ...</color>\n{1}",
                 [Lang.AddTriggerSuccess] = "Successfully added trigger #{0}.",
-                [Lang.UpdateTriggerSyntax] = "Syntax: <color=#fd4>{0} <id> <speed> <track selection></color>\nSpeeds: {1}\nTrack selections: {2}",
+                [Lang.UpdateTriggerSyntax] = "Syntax: <color=#fd4>{0} <id> <option1> <option2> ...</color>\n{1}",
                 [Lang.UpdateTriggerSuccess] = "Successfully updated trigger #{0}",
                 [Lang.MoveTriggerSuccess] = "Successfully moved trigger #{0}",
                 [Lang.RemoveTriggerSyntax] = "Syntax: <color=#fd4>{0} <id></color>",
                 [Lang.RemoveTriggerSuccess] = "Trigger #{0} successfully removed.",
 
+                [Lang.HelpSpeedOptions] = "Speeds: {0}",
+                [Lang.HelpDirectionOptions] = "Directions: {0}",
+                [Lang.HelpTrackSelectionOptions] = "Track selection: {0}",
+                [Lang.HelpOtherOptions] = "Other options: <color=#fd4>Start</color>",
+
                 [Lang.InfoTrigger] = "Workcart Trigger #{0}",
                 [Lang.InfoStart] = "Starts automation",
                 [Lang.InfoTriggerSpeed] = "Speed: {0}",
+                [Lang.InfoTriggerDirection] = "Direction: {0}",
                 [Lang.InfoTriggerTrackSelection] = "Track selection: {0}",
             }, this, "en");
         }

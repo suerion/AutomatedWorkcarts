@@ -13,20 +13,21 @@
 
 - `aw.toggle` -- Toggles automation for the workcart you are standing on or looking at.
   - This command is disabled while the `AutomateAllWorkcarts` configuration option is `true`.
-- `aw.addtrigger <option1> <option2> ...` -- Adds a trigger to the track position where the player is aiming, with the specified options. Workcarts that pass through the trigger will be affected by the trigger's options.
-  - Speed options: `Rev_Hi` | `Rev_Med` | `Rev_Lo` | `Zero` | `Fwd_Lo` | `Fwd_Med` | `Fwd_Hi`.
-  - Track selection options:  `Default` | `Left` | `Right`.
-  - Passing the `Start` option will cause any workcart that passes through (or spawns on) the trigger to become an automated workcart. Useful if you have configured the plugin with `AutomateAllWorkcarts` set to `false`.
+- `aw.addtrigger <option1> <option2> ...` -- Adds a trigger to the track position where the player is aiming, with the specified options. Automated workcarts that pass through the trigger will be affected by the trigger's options.
+  - Speed options: `Hi` | `Med` | `Lo` | `Zero`.
+  - Direction options: `Fwd` | `Rev` | `Invert`.
+  - Track selection options:  `Left` | `Default` | `Right`.
+  - Passing the `Start` option will enable automation for any workcart that enters the trigger. This is useful if you have set `AutomateAllWorkcarts` set to `false` but don't want to manually automate individual workcarts. The recommendation is to place this on specific workcart spawn points.
   - Examples:
     - `aw.addtrigger` -- Creates a trigger with speed `Zero`. This causes the workcart to turn its engine off for the duration of the `EngineOffDuration` configuration option.
-    - `aw.addtrigger Rev_Hi` -- Creates a trigger that will cause workcarts to select max speed.
-    - `aw.addtrigger Rev_Hi` -- Creates a trigger that will cause workcarts to turn left at every intersection until another trigger changes the selection.
-    - `aw.addtrigger Start Rev_Hi Left` -- Creates a trigger with max forward speed and left track selection.
+    - `aw.addtrigger Rev Hi` -- Creates a trigger that will cause workcarts to select max speed.
+    - `aw.addtrigger Rev Hi` -- Creates a trigger that will cause workcarts to turn left at every intersection until another trigger changes the selection.
+    - `aw.addtrigger Start Rev Hi Left` -- Creates a trigger with max forward speed and left track selection, which automatically enables automation for any workcart that enters it.
 - `aw.updatetrigger <id> <option1> <option2> ...` -- Updates the options of the specified trigger. Options are the same as for `aw.addtrigger`.
 - `aw.movetrigger <id>` -- Moves the specified trigger to the track position where the player is aiming.
 - `aw.removetrigger <id>` -- Removes the specified trigger.
 - `aw.showtriggers` -- Shows all triggers, including id, speed and track selection. This lasts 60 seconds, but is extended any time you add, update, move or remove a trigger.
-  - You must be an admin to see them.
+  - You must be an admin to see the triggers.
 
 The following command aliases are also available:
 - `aw.addtrigger` -> `awt.add`
@@ -47,30 +48,18 @@ The following command aliases are also available:
 }
 ```
 
-- `AutomateAllWorkcarts` (`true` or `false`) -- While `true`, all workcarts will be automated, except those blocked by other plugins; the `aw.toggle` command will be disabled. While false, you can either automate individual workcarts with `aw.toggle` or use custom triggers to automate workcarts that pass through them (or spawn on them).
+- `AutomateAllWorkcarts` (`true` or `false`) -- While `true`, all workcarts will be automated, except those blocked by other plugins; the `aw.toggle` command will be disabled. While false, you can either automate individual workcarts with `aw.toggle` or use custom triggers to automate workcarts that enter them.
 - `EngineOffDuration` -- Number of seconds that trains should wait after stopping.
   - For custom triggers, the timer starts as soon as the workcart enters a trigger with speed `Zero`, not when the workcart actually stops.
 - `AutoDetectStations` (`true` or `false`) -- While `true`, the plugin will auto detect vanilla train stations and add triggers to them, causing automated workcarts to stop at them for the configured `EngineOffDuration`.
   - Note: These triggers cannot be customized.
 - `DefaultSpeed` -- Default speed to use when a workcart starts being automated.
+  - Allowed values: `"Rev_Hi"` | `"Rev_Med"` | `"Rev_Lo"` | `"Zero"` | `"Fwd_Lo"` | `"Fwd_Med"` | `"Fwd_Hi"`.
   - Basically this applies when the plugin loads, when toggling on with `aw.toggle`, or when a workcart spawns.
 - `DepartureSpeed` -- Speed to use when departing from a stop.
-- `DefaultTrackSelection` (`Default`, `Left` or `Right`) -- Default track selection to use when a workcart starts being automated.
+- `DefaultTrackSelection` -- Default track selection to use when a workcart starts being automated.
+  - Allowed values: `"Left"` | `"Default"` | `"Right"`.
   - Basically this applies when the plugin loads, when toggling on with `aw.toggle`, or when a workcart spawns.
-
-### Possible speeds
-- `"Rev_Hi"`
-- `"Rev_Med"`
-- `"Rev_Lo"`
-- `"Zero"`
-- `"Fwd_Lo"`
-- `"Fwd_Med"`
-- `"Fwd_Hi"`
-
-### Possible track selections
-- `"Default"`
-- `"Left"`
-- `"Right"`
 
 ## Localization
 
@@ -85,16 +74,21 @@ The following command aliases are also available:
   "Error.AutomateBlocked": "Error: Another plugin blocked automating that workcart.",
   "Toggle.Success.On": "That workcart is now automated.",
   "Toggle.Success.Off": "That workcart is no longer automated.",
-  "AddTrigger.Syntax": "Syntax: <color=#fd4>{0} <speed> <track selection></color>\nSpeeds: {1}\nTrack selections: {2}",
+  "AddTrigger.Syntax": "Syntax: <color=#fd4>{0} <option1> <option2> ...</color>\n{1}",
   "AddTrigger.Success": "Successfully added trigger #{0}.",
-  "UpdateTrigger.Syntax": "Syntax: <color=#fd4>{0} <id> <speed> <track selection></color>\nSpeeds: {1}\nTrack selections: {2}",
+  "UpdateTrigger.Syntax": "Syntax: <color=#fd4>{0} <id> <option1> <option2> ...</color>\n{1}",
   "UpdateTrigger.Success": "Successfully updated trigger #{0}",
   "MoveTrigger.Success": "Successfully moved trigger #{0}",
   "RemoveTrigger.Syntax": "Syntax: <color=#fd4>{0} <id></color>",
   "RemoveTrigger.Success": "Trigger #{0} successfully removed.",
+  "Help.SpeedOptions": "Speeds: {0}",
+  "Help.DirectionOptions": "Directions: {0}",
+  "Help.TrackSelectionOptions": "Track selection: {0}",
+  "Help.OtherOptions": "Other options: <color=#fd4>Start</color>",
   "Info.Trigger": "Workcart Trigger #{0}",
   "Info.Trigger.Start": "Starts automation",
   "Info.Trigger.Speed": "Speed: {0}",
+  "Info.Trigger.Direction": "Direction: {0}",
   "Info.Trigger.TrackSelection": "Track selection: {0}"
 }
 ```
