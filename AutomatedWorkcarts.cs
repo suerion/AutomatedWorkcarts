@@ -44,7 +44,6 @@ namespace Oxide.Plugins
         {
             _pluginInstance = this;
             _pluginData = StoredPluginData.Load();
-            _mapData = StoredMapData.Load();
 
             permission.RegisterPermission(PermissionToggle, this);
             permission.RegisterPermission(PermissionManageTriggers, this);
@@ -67,6 +66,7 @@ namespace Oxide.Plugins
 
         private void OnServerInitialized()
         {
+            _mapData = StoredMapData.Load();
             _customTriggerManager.CreateAll();
 
             if (_pluginConfig.AutoDetectStations)
