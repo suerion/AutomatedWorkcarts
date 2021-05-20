@@ -104,3 +104,12 @@ bool? OnWorkcartAutomate(TrainEngine workcart)
 - Called when a workcart is about to be automated
 - Returning `false` will prevent the workcart from being automated
 - Returning `null` will result in the default behavior
+
+#### OnWorkcartAutomated
+
+```csharp
+void OnWorkcartAutomated(TrainEngine workcart)
+```
+
+- Called after a workcart has been automated
+- No return behavior

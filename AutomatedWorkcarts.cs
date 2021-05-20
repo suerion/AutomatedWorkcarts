@@ -430,7 +430,7 @@ namespace Oxide.Plugins
                 trainController.StartImmediately(triggerInfo);
 
             workcart.SetHealth(workcart.MaxHealth());
-            Interface.CallHook("OnWorkcartSafeZoneCreated", workcart);
+            Interface.CallHook("OnWorkcartAutomated", workcart);
 
             return true;
         }
