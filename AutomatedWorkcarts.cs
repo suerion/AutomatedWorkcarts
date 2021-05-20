@@ -278,23 +278,27 @@ namespace Oxide.Plugins
         private void CommandUpdateTrigger(IPlayer player, string cmd, string[] args)
         {
             if (player.IsServer
-                || !VerifyPermission(player, PermissionManageTriggers))
+                || !VerifyPermission(player, PermissionManageTriggers)
+                || !VerifyAnyTriggers(player))
                 return;
 
-            int triggerId;
-            if (args.Length < 2 || !int.TryParse(args[0], out triggerId))
+            var basePlayer = player.Object as BasePlayer;
+            CustomTriggerInfo triggerInfo;
+            string[] optionArgs;
+
+            if (!VerifyValidTrigger(player, cmd, args, Lang.UpdateTriggerSyntax, out triggerInfo, out optionArgs))
+            {
+                _customTriggerManager.ShowAllToPlayer(basePlayer);
+                return;
+            }
+
+            if (optionArgs.Length == 0)
             {
                 ReplyToPlayer(player, Lang.UpdateTriggerSyntax, cmd, GetTriggerOptions(player));
                 return;
             }
 
-            var basePlayer = player.Object as BasePlayer;
-
-            CustomTriggerInfo triggerInfo;
-            if (!VerifyTriggerExists(player, triggerId, out triggerInfo))
-                return;
-
-            foreach (var arg in args.Skip(1))
+            foreach (var arg in optionArgs)
             {
                 if (!TryParseArg(player, cmd, arg, triggerInfo, Lang.UpdateTriggerSyntax))
                     return;
@@ -309,7 +313,8 @@ namespace Oxide.Plugins
         private void CommandMoveTrigger(IPlayer player, string cmd, string[] args)
         {
             if (player.IsServer
-                || !VerifyPermission(player, PermissionManageTriggers))
+                || !VerifyPermission(player, PermissionManageTriggers)
+                || !VerifyAnyTriggers(player))
                 return;
 
             int triggerId;
@@ -320,7 +325,6 @@ namespace Oxide.Plugins
             }
 
             var basePlayer = player.Object as BasePlayer;
-
             CustomTriggerInfo triggerInfo;
             Vector3 trackPosition;
 
@@ -337,42 +341,32 @@ namespace Oxide.Plugins
         private void CommandRemoveTrigger(IPlayer player, string cmd, string[] args)
         {
             if (player.IsServer
-                || !VerifyPermission(player, PermissionManageTriggers))
+                || !VerifyPermission(player, PermissionManageTriggers)
+                || !VerifyAnyTriggers(player))
                 return;
-
-            int triggerId;
-            if (args.Length < 1 || !int.TryParse(args[0], out triggerId))
-            {
-                ReplyToPlayer(player, Lang.RemoveTriggerSyntax, cmd);
-                return;
-            }
 
             var basePlayer = player.Object as BasePlayer;
-            var triggerInfo = _customTriggerManager.FindTrigger(triggerId);
-            if (triggerInfo == null)
+            CustomTriggerInfo triggerInfo;
+            string[] optionArgs;
+
+            if (!VerifyValidTrigger(player, cmd, args, Lang.RemoveTriggerSyntax, out triggerInfo, out optionArgs))
             {
-                ReplyToPlayer(player, Lang.ErrorTriggerNotFound, triggerId);
                 _customTriggerManager.ShowAllToPlayer(basePlayer);
                 return;
             }
 
             _customTriggerManager.RemoveTrigger(triggerInfo);
             _customTriggerManager.ShowAllToPlayer(basePlayer);
-            ReplyToPlayer(player, Lang.RemoveTriggerSuccess, triggerId);
+            ReplyToPlayer(player, Lang.RemoveTriggerSuccess, triggerInfo.Id);
         }
 
         [Command("aw.showtriggers")]
         private void CommandShowStops(IPlayer player, string cmd, string[] args)
         {
             if (player.IsServer
-                || !VerifyPermission(player, PermissionManageTriggers))
+                || !VerifyPermission(player, PermissionManageTriggers)
+                || !VerifyAnyTriggers(player))
                 return;
-
-            if (_mapData.CustomTriggers.Count == 0)
-            {
-                ReplyToPlayer(player, Lang.ErrorNoTriggers);
-                return;
-            }
 
             _customTriggerManager.ShowAllToPlayer(player.Object as BasePlayer);
         }
@@ -390,23 +384,54 @@ namespace Oxide.Plugins
             return false;
         }
 
+        private bool VerifyAnyTriggers(IPlayer player)
+        {
+            if (_mapData.CustomTriggers.Count > 0)
+                return true;
+
+            ReplyToPlayer(player, Lang.ErrorNoTriggers);
+            return false;
+        }
+
         private bool VerifyTriggerExists(IPlayer player, int triggerId, out CustomTriggerInfo triggerInfo)
         {
             triggerInfo = _customTriggerManager.FindTrigger(triggerId);
             if (triggerInfo != null)
                 return true;
 
-            ReplyToPlayer(player, Lang.ErrorTriggerNotFound, triggerId);
             _customTriggerManager.ShowAllToPlayer(player.Object as BasePlayer);
+            ReplyToPlayer(player, Lang.ErrorTriggerNotFound, triggerId);
             return false;
         }
 
-        private bool VerifyTrackPosition(IPlayer player, out Vector3 trackPosition, float distanceFromHit = 0)
+        private bool VerifyTrackPosition(IPlayer player, out Vector3 trackPosition)
         {
-            if (TryGetTrackPosition(player.Object as BasePlayer, out trackPosition, distanceFromHit))
+            if (TryGetTrackPosition(player.Object as BasePlayer, out trackPosition))
                 return true;
 
             ReplyToPlayer(player, Lang.ErrorNoTrackFound);
+            return false;
+        }
+
+        private bool VerifyValidTrigger(IPlayer player, string cmd, string[] args, string errorMessageName, out CustomTriggerInfo triggerInfo, out string[] optionArgs)
+        {
+            var basePlayer = player.Object as BasePlayer;
+            optionArgs = args;
+            triggerInfo = null;
+
+            int triggerId;
+            if (args.Length > 0 && int.TryParse(args[0], out triggerId))
+            {
+                optionArgs = args.Skip(1).ToArray();
+                return VerifyTriggerExists(player, triggerId, out triggerInfo);
+            }
+
+            triggerInfo = GetNearestTriggerWhereAiming(basePlayer);
+            if (triggerInfo != null)
+                return true;
+
+            _customTriggerManager.ShowAllToPlayer(basePlayer);
+            ReplyToPlayer(player, errorMessageName, cmd, GetTriggerOptions(player));
             return false;
         }
 
@@ -504,7 +529,7 @@ namespace Oxide.Plugins
             return false;
         }
 
-        private static bool TryGetTrackPosition(BasePlayer player, out Vector3 trackPosition, float distanceFromHit = 0, float maxDistance = 20)
+        private static bool TryGetTrackPosition(BasePlayer player, out Vector3 trackPosition, float maxDistance = 20)
         {
             Vector3 hitPosition;
             if (!TryGetHitPosition(player, out hitPosition, maxDistance))
@@ -521,7 +546,7 @@ namespace Oxide.Plugins
                 return false;
             }
 
-            trackPosition = spline.GetPosition(distanceResult + distanceFromHit);
+            trackPosition = spline.GetPosition(distanceResult);
             return true;
         }
 
@@ -581,6 +606,28 @@ namespace Oxide.Plugins
 
         private static TrainEngine GetPlayerCart(BasePlayer player) =>
             GetLookEntity(player) as TrainEngine ?? GetMountedCart(player);
+
+        private CustomTriggerInfo GetNearestTriggerWhereAiming(BasePlayer player, float maxDistance = 10)
+        {
+            Vector3 trackPosition;
+            if (!TryGetTrackPosition(player, out trackPosition))
+                return null;
+
+            CustomTriggerInfo closestTrigger = null;
+            float shortestDistance = float.MaxValue;
+
+            foreach (var trigger in _mapData.CustomTriggers)
+            {
+                var distance = Vector3.Distance(trackPosition, trigger.Position);
+                if (distance >= shortestDistance || distance >= maxDistance)
+                    continue;
+
+                shortestDistance = distance;
+                closestTrigger = trigger;
+            }
+
+            return closestTrigger;
+        }
 
         #endregion
 
