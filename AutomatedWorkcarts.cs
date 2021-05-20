@@ -1016,7 +1016,7 @@ namespace Oxide.Plugins
                 if (trackSelection != null)
                     infoLines.Add(_pluginInstance.GetMessage(player, Lang.InfoTriggerTrackSelection, trackSelection));
 
-                var textPosition = triggerInfo.Position + Vector3.up * 2.5f;
+                var textPosition = triggerInfo.Position + new Vector3(0, 2.5f + infoLines.Count * 0.1f, 0);
                 player.SendConsoleCommand("ddraw.text", TriggerDisplayDuration, color, textPosition, string.Join("\n", infoLines));
             }
         }
