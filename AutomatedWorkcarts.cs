@@ -529,7 +529,7 @@ namespace Oxide.Plugins
             return false;
         }
 
-        private static bool TryGetTrackPosition(BasePlayer player, out Vector3 trackPosition, float maxDistance = 20)
+        private static bool TryGetTrackPosition(BasePlayer player, out Vector3 trackPosition, float maxDistance = 30)
         {
             Vector3 hitPosition;
             if (!TryGetHitPosition(player, out hitPosition, maxDistance))
