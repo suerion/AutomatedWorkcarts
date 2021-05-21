@@ -714,7 +714,7 @@ namespace Oxide.Plugins
                 case -1: return EngineSpeeds.Rev_Lo;
                 case -2: return EngineSpeeds.Rev_Med;
                 case -3: return EngineSpeeds.Rev_Hi;
-                default: return 0;
+                default: return EngineSpeeds.Zero;
             }
         }
 
