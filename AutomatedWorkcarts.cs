@@ -3,6 +3,7 @@ using Newtonsoft.Json.Linq;
 using Newtonsoft.Json.Serialization;
 using Oxide.Core;
 using Oxide.Core.Libraries.Covalence;
+using Oxide.Core.Plugins;
 using Rust;
 using System;
 using System.Collections.Generic;
@@ -13,11 +14,14 @@ using static TrainTrackSpline;
 
 namespace Oxide.Plugins
 {
-    [Info("Automated Workcarts", "WhiteThunder", "0.4.1")]
+    [Info("Automated Workcarts", "WhiteThunder", "0.4.2")]
     [Description("Spawns conductor NPCs that drive workcarts between stations.")]
     internal class AutomatedWorkcarts : CovalencePlugin
     {
         #region Fields
+
+        [PluginReference]
+        private Plugin CargoTrainEvent;
 
         private static AutomatedWorkcarts _pluginInstance;
         private static Configuration _pluginConfig;
@@ -473,7 +477,13 @@ namespace Oxide.Plugins
         private static bool AutomationWasBlocked(TrainEngine workcart)
         {
             object hookResult = Interface.CallHook("OnWorkcartAutomate", workcart);
-            return hookResult is bool && (bool)hookResult == false;
+            if (hookResult is bool && (bool)hookResult == false)
+                return true;
+
+            if (_pluginInstance.CargoTrainEvent?.Call("IsTrainSpecial", workcart.net.ID)?.Equals(true) ?? false)
+                return true;
+
+            return false;
         }
 
         private static bool TryAddTrainController(TrainEngine workcart, CustomTriggerInfo triggerInfo = null)
