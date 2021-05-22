@@ -6,7 +6,7 @@
 
 ## Permission
 
-- `automatedworkcarts.toggle` -- Allows usage of the `aw.toggle` or `aw.toggleall` commands.
+- `automatedworkcarts.toggle` -- Allows usage of the `aw.toggle` command.
 - `automatedworkcarts.managetriggers` -- Allows adding and removing custom triggers.
 
 ## Commands
