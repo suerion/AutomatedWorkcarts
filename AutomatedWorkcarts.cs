@@ -13,7 +13,7 @@ using static TrainTrackSpline;
 
 namespace Oxide.Plugins
 {
-    [Info("Automated Workcarts", "WhiteThunder", "0.4.0")]
+    [Info("Automated Workcarts", "WhiteThunder", "0.4.1")]
     [Description("Spawns conductor NPCs that drive workcarts between stations.")]
     internal class AutomatedWorkcarts : CovalencePlugin
     {
@@ -1259,9 +1259,9 @@ namespace Oxide.Plugins
                     return;
 
                 // AddMapMarker();
-                Invoke(AddConductor, 0);
-                Invoke(ScheduledStartTrain, UnityEngine.Random.Range(1f, 3f));
+                AddConductor();
                 EnableUnlimitedFuel();
+                StartTrain(_pluginConfig.GetDefaultSpeed());
             }
 
             private TrainState _trainState = TrainState.BetweenStations;
@@ -1271,7 +1271,6 @@ namespace Oxide.Plugins
             {
                 var initialSpeed = GetNextVelocity(EngineSpeeds.Zero, triggerInfo.GetSpeed(), triggerInfo.GetDirection());
 
-                CancelInvoke(ScheduledStartTrain);
                 Invoke(() =>
                 {
                     StartTrain(initialSpeed);
@@ -1390,18 +1389,9 @@ namespace Oxide.Plugins
 
             private void StartTrain(EngineSpeeds initialSpeed)
             {
-                _workcart.engineController.FinishStartingEngine();
+                _workcart.engineController.TryStartEngine(Conductor);
                 SetThrottle(initialSpeed);
                 _workcart.SetTrackSelection(_pluginConfig.GetDefaultTrackSelection());
-            }
-
-            private void ScheduledStartTrain()
-            {
-                var initialSpeed = _workcart.FrontTrackSection.isStation
-                    ? _pluginConfig.GetDepartureSpeed()
-                    : _pluginConfig.GetDefaultSpeed();
-
-                StartTrain(initialSpeed);
             }
 
             private void AddOutfit()
