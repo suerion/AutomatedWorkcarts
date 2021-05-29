@@ -1592,7 +1592,6 @@ namespace Oxide.Plugins
 
             private void DisableUnlimitedFuel()
             {
-                _workcart.fuelSystem.cachedHasFuel = false;
                 _workcart.fuelSystem.nextFuelCheckTime = 0;
             }
         }
