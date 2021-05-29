@@ -14,7 +14,7 @@ using static TrainTrackSpline;
 
 namespace Oxide.Plugins
 {
-    [Info("Automated Workcarts", "WhiteThunder", "0.7.0")]
+    [Info("Automated Workcarts", "WhiteThunder", "0.7.1")]
     [Description("Spawns conductor NPCs that drive workcarts between stations.")]
     internal class AutomatedWorkcarts : CovalencePlugin
     {
@@ -1705,7 +1705,7 @@ namespace Oxide.Plugins
             public static StoredTunnelData GetDefaultData()
             {
                 var stationStopDuration = 12.5f;
-                var quickStopDuration = 2.5f;
+                var quickStopDuration = 7.5f;
                 var triggerHeight = 0.29f;
 
                 return new StoredTunnelData()
