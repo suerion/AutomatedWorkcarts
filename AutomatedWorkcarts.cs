@@ -14,7 +14,7 @@ using static TrainTrackSpline;
 
 namespace Oxide.Plugins
 {
-    [Info("Automated Workcarts", "WhiteThunder", "0.5.0")]
+    [Info("Automated Workcarts", "WhiteThunder", "0.5.1")]
     [Description("Spawns conductor NPCs that drive workcarts between stations.")]
     internal class AutomatedWorkcarts : CovalencePlugin
     {
@@ -404,20 +404,15 @@ namespace Oxide.Plugins
                 || !VerifyAnyTriggers(player))
                 return;
 
-            int triggerId;
-            WorkcartTriggerType triggerType;
-            if (args.Length < 1 || !IsTriggerArg(player, args[0], out triggerId, out triggerType))
-            {
-                ReplyToPlayer(player, Lang.RemoveTriggerSyntax, cmd);
-                return;
-            }
-
             var basePlayer = player.Object as BasePlayer;
             WorkcartTriggerInfo triggerInfo;
-            Vector3 trackPosition;
 
-            if (!VerifyTriggerExists(player, triggerId, triggerType, out triggerInfo)
-                || !VerifyTrackPosition(player, out trackPosition))
+            string[] optionArgs;
+            if (!VerifyValidTrigger(player, cmd, args, Lang.RemoveTriggerSyntax, out triggerInfo, out optionArgs))
+                return;
+
+            Vector3 trackPosition;
+            if (!VerifyTrackPosition(player, out trackPosition))
                 return;
 
             if (triggerInfo.TriggerType == WorkcartTriggerType.Tunnel)
@@ -453,10 +448,7 @@ namespace Oxide.Plugins
             string[] optionArgs;
 
             if (!VerifyValidTrigger(player, cmd, args, Lang.RemoveTriggerSyntax, out triggerInfo, out optionArgs))
-            {
-                _triggerManager.ShowAllRepeatedly(basePlayer);
                 return;
-            }
 
             _triggerManager.RemoveTrigger(triggerInfo);
             _triggerManager.ShowAllRepeatedly(basePlayer);
