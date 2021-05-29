@@ -43,7 +43,6 @@ The following command aliases are also available:
 ```json
 {
   "AutomateAllWorkcarts": false,
-  "AutoDetectStations": true,
   "EngineOffDuration": 30.0,
   "DefaultSpeed": "Fwd_Hi",
   "DepartureSpeed": "Fwd_Lo",
@@ -54,8 +53,6 @@ The following command aliases are also available:
 - `AutomateAllWorkcarts` (`true` or `false`) -- While `true`, all workcarts will be automated, except those blocked by other plugins; the `aw.toggle` command will be disabled. While false, you can either automate individual workcarts with `aw.toggle` or use custom triggers to automate workcarts that enter them.
 - `EngineOffDuration` -- Number of seconds that trains should wait after stopping.
   - For custom triggers, the timer starts as soon as the workcart enters a trigger with speed `Zero`, not when the workcart actually stops.
-- `AutoDetectStations` (`true` or `false`) -- While `true`, the plugin will auto detect vanilla train stations and add triggers to them, causing automated workcarts to stop at them for the configured `EngineOffDuration`.
-  - Note: These triggers cannot be customized.
 - `DefaultSpeed` -- Default speed to use when a workcart starts being automated.
   - Allowed values: `"Rev_Hi"` | `"Rev_Med"` | `"Rev_Lo"` | `"Zero"` | `"Fwd_Lo"` | `"Fwd_Med"` | `"Fwd_Hi"`.
   - Basically this applies when the plugin loads, when toggling on with `aw.toggle`, or when a workcart spawns.

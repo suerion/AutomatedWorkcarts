@@ -14,7 +14,7 @@ using static TrainTrackSpline;
 
 namespace Oxide.Plugins
 {
-    [Info("Automated Workcarts", "WhiteThunder", "0.6.0")]
+    [Info("Automated Workcarts", "WhiteThunder", "0.7.0")]
     [Description("Spawns conductor NPCs that drive workcarts between stations.")]
     internal class AutomatedWorkcarts : CovalencePlugin
     {
@@ -36,7 +36,6 @@ namespace Oxide.Plugins
         private const string VendingMachineMapMarkerPrefab = "assets/prefabs/deployable/vendingmachine/vending_mapmarker.prefab";
         private const string DroneMapMarkerPrefab = "assets/prefabs/misc/marketplace/deliverydronemarker.prefab";
 
-        private TrainStationManager _trainStationManager = new TrainStationManager();
         private WorkcartTriggerManager _triggerManager = new WorkcartTriggerManager();
 
         #endregion
@@ -57,7 +56,6 @@ namespace Oxide.Plugins
 
         private void Unload()
         {
-            _trainStationManager.DestroyAll();
             _triggerManager.DestroyAll();
 
             TrainController.DestroyAll();
@@ -74,9 +72,6 @@ namespace Oxide.Plugins
             _mapData = StoredMapData.Load();
 
             _triggerManager.CreateAll();
-
-            if (_pluginConfig.AutoDetectStations)
-                _trainStationManager.CreateAll();
 
             foreach (var entity in BaseNetworkable.serverEntities)
             {
@@ -168,36 +163,6 @@ namespace Oxide.Plugins
                 return;
 
             trainController.HandleWorkcartTrigger(trigger.TriggerInfo);
-        }
-
-        private void OnEntityEnter(TriggerStation trigger, TrainEngine workcart)
-        {
-            var trainController = workcart.GetComponent<TrainController>();
-            if (trainController == null)
-                return;
-
-            trigger.StationTrack.OnTrainArrive(trainController);
-        }
-
-        private void OnEntityEnter(TriggerStationStop trigger, TrainEngine workcart)
-        {
-            var trainController = workcart.GetComponent<TrainController>();
-            if (trainController == null)
-                return;
-
-            trigger.StationTrack.OnTrainReachStop(trainController);
-        }
-
-        private void OnEntityLeave(TriggerStation trigger, TrainEngine workcart)
-        {
-            if (workcart == null || trigger is TriggerStationStop)
-                return;
-
-            var trainController = workcart.GetComponent<TrainController>();
-            if (trainController == null)
-                return;
-
-            trigger.StationTrack.OnTrainDepart(trainController);
         }
 
         #endregion
@@ -1472,169 +1437,10 @@ namespace Oxide.Plugins
 
         #endregion
 
-        #region Train Stations
-
-        private class TrainStationManager
-        {
-            private List<TrainStation> _trainStations = new List<TrainStation>();
-
-            public void CreateAll()
-            {
-                foreach (var dungeon in TerrainMeta.Path.DungeonCells)
-                {
-                    if (dungeon == null)
-                        continue;
-
-                    TrainStation track1, track2;
-                    if (TrainStation.TryCreateStationTracks(dungeon, out track1, out track2))
-                    {
-                        _trainStations.Add(track1);
-                        _trainStations.Add(track2);
-                    }
-                }
-            }
-
-            public void DestroyAll()
-            {
-                foreach (var station in _trainStations)
-                    station.Destroy();
-            }
-        }
-
-        private class TriggerStation : TriggerBase
-        {
-            public TrainStation StationTrack;
-        }
-
-        private class TriggerStationStop : TriggerStation {}
-
-        private class TrainStation
-        {
-            private static readonly Vector3 TriggerDimensions = new Vector3(3, 3, 1);
-            private static readonly Vector3 FullLengthTriggerDimensions = new Vector3(3, 3, 144);
-
-            private static readonly Vector3 LeftTriggerPosition = new Vector3(4.5f, 2.5f, 0);
-            private static readonly Vector3 LeftEntrancePosition = new Vector3(4.5f, 2.5f, 72);
-            private static readonly Vector3 LeftStopPosition = new Vector3(4.5f, 2.5f, 24); // 18 is exact elevator spot
-            private static readonly Vector3 LeftExitPosition = new Vector3(4.5f, 2.5f, -72);
-
-            private static readonly Vector3 RightTriggerPosition = new Vector3(-4.5f, 2.5f, 0);
-            private static readonly Vector3 RightEntrancePosition = new Vector3(-4.5f, 2.5f, -72);
-            private static readonly Vector3 RightStopPosition = new Vector3(-4.5f, 2.5f, 18); // 24 is exact elevator spot
-            private static readonly Vector3 RightExitPosition = new Vector3(-4.5f, 2.5f, 72);
-
-            public static bool TryCreateStationTracks(DungeonCell dungeon, out TrainStation track1, out TrainStation track2)
-            {
-                var dungeonShortName = GetShortName(dungeon.name);
-
-                Quaternion rotation;
-                if (!DungeonRotations.TryGetValue(dungeonShortName, out rotation))
-                {
-                    track1 = null;
-                    track2 = null;
-                    return false;
-                }
-
-                track1 = new TrainStation(dungeon, rotation, isLeftTrack: true);
-                track2 = new TrainStation(dungeon, rotation, isLeftTrack: false);
-
-                return true;
-            }
-
-            private DungeonCell _dungeon;
-            private Quaternion _rotation;
-
-            private TriggerStation _fullLengthTrigger;
-            private List<GameObject> _gameObjects = new List<GameObject>();
-
-            public TrainStation(DungeonCell dungeon, Quaternion rotation, bool isLeftTrack)
-            {
-                _dungeon = dungeon;
-                _rotation = rotation;
-                _fullLengthTrigger = CreateTrigger<TriggerStation>(isLeftTrack ? LeftTriggerPosition : RightTriggerPosition, FullLengthTriggerDimensions);
-                CreateTrigger<TriggerStationStop>(isLeftTrack ? LeftStopPosition : RightStopPosition, TriggerDimensions);
-            }
-
-            public void OnTrainArrive(TrainController trainController)
-            {
-                trainController.ArriveAtStation();
-                DepartExistingTrains(_fullLengthTrigger, trainController);
-            }
-
-            public void OnTrainReachStop(TrainController trainController)
-            {
-                trainController.StopAtStation(_pluginConfig.EngineOffDuration);
-            }
-
-            public void OnTrainDepart(TrainController trainController)
-            {
-                trainController.LeaveStation();
-            }
-
-            public bool DepartExistingTrains(TriggerStation trigger, TrainController exceptTrain)
-            {
-                if (trigger.entityContents == null)
-                    return false;
-
-                var wasExistingTrain = false;
-
-                foreach (var item in trigger.entityContents)
-                {
-                    if (item == null)
-                        continue;
-
-                    var otherController = item.GetComponent<TrainController>();
-                    if (otherController == null || otherController == exceptTrain)
-                        continue;
-
-                    if (otherController.StartLeavingStation())
-                        wasExistingTrain = true;
-                }
-
-                return wasExistingTrain;
-            }
-
-            public void Destroy()
-            {
-                foreach (var obj in _gameObjects)
-                    UnityEngine.Object.Destroy(obj);
-            }
-
-            private TriggerStation CreateTrigger<T>(Vector3 localPosition, Vector3 dimensions) where T : TriggerStation
-            {
-                var gameObject = new GameObject();
-                gameObject.transform.position = _dungeon.transform.TransformPoint(_rotation * localPosition);
-                gameObject.transform.rotation = _rotation;
-
-                var boxCollider = gameObject.AddComponent<BoxCollider>();
-                boxCollider.isTrigger = true;
-                boxCollider.size = dimensions;
-                boxCollider.gameObject.layer = 6;
-
-                var trigger = gameObject.AddComponent<T>();
-                trigger.interestLayers = Layers.Mask.Vehicle_World;
-                trigger.StationTrack = this;
-
-                _gameObjects.Add(gameObject);
-
-                return trigger;
-            }
-        }
-
-        #endregion
-
         #region Train Controller
 
         private class TrainController : FacepunchBehaviour
         {
-            private enum TrainState
-            {
-                BetweenStations,
-                EnteringStation,
-                StoppedAtStation,
-                LeavingStation
-            }
-
             public static void DestroyAll()
             {
                 foreach (var entity in BaseNetworkable.serverEntities)
@@ -1667,7 +1473,6 @@ namespace Oxide.Plugins
                 StartTrain(_pluginConfig.GetDefaultSpeed());
             }
 
-            private TrainState _trainState = TrainState.BetweenStations;
             private EngineSpeeds _nextSpeed;
 
             public void StartImmediately(WorkcartTriggerInfo triggerInfo)
@@ -1687,88 +1492,21 @@ namespace Oxide.Plugins
                 SetThrottle(engineSpeed);
 
                 if (engineSpeed == EngineSpeeds.Zero)
-                    Invoke(ScheduledDepartureForTrigger, triggerInfo.GetStopDuration());
+                    Invoke(ScheduledDeparture, triggerInfo.GetStopDuration());
                 else
-                    CancelInvoke(ScheduledDepartureForTrigger);
+                    CancelInvoke(ScheduledDeparture);
 
                 _workcart.SetTrackSelection(GetNextTrackSelection(_workcart.curTrackSelection, triggerInfo.GetTrackSelection()));
             }
 
-            public void ScheduledDepartureForTrigger()
-            {
-                SetThrottle(_pluginConfig.GetDepartureSpeed());
-            }
-
-            public void ArriveAtStation()
-            {
-                if (_trainState == TrainState.EnteringStation)
-                    return;
-
-                _trainState = TrainState.EnteringStation;
-
-                if (_workcart.TrackSpeed > 15)
-                    BrakeToSpeed(EngineSpeeds.Fwd_Med, 1.7f);
-                else
-                    SetThrottle(EngineSpeeds.Fwd_Med);
-            }
-
-            public void StopAtStation(float stayDuration)
-            {
-                if (_trainState == TrainState.StoppedAtStation
-                    || _trainState == TrainState.LeavingStation)
-                    return;
-
-                _trainState = TrainState.StoppedAtStation;
-
-                BrakeToSpeed(EngineSpeeds.Zero, 1.5f);
-                Invoke(ScheduledDeparture, stayDuration);
-            }
-
             public void ScheduledDeparture()
             {
-                StartLeavingStation();
-            }
-
-            public bool StartLeavingStation()
-            {
-                if (_trainState == TrainState.LeavingStation)
-                    return false;
-
-                _trainState = TrainState.LeavingStation;
                 SetThrottle(_pluginConfig.GetDepartureSpeed());
-
-                CancelInvoke(ScheduledDeparture);
-                return true;
-            }
-
-            public void LeaveStation()
-            {
-                _trainState = TrainState.BetweenStations;
-                SetThrottle(_pluginConfig.GetDefaultSpeed());
-            }
-
-            // TODO: Automatically figure out break duration for target speed.
-            public void BrakeToSpeed(EngineSpeeds nextSpeed, float duration)
-            {
-                _workcart.SetThrottle(EngineSpeeds.Rev_Lo);
-                _nextSpeed = nextSpeed;
-                Invoke(ScheduledSpeedChange, duration);
-            }
-
-            public void ScheduledSpeedChange()
-            {
-                _workcart.SetThrottle(_nextSpeed);
             }
 
             public void SetThrottle(EngineSpeeds engineSpeed)
             {
-                CancelInvoke(ScheduledSpeedChange);
                 _workcart.SetThrottle(engineSpeed);
-            }
-
-            private bool IsParked()
-            {
-                return _workcart.Distance(_workcart.spawnOrigin) < 5;
             }
 
             private void AddConductor()
@@ -1854,7 +1592,7 @@ namespace Oxide.Plugins
 
             private void DisableUnlimitedFuel()
             {
-                _workcart.fuelSystem.cachedHasFuel = true;
+                _workcart.fuelSystem.cachedHasFuel = false;
                 _workcart.fuelSystem.nextFuelCheckTime = 0;
             }
         }
@@ -2196,9 +1934,6 @@ namespace Oxide.Plugins
         {
             [JsonProperty("AutomateAllWorkcarts")]
             public bool AutomateAllWorkcarts = false;
-
-            [JsonProperty("AutoDetectStations")]
-            public bool AutoDetectStations = true;
 
             [JsonProperty("EngineOffDuration")]
             public float EngineOffDuration = 30;
