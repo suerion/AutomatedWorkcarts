@@ -14,7 +14,7 @@ using static TrainTrackSpline;
 
 namespace Oxide.Plugins
 {
-    [Info("Automated Workcarts", "WhiteThunder", "0.5.1")]
+    [Info("Automated Workcarts", "WhiteThunder", "0.6.0")]
     [Description("Spawns conductor NPCs that drive workcarts between stations.")]
     internal class AutomatedWorkcarts : CovalencePlugin
     {
@@ -1940,7 +1940,10 @@ namespace Oxide.Plugins
 
             public static StoredTunnelData Load()
             {
-                return Interface.Oxide.DataFileSystem.ReadObject<StoredTunnelData>(Filename) ?? new StoredTunnelData();
+                if (Interface.Oxide.DataFileSystem.ExistsDatafile(Filename))
+                    return Interface.Oxide.DataFileSystem.ReadObject<StoredTunnelData>(Filename) ?? GetDefaultData();
+
+                return GetDefaultData();
             }
 
             public StoredTunnelData Save()
@@ -1959,6 +1962,229 @@ namespace Oxide.Plugins
             {
                 TunnelTriggers.Remove(triggerInfo);
                 Save();
+            }
+
+            public static StoredTunnelData GetDefaultData()
+            {
+                var stationStopDuration = 12.5f;
+                var quickStopDuration = 2.5f;
+                var triggerHeight = 0.29f;
+
+                return new StoredTunnelData()
+                {
+                    TunnelTriggers =
+                    {
+                        new WorkcartTriggerInfo
+                        {
+                            Id = 1,
+                            Position = new Vector3(4.5f, triggerHeight, 74),
+                            TunnelType = TunnelType.TrainStation.ToString(),
+                            Speed = WorkcartSpeed.Lo.ToString(),
+                            Direction = WorkcartDirection.Invert.ToString(),
+                        },
+                        new WorkcartTriggerInfo
+                        {
+                            Id = 2,
+                            Position = new Vector3(4.5f, triggerHeight, 46),
+                            TunnelType = TunnelType.TrainStation.ToString(),
+                            Speed = WorkcartSpeed.Lo.ToString(),
+                            Direction = WorkcartDirection.Fwd.ToString(),
+                        },
+                        new WorkcartTriggerInfo
+                        {
+                            Id = 3,
+                            Position = new Vector3(4.5f, triggerHeight, 16),
+                            TunnelType = TunnelType.TrainStation.ToString(),
+                            Speed = WorkcartSpeed.Zero.ToString(),
+                            StopDuration = stationStopDuration,
+                        },
+                        new WorkcartTriggerInfo
+                        {
+                            Id = 4,
+                            Position = new Vector3(4.5f, triggerHeight, -74),
+                            TunnelType = TunnelType.TrainStation.ToString(),
+                            Speed = WorkcartSpeed.Hi.ToString(),
+                        },
+                        new WorkcartTriggerInfo
+                        {
+                            Id = 5,
+                            Position = new Vector3(0, triggerHeight, -84),
+                            TunnelType = TunnelType.TrainStation.ToString(),
+                            StartsAutomation = true,
+                            Speed = WorkcartSpeed.Hi.ToString(),
+                            Direction = WorkcartDirection.Fwd.ToString(),
+                            TrackSelection = WorkcartTrackSelection.Left.ToString(),
+                        },
+
+                        new WorkcartTriggerInfo
+                        {
+                            Id = 6,
+                            Position = new Vector3(-4.5f, triggerHeight, -34),
+                            TunnelType = TunnelType.TrainStation.ToString(),
+                            Speed = WorkcartSpeed.Lo.ToString(),
+                            Direction = WorkcartDirection.Invert.ToString(),
+                        },
+                        new WorkcartTriggerInfo
+                        {
+                            Id = 7,
+                            Position = new Vector3(-4.5f, triggerHeight, -4),
+                            TunnelType = TunnelType.TrainStation.ToString(),
+                            Speed = WorkcartSpeed.Lo.ToString(),
+                            Direction = WorkcartDirection.Fwd.ToString(),
+                        },
+                        new WorkcartTriggerInfo
+                        {
+                            Id = 8,
+                            Position = new Vector3(-4.5f, triggerHeight, 26),
+                            TunnelType = TunnelType.TrainStation.ToString(),
+                            Speed = WorkcartSpeed.Zero.ToString(),
+                            StopDuration = stationStopDuration
+                        },
+                        new WorkcartTriggerInfo
+                        {
+                            Id = 9,
+                            Position = new Vector3(-4.5f, triggerHeight, 74),
+                            TunnelType = TunnelType.TrainStation.ToString(),
+                            Speed = WorkcartSpeed.Hi.ToString(),
+                        },
+                        new WorkcartTriggerInfo
+                        {
+                            Id = 10,
+                            Position = new Vector3(0, triggerHeight, 84),
+                            TunnelType = TunnelType.TrainStation.ToString(),
+                            StartsAutomation = true,
+                            Speed = WorkcartSpeed.Hi.ToString(),
+                            Direction = WorkcartDirection.Fwd.ToString(),
+                            TrackSelection = WorkcartTrackSelection.Left.ToString(),
+                        },
+
+                        new WorkcartTriggerInfo
+                        {
+                            Id = 11,
+                            Position = new Vector3(-4.45f, triggerHeight, -72),
+                            TunnelType = TunnelType.BarricadeTunnel.ToString(),
+                            Speed = WorkcartSpeed.Lo.ToString(),
+                            Direction = WorkcartDirection.Invert.ToString(),
+                        },
+                        new WorkcartTriggerInfo
+                        {
+                            Id = 12,
+                            Position = new Vector3(-4.5f, triggerHeight, -52),
+                            TunnelType = TunnelType.BarricadeTunnel.ToString(),
+                            Speed = WorkcartSpeed.Lo.ToString(),
+                            Direction = WorkcartDirection.Fwd.ToString(),
+                        },
+                        new WorkcartTriggerInfo
+                        {
+                            Id = 13,
+                            Position = new Vector3(-4.5f, triggerHeight, 5),
+                            TunnelType = TunnelType.BarricadeTunnel.ToString(),
+                            Speed = WorkcartSpeed.Zero.ToString(),
+                            StopDuration = quickStopDuration,
+                        },
+                        new WorkcartTriggerInfo
+                        {
+                            Id = 14,
+                            Position = new Vector3(-4.5f, triggerHeight, 52),
+                            TunnelType = TunnelType.BarricadeTunnel.ToString(),
+                            Speed = WorkcartSpeed.Hi.ToString(),
+                        },
+                        new WorkcartTriggerInfo
+                        {
+                            Id = 15,
+                            Position = new Vector3(4.45f, triggerHeight, 72),
+                            TunnelType = TunnelType.BarricadeTunnel.ToString(),
+                            Speed = WorkcartSpeed.Lo.ToString(),
+                            Direction = WorkcartDirection.Invert.ToString(),
+                        },
+                        new WorkcartTriggerInfo
+                        {
+                            Id = 16,
+                            Position = new Vector3(4.5f, triggerHeight, 52),
+                            TunnelType = TunnelType.BarricadeTunnel.ToString(),
+                            Speed = WorkcartSpeed.Lo.ToString(),
+                            Direction = WorkcartDirection.Fwd.ToString(),
+                        },
+                        new WorkcartTriggerInfo
+                        {
+                            Id = 17,
+                            Position = new Vector3(4.5f, triggerHeight, 3f),
+                            TunnelType = TunnelType.BarricadeTunnel.ToString(),
+                            Speed = WorkcartSpeed.Zero.ToString(),
+                            StopDuration = quickStopDuration,
+                        },
+                        new WorkcartTriggerInfo
+                        {
+                            Id = 18,
+                            Position = new Vector3(4.5f, triggerHeight, -52),
+                            TunnelType = TunnelType.BarricadeTunnel.ToString(),
+                            Speed = WorkcartSpeed.Hi.ToString(),
+                        },
+
+                        new WorkcartTriggerInfo
+                        {
+                            Id = 19,
+                            Position = new Vector3(3, triggerHeight, 59),
+                            TunnelType = TunnelType.LootTunnel.ToString(),
+                            Speed = WorkcartSpeed.Lo.ToString(),
+                            Direction = WorkcartDirection.Invert.ToString(),
+                        },
+                        new WorkcartTriggerInfo
+                        {
+                            Id = 20,
+                            Position = new Vector3(3, triggerHeight, 29),
+                            TunnelType = TunnelType.LootTunnel.ToString(),
+                            Speed = WorkcartSpeed.Lo.ToString(),
+                            Direction = WorkcartDirection.Fwd.ToString(),
+                        },
+                        new WorkcartTriggerInfo
+                        {
+                            Id = 21,
+                            Position = new Vector3(3, triggerHeight, -1),
+                            TunnelType = TunnelType.LootTunnel.ToString(),
+                            Speed = WorkcartSpeed.Zero.ToString(),
+                            StopDuration = quickStopDuration,
+                        },
+                        new WorkcartTriggerInfo
+                        {
+                            Id = 22,
+                            Position = new Vector3(3, triggerHeight, -31),
+                            TunnelType = TunnelType.LootTunnel.ToString(),
+                            Speed = WorkcartSpeed.Hi.ToString(),
+                        },
+                        new WorkcartTriggerInfo
+                        {
+                            Id = 23,
+                            Position = new Vector3(-3, triggerHeight, -61),
+                            TunnelType = TunnelType.LootTunnel.ToString(),
+                            Speed = WorkcartSpeed.Lo.ToString(),
+                            Direction = WorkcartDirection.Invert.ToString(),
+                        },
+                        new WorkcartTriggerInfo
+                        {
+                            Id = 24,
+                            Position = new Vector3(-3, triggerHeight, -31),
+                            TunnelType = TunnelType.LootTunnel.ToString(),
+                            Speed = WorkcartSpeed.Lo.ToString(),
+                            Direction = WorkcartDirection.Fwd.ToString(),
+                        },
+                        new WorkcartTriggerInfo
+                        {
+                            Id = 25,
+                            Position = new Vector3(-3, triggerHeight, 1),
+                            TunnelType = TunnelType.LootTunnel.ToString(),
+                            Speed = WorkcartSpeed.Zero.ToString(),
+                            StopDuration = quickStopDuration,
+                        },
+                        new WorkcartTriggerInfo
+                        {
+                            Id = 26,
+                            Position = new Vector3(-3, triggerHeight, 29),
+                            TunnelType = TunnelType.LootTunnel.ToString(),
+                            Speed = WorkcartSpeed.Hi.ToString(),
+                        },
+                    }
+                };
             }
         }
 
