@@ -45,6 +45,7 @@ The following command aliases are also available:
   "DefaultSpeed": "Fwd_Hi",
   "DepartureSpeed": "Fwd_Med",
   "DefaultTrackSelection": "Left",
+  "DestroyOffendingWorkcarts": false,
   "EnableMapTriggers": true,
   "EnableTunnelTriggers": {
     "TrainStation": false,
@@ -61,6 +62,8 @@ The following command aliases are also available:
 - `DefaultTrackSelection` -- Default track selection to use when a workcart starts being automated.
   - Allowed values: `"Left"` | `"Default"` | `"Right"`.
   - Basically this applies when the plugin loads, when toggling on with `aw.toggle`, or when a workcart spawns.
+- `BulldozeOffendingWorkcarts` (`true` or `false`) -- While true, automated workcarts will destroy other non-automated workcarts in their path that are not heading the same speed and direction.
+  - Regardless of this setting, automated workcarts may destroy each other in head on or perpendicular collisions.
 - `EnableMapTriggers` (`true` or `false`) -- Whether map-specific triggers are enabled. While `false`, existing map-specific triggers will be disabled, and no new map-specific triggers can be added.
 - `EnableTunnelTriggers` (each `true` or `false`) -- Whether triggers are enabled for the corresponding type of train tunnel. While `false`, existing tunnel triggers will be disabled, and no new tunnel triggers can be added.
 

@@ -14,7 +14,7 @@ using static TrainTrackSpline;
 
 namespace Oxide.Plugins
 {
-    [Info("Automated Workcarts", "WhiteThunder", "0.8.0")]
+    [Info("Automated Workcarts", "WhiteThunder", "0.9.0")]
     [Description("Spawns conductor NPCs that drive workcarts between stations.")]
     internal class AutomatedWorkcarts : CovalencePlugin
     {
@@ -85,9 +85,22 @@ namespace Oxide.Plugins
             }
         }
 
+        private void OnServerSave()
+        {
+            _pluginData.Save();
+        }
+
         private void OnNewSave()
         {
             _pluginData = StoredPluginData.Clear();
+        }
+
+        private void OnEntityKill(TrainEngine workcart)
+        {
+            if (workcart == null || workcart.net == null)
+                return;
+
+            _pluginData.RemoveWorkcart(workcart);
         }
 
         private bool? OnEntityTakeDamage(TrainEngine workcart)
@@ -147,6 +160,89 @@ namespace Oxide.Plugins
                 return;
 
             trainController.HandleWorkcartTrigger(trigger.TriggerInfo);
+        }
+
+        private void OnEntityEnter(TriggerTrainCollisions trigger, TrainEngine otherWorkcart)
+        {
+            if (trigger.entityContents?.Contains(otherWorkcart) ?? false)
+                return;
+
+            var workcart = trigger.GetComponentInParent<TrainEngine>();
+            if (workcart == null)
+                return;
+
+            var dot = Vector3.Dot(GetWorkcartForward(workcart), GetWorkcartForward(otherWorkcart));
+            if (dot >= 0.01f)
+            {
+                // Going same direction.
+                TrainEngine forwardWorkcart, backwardWorkcart;
+                DetermineWorkcartOrientations(workcart, otherWorkcart, out forwardWorkcart, out backwardWorkcart);
+
+                var forwardController = forwardWorkcart.GetComponent<TrainController>();
+                var backController = backwardWorkcart.GetComponent<TrainController>();
+
+                // Do nothing if neither workcart is automated.
+                if (forwardController == null && backController == null)
+                    return;
+
+                if (forwardController != null)
+                {
+                    forwardController.BeginEarlyDeparture();
+                }
+                else if (Math.Abs(EngineSpeedToNumber(forwardWorkcart.CurThrottleSetting)) < Math.Abs(EngineSpeedToNumber(backwardWorkcart.CurThrottleSetting)))
+                {
+                    // Destroy the forward workcart if it's not automated and going too slow.
+                    ScheduleDestroyWorkcart(forwardWorkcart);
+                    return;
+                }
+
+                if (backController != null)
+                    backController.ChillBriefly();
+            }
+            else
+            {
+                // Going opposite directions or perpendicular.
+                var controller = workcart.GetComponent<TrainController>();
+                var otherController = otherWorkcart.GetComponent<TrainController>();
+
+                // Do nothing if neither workcart is automated.
+                if (controller == null && otherController == null)
+                    return;
+
+                if (GetForwardWorkcart(workcart, otherWorkcart) == workcart)
+                {
+                    // Not a head on collision. One is braking while hitting the other.
+                    if (controller != null)
+                        controller.BeginEarlyDeparture();
+
+                    return;
+                }
+
+                // If one of the workcarts is not automated, destroy that one.
+                if (controller == null)
+                {
+                    if (_pluginConfig.BulldozeOffendingWorkcarts)
+                        ScheduleDestroyWorkcart(workcart);
+                    return;
+                }
+
+                if (otherController == null)
+                {
+                    if (_pluginConfig.BulldozeOffendingWorkcarts)
+                        ScheduleDestroyWorkcart(otherWorkcart);
+                    return;
+                }
+
+                // Don't destroy both, since the collison event can happen for both workcarts in the same frame.
+                if (controller.IsDestroying)
+                    return;
+
+                // If both are automated, destroy the slower one (if same speed, will be random).
+                if (GetFasterWorkcart(workcart, otherWorkcart) == workcart)
+                    otherController.ScheduleDestruction();
+                else
+                    controller.ScheduleDestruction();
+            }
         }
 
         #endregion
@@ -724,6 +820,66 @@ namespace Oxide.Plugins
 
         private static TrainEngine GetPlayerCart(BasePlayer player) =>
             GetLookEntity(player) as TrainEngine ?? GetMountedCart(player);
+
+        private static Vector3 GetWorkcartForward(TrainEngine workcart)
+        {
+            var trainController = workcart.GetComponent<TrainController>();
+            var speed = trainController != null
+                ? trainController.DesiredThrottle
+                : workcart.CurThrottleSetting;
+
+            return EngineSpeedToNumber(speed) >= 0 ?
+                workcart.transform.forward
+                : -workcart.transform.forward;
+        }
+
+        private static TrainEngine GetFasterWorkcart(TrainEngine workcart, TrainEngine otherWorkcart)
+        {
+            return Math.Abs(workcart.TrackSpeed) >= Math.Abs(otherWorkcart.TrackSpeed)
+                ? workcart
+                : otherWorkcart;
+        }
+
+        // Given two workcarts going the same direction, return the one that is closer to the destination direction.
+        private static TrainEngine GetForwardWorkcart(TrainEngine workcart, TrainEngine otherWorkcart)
+        {
+            var forward = GetWorkcartForward(workcart);
+            var otherForward = GetWorkcartForward(otherWorkcart);
+
+            var position = workcart.transform.position;
+            var otherPosition = otherWorkcart.transform.position;
+            var forwardPosition = position + forward * 100f;
+
+            var workcartDistance = (forwardPosition - position).magnitude;
+            var otherWorkcartDistance = (forwardPosition - otherPosition).magnitude;
+
+            return workcartDistance <= otherWorkcartDistance
+                ? workcart
+                : otherWorkcart;
+        }
+
+        private static void DetermineWorkcartOrientations(TrainEngine workcart, TrainEngine otherWorkcart, out TrainEngine forwardWorkcart, out TrainEngine backwardWorkcart)
+        {
+            forwardWorkcart = GetForwardWorkcart(workcart, otherWorkcart);
+            backwardWorkcart = forwardWorkcart == workcart
+                ? otherWorkcart
+                : workcart;
+        }
+
+        private static void DestroyWorkcart(TrainEngine workcart)
+        {
+            if (workcart.IsDestroyed)
+                return;
+
+            var hitInfo = new HitInfo(null, workcart, Rust.DamageType.Explosion, float.MaxValue, workcart.transform.position);
+            hitInfo.UseProtection = false;
+            workcart.Die(hitInfo);
+        }
+
+        private static void ScheduleDestroyWorkcart(TrainEngine workcart)
+        {
+            workcart.Invoke(() => DestroyWorkcart(workcart), 0);
+        }
 
         #endregion
 
@@ -1450,6 +1606,8 @@ namespace Oxide.Plugins
 
         private class TrainController : FacepunchBehaviour
         {
+            private const float ChillDuration = 3f;
+
             public static void DestroyAll()
             {
                 foreach (var entity in BaseNetworkable.serverEntities)
@@ -1468,6 +1626,7 @@ namespace Oxide.Plugins
 
             public BasePlayer Conductor { get; private set; }
             private TrainEngine _workcart;
+            private EngineSpeeds _speedBeforeChilling;
             private VendingMachineMapMarker _mapMarker;
 
             private void Awake()
@@ -1482,8 +1641,6 @@ namespace Oxide.Plugins
                 StartTrain(_pluginConfig.GetDefaultSpeed());
             }
 
-            private EngineSpeeds _nextSpeed;
-
             public void StartImmediately(WorkcartTriggerInfo triggerInfo)
             {
                 var initialSpeed = GetNextVelocity(EngineSpeeds.Zero, triggerInfo.GetSpeed(), triggerInfo.GetDirection());
@@ -1492,11 +1649,13 @@ namespace Oxide.Plugins
                 {
                     StartTrain(initialSpeed);
                     HandleWorkcartTrigger(triggerInfo);
-                }, 1);
+                }, UnityEngine.Random.Range(0, 1f));
             }
 
             public void HandleWorkcartTrigger(WorkcartTriggerInfo triggerInfo)
             {
+                CancelInvoke(StopChilling);
+
                 var engineSpeed = GetNextVelocity(_workcart.CurThrottleSetting, triggerInfo.GetSpeed(), triggerInfo.GetDirection());
                 SetThrottle(engineSpeed);
 
@@ -1508,6 +1667,15 @@ namespace Oxide.Plugins
                 _workcart.SetTrackSelection(GetNextTrackSelection(_workcart.curTrackSelection, triggerInfo.GetTrackSelection()));
             }
 
+            public void BeginEarlyDeparture()
+            {
+                if (!IsInvoking(ScheduledDeparture))
+                    return;
+
+                CancelInvoke(ScheduledDeparture);
+                ScheduledDeparture();
+            }
+
             public void ScheduledDeparture()
             {
                 SetThrottle(_pluginConfig.GetDepartureSpeed());
@@ -1517,6 +1685,33 @@ namespace Oxide.Plugins
             {
                 _workcart.SetThrottle(engineSpeed);
             }
+
+            public void StopEngine() => _workcart.SetThrottle(EngineSpeeds.Zero);
+
+            public void ScheduleDestruction() => Invoke(DestroyCinematically, 0);
+            private void DestroyCinematically() => DestroyWorkcart(_workcart);
+            public bool IsDestroying => IsInvoking(DestroyCinematically);
+
+            public void ChillBriefly()
+            {
+                if (!IsChilling)
+                {
+                    _speedBeforeChilling = _workcart.CurThrottleSetting;
+                    SetThrottle(EngineSpeeds.Zero);
+                }
+
+                CancelInvoke(StopChilling);
+                Invoke(StopChilling, ChillDuration);
+            }
+
+            public void StopChilling() => SetThrottle(_speedBeforeChilling);
+            public bool IsChilling => IsInvoking(StopChilling);
+
+            public EngineSpeeds DesiredThrottle => IsChilling
+                ? _speedBeforeChilling
+                : _workcart.CurThrottleSetting == EngineSpeeds.Zero
+                ? _pluginConfig.GetDepartureSpeed()
+                : _workcart.CurThrottleSetting;
 
             private void AddConductor()
             {
@@ -1951,6 +2146,9 @@ namespace Oxide.Plugins
 
             [JsonProperty("DefaultTrackSelection")]
             public string DefaultTrackSelection = TrackSelection.Left.ToString();
+
+            [JsonProperty("BulldozeOffendingWorkcarts")]
+            public bool BulldozeOffendingWorkcarts = false;
 
             [JsonProperty("EnableMapTriggers")]
             public bool EnableMapTriggers = true;
