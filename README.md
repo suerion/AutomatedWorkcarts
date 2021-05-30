@@ -19,7 +19,7 @@
   - Track selection options: `Default` | `Left` | `Right` | `Swap`.
   - Passing the `Start` option will enable automation for any workcart that enters the trigger. This is useful if you have set `AutomateAllWorkcarts` set to `false` but don't want to manually automate individual workcarts. The recommendation is to place this on specific workcart spawn points.
   - Examples:
-    - `aw.addtrigger` -- Creates a trigger with speed `Zero`. This causes the workcart to turn its engine off for the duration of the `EngineOffDuration` configuration option.
+    - `aw.addtrigger` -- Creates a trigger with speed `Zero`. This causes the workcart to turn its engine off 30 seconds, or the specified duration.
     - `aw.addtrigger Rev Hi` -- Creates a trigger that will cause workcarts to select max speed.
     - `aw.addtrigger Rev Hi` -- Creates a trigger that will cause workcarts to turn left at every intersection until another trigger changes the selection.
     - `aw.addtrigger Start Rev Hi Left` -- Creates a trigger with max forward speed and left track selection, which automatically enables automation for any workcart that enters it.
@@ -44,7 +44,6 @@ The following command aliases are also available:
 ```json
 {
   "AutomateAllWorkcarts": false,
-  "EngineOffDuration": 30.0,
   "DefaultSpeed": "Fwd_Hi",
   "DepartureSpeed": "Fwd_Lo",
   "DefaultTrackSelection": "Left"
@@ -52,8 +51,6 @@ The following command aliases are also available:
 ```
 
 - `AutomateAllWorkcarts` (`true` or `false`) -- While `true`, all workcarts will be automated, except those blocked by other plugins; the `aw.toggle` command will be disabled. While false, you can either automate individual workcarts with `aw.toggle` or use custom triggers to automate workcarts that enter them.
-- `EngineOffDuration` -- Number of seconds that trains should wait after stopping.
-  - For custom triggers, the timer starts as soon as the workcart enters a trigger with speed `Zero`, not when the workcart actually stops.
 - `DefaultSpeed` -- Default speed to use when a workcart starts being automated.
   - Allowed values: `"Rev_Hi"` | `"Rev_Med"` | `"Rev_Lo"` | `"Zero"` | `"Fwd_Lo"` | `"Fwd_Med"` | `"Fwd_Hi"`.
   - Basically this applies when the plugin loads, when toggling on with `aw.toggle`, or when a workcart spawns.

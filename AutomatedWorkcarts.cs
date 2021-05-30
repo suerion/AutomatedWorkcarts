@@ -14,7 +14,7 @@ using static TrainTrackSpline;
 
 namespace Oxide.Plugins
 {
-    [Info("Automated Workcarts", "WhiteThunder", "0.7.3")]
+    [Info("Automated Workcarts", "WhiteThunder", "0.7.4")]
     [Description("Spawns conductor NPCs that drive workcarts between stations.")]
     internal class AutomatedWorkcarts : CovalencePlugin
     {
@@ -1009,7 +1009,7 @@ namespace Oxide.Plugins
             {
                 return StopDuration > 0
                     ? StopDuration
-                    : _pluginConfig.EngineOffDuration;
+                    : 30;
             }
 
             private TunnelType? _tunnelType;
@@ -1958,9 +1958,6 @@ namespace Oxide.Plugins
         {
             [JsonProperty("AutomateAllWorkcarts")]
             public bool AutomateAllWorkcarts = false;
-
-            [JsonProperty("EngineOffDuration")]
-            public float EngineOffDuration = 30;
 
             [JsonProperty("DefaultSpeed")]
             public string DefaultSpeed = EngineSpeeds.Fwd_Hi.ToString();
