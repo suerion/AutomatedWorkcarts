@@ -14,7 +14,7 @@ using static TrainTrackSpline;
 
 namespace Oxide.Plugins
 {
-    [Info("Automated Workcarts", "WhiteThunder", "0.7.4")]
+    [Info("Automated Workcarts", "WhiteThunder", "0.7.5")]
     [Description("Spawns conductor NPCs that drive workcarts between stations.")]
     internal class AutomatedWorkcarts : CovalencePlugin
     {
@@ -50,8 +50,6 @@ namespace Oxide.Plugins
 
             permission.RegisterPermission(PermissionToggle, this);
             permission.RegisterPermission(PermissionManageTriggers, this);
-
-            Unsubscribe(nameof(OnEntitySpawned));
         }
 
         private void Unload()
@@ -76,7 +74,7 @@ namespace Oxide.Plugins
             foreach (var entity in BaseNetworkable.serverEntities)
             {
                 var workcart = entity as TrainEngine;
-                if (workcart != null && (_pluginConfig.AutomateAllWorkcarts || _pluginData.AutomatedWorkcardIds.Contains(workcart.net.ID)))
+                if (workcart != null && _pluginData.AutomatedWorkcardIds.Contains(workcart.net.ID))
                 {
                     timer.Once(UnityEngine.Random.Range(0, 1f), () =>
                     {
@@ -85,24 +83,11 @@ namespace Oxide.Plugins
                     });
                 }
             }
-
-            if (_pluginConfig.AutomateAllWorkcarts)
-                Subscribe(nameof(OnEntitySpawned));
         }
 
         private void OnNewSave()
         {
             _pluginData = StoredPluginData.Clear();
-        }
-
-        private void OnEntitySpawned(TrainEngine workcart)
-        {
-            // Delay so that other plugins that spawn workcarts can save its net id to allow blocking automation.
-            NextTick(() =>
-            {
-                if (workcart != null)
-                    TryAddTrainController(workcart);
-            });
         }
 
         private bool? OnEntityTakeDamage(TrainEngine workcart)
@@ -152,8 +137,7 @@ namespace Oxide.Plugins
                 if (trigger.TriggerInfo.StartsAutomation)
                 {
                     TryAddTrainController(workcart, trigger.TriggerInfo);
-                    if (!_pluginConfig.AutomateAllWorkcarts)
-                        _pluginData.AddWorkcart(workcart);
+                    _pluginData.AddWorkcart(workcart);
                 }
 
                 return;
@@ -178,12 +162,6 @@ namespace Oxide.Plugins
             if (!player.HasPermission(PermissionToggle))
             {
                 ReplyToPlayer(player, Lang.ErrorNoPermission);
-                return;
-            }
-
-            if (_pluginConfig.AutomateAllWorkcarts)
-            {
-                ReplyToPlayer(player, Lang.ErrorFullyAutomated);
                 return;
             }
 
@@ -1956,9 +1934,6 @@ namespace Oxide.Plugins
 
         private class Configuration : SerializableConfiguration
         {
-            [JsonProperty("AutomateAllWorkcarts")]
-            public bool AutomateAllWorkcarts = false;
-
             [JsonProperty("DefaultSpeed")]
             public string DefaultSpeed = EngineSpeeds.Fwd_Hi.ToString();
 
@@ -2175,7 +2150,6 @@ namespace Oxide.Plugins
             public const string ErrorTriggerNotFound = "Error.TriggerNotFound";
             public const string ErrorNoTrackFound = "Error.ErrorNoTrackFound";
             public const string ErrorNoWorkcartFound = "Error.NoWorkcartFound";
-            public const string ErrorFullyAutomated = "Error.FullyAutomated";
             public const string ErrorAutomateBlocked = "Error.AutomateBlocked";
             public const string ErrorUnsupportedTunnel = "Error.UnsupportedTunnel";
 
@@ -2218,7 +2192,6 @@ namespace Oxide.Plugins
                 [Lang.ErrorTriggerNotFound] = "Error: Trigger id #{0}{1} not found.",
                 [Lang.ErrorNoTrackFound] = "Error: No track found nearby.",
                 [Lang.ErrorNoWorkcartFound] = "Error: No workcart found.",
-                [Lang.ErrorFullyAutomated] = "Error: You cannot do that while full automation is on.",
                 [Lang.ErrorAutomateBlocked] = "Error: Another plugin blocked automating that workcart.",
                 [Lang.ErrorUnsupportedTunnel] = "Error: Not a supported train tunnel.",
 

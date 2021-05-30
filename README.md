@@ -12,12 +12,11 @@
 ## Commands
 
 - `aw.toggle` -- Toggles automation for the workcart you are standing on or looking at.
-  - This command is disabled while the `AutomateAllWorkcarts` configuration option is `true`.
 - `aw.addtrigger <option1> <option2> ...` -- Adds a trigger to the track position where the player is aiming, with the specified options. Automated workcarts that pass through the trigger will be affected by the trigger's options.
   - Speed options: `Hi` | `Med` | `Lo` | `Zero`.
   - Direction options: `Fwd` | `Rev` | `Invert`.
   - Track selection options: `Default` | `Left` | `Right` | `Swap`.
-  - Passing the `Start` option will enable automation for any workcart that enters the trigger. This is useful if you have set `AutomateAllWorkcarts` set to `false` but don't want to manually automate individual workcarts. The recommendation is to place this on specific workcart spawn points.
+  - Passing the `Start` option will enable automation for any workcart that enters the trigger. The recommendation is to place this on specific workcart spawn points.
   - Examples:
     - `aw.addtrigger` -- Creates a trigger with speed `Zero`. This causes the workcart to turn its engine off 30 seconds, or the specified duration.
     - `aw.addtrigger Rev Hi` -- Creates a trigger that will cause workcarts to select max speed.
@@ -43,14 +42,12 @@ The following command aliases are also available:
 
 ```json
 {
-  "AutomateAllWorkcarts": false,
   "DefaultSpeed": "Fwd_Hi",
   "DepartureSpeed": "Fwd_Med",
   "DefaultTrackSelection": "Left"
 }
 ```
 
-- `AutomateAllWorkcarts` (`true` or `false`) -- While `true`, all workcarts will be automated, except those blocked by other plugins; the `aw.toggle` command will be disabled. While false, you can either automate individual workcarts with `aw.toggle` or use custom triggers to automate workcarts that enter them.
 - `DefaultSpeed` -- Default speed to use when a workcart starts being automated.
   - Allowed values: `"Rev_Hi"` | `"Rev_Med"` | `"Rev_Lo"` | `"Zero"` | `"Fwd_Lo"` | `"Fwd_Med"` | `"Fwd_Hi"`.
   - Basically this applies when the plugin loads, when toggling on with `aw.toggle`, or when a workcart spawns.
@@ -68,7 +65,6 @@ The following command aliases are also available:
   "Error.TriggerNotFound": "Error: Trigger id #{0}{1} not found.",
   "Error.ErrorNoTrackFound": "Error: No track found nearby.",
   "Error.NoWorkcartFound": "Error: No workcart found.",
-  "Error.FullyAutomated": "Error: You cannot do that while full automation is on.",
   "Error.AutomateBlocked": "Error: Another plugin blocked automating that workcart.",
   "Error.UnsupportedTunnel": "Error: Not a supported train tunnel.",
   "Toggle.Success.On": "That workcart is now automated.",
