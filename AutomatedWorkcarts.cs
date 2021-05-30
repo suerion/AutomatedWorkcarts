@@ -1963,7 +1963,7 @@ namespace Oxide.Plugins
             public string DefaultSpeed = EngineSpeeds.Fwd_Hi.ToString();
 
             [JsonProperty("DepartureSpeed")]
-            public string DepartureSpeed = EngineSpeeds.Fwd_Lo.ToString();
+            public string DepartureSpeed = EngineSpeeds.Fwd_Med.ToString();
 
             [JsonProperty("DefaultTrackSelection")]
             public string DefaultTrackSelection = TrackSelection.Left.ToString();

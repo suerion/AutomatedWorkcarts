@@ -45,7 +45,7 @@ The following command aliases are also available:
 {
   "AutomateAllWorkcarts": false,
   "DefaultSpeed": "Fwd_Hi",
-  "DepartureSpeed": "Fwd_Lo",
+  "DepartureSpeed": "Fwd_Med",
   "DefaultTrackSelection": "Left"
 }
 ```
