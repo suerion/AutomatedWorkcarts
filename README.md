@@ -44,7 +44,13 @@ The following command aliases are also available:
 {
   "DefaultSpeed": "Fwd_Hi",
   "DepartureSpeed": "Fwd_Med",
-  "DefaultTrackSelection": "Left"
+  "DefaultTrackSelection": "Left",
+  "EnableMapTriggers": true,
+  "EnableTunnelTriggers": {
+    "TrainStation": false,
+    "BarricadeTunnel": false,
+    "LootTunnel": false
+  }
 }
 ```
 
@@ -55,6 +61,8 @@ The following command aliases are also available:
 - `DefaultTrackSelection` -- Default track selection to use when a workcart starts being automated.
   - Allowed values: `"Left"` | `"Default"` | `"Right"`.
   - Basically this applies when the plugin loads, when toggling on with `aw.toggle`, or when a workcart spawns.
+- `EnableMapTriggers` (`true` or `false`) -- Whether map-specific triggers are enabled. While `false`, existing map-specific triggers will be disabled, and no new map-specific triggers can be added.
+- `EnableTunnelTriggers` (each `true` or `false`) -- Whether triggers are enabled for the corresponding type of train tunnel. While `false`, existing tunnel triggers will be disabled, and no new tunnel triggers can be added.
 
 ## Localization
 
@@ -67,6 +75,7 @@ The following command aliases are also available:
   "Error.NoWorkcartFound": "Error: No workcart found.",
   "Error.AutomateBlocked": "Error: Another plugin blocked automating that workcart.",
   "Error.UnsupportedTunnel": "Error: Not a supported train tunnel.",
+  "Error.TunnelTypeDisabled": "Error: Tunnel type <color=#fd4>{0}</color> is currently disabled.",
   "Toggle.Success.On": "That workcart is now automated.",
   "Toggle.Success.Off": "That workcart is no longer automated.",
   "AddTrigger.Syntax": "Syntax: <color=#fd4>{0} <option1> <option2> ...</color>\n{1}",

@@ -14,7 +14,7 @@ using static TrainTrackSpline;
 
 namespace Oxide.Plugins
 {
-    [Info("Automated Workcarts", "WhiteThunder", "0.7.5")]
+    [Info("Automated Workcarts", "WhiteThunder", "0.8.0")]
     [Description("Spawns conductor NPCs that drive workcarts between stations.")]
     internal class AutomatedWorkcarts : CovalencePlugin
     {
@@ -248,6 +248,12 @@ namespace Oxide.Plugins
             DungeonCellWrapper dungeonCellWrapper;
             if (!VerifySupportedNearbyTrainTunnel(player, trackPosition, out dungeonCellWrapper))
                 return;
+
+            if (!_pluginConfig.IsTunnelTypeEnabled(dungeonCellWrapper.TunnelType))
+            {
+                ReplyToPlayer(player, Lang.ErrorTunneLTypeDisabled, dungeonCellWrapper.TunnelType);
+                return;
+            }
 
             var triggerInfo = new WorkcartTriggerInfo()
             {
@@ -1100,7 +1106,6 @@ namespace Oxide.Plugins
         private abstract class BaseTriggerWrapper
         {
             public WorkcartTriggerInfo TriggerInfo { get; protected set; }
-
             public virtual Vector3 Position => TriggerInfo.Position;
 
             protected GameObject _gameObject;
@@ -1299,12 +1304,16 @@ namespace Oxide.Plugins
 
             public void CreateAll()
             {
-                foreach (var triggerInfo in _mapData.MapTriggers)
-                    _mapTriggers[triggerInfo] = MapTriggerWrapper.CreateWorldTrigger(triggerInfo);
+                if (_pluginConfig.EnableMapTriggers)
+                {
+                    foreach (var triggerInfo in _mapData.MapTriggers)
+                        _mapTriggers[triggerInfo] = MapTriggerWrapper.CreateWorldTrigger(triggerInfo);
+                }
 
                 foreach (var triggerInfo in _tunnelData.TunnelTriggers)
                 {
-                    if (triggerInfo.GetTunnelType() == TunnelType.Unsupported)
+                    var tunnelType = triggerInfo.GetTunnelType();
+                    if (tunnelType == TunnelType.Unsupported || !_pluginConfig.IsTunnelTypeEnabled(tunnelType))
                         continue;
 
                     _tunnelTriggers[triggerInfo] = TunnelTriggerWrapper.CreateTunnelTriggers(triggerInfo);
@@ -1943,6 +1952,25 @@ namespace Oxide.Plugins
             [JsonProperty("DefaultTrackSelection")]
             public string DefaultTrackSelection = TrackSelection.Left.ToString();
 
+            [JsonProperty("EnableMapTriggers")]
+            public bool EnableMapTriggers = true;
+
+            [JsonProperty("EnableTunnelTriggers")]
+            public Dictionary<string, bool> EnableTunnelTriggers = new Dictionary<string, bool>
+            {
+                [TunnelType.TrainStation.ToString()] = false,
+                [TunnelType.BarricadeTunnel.ToString()] = false,
+                [TunnelType.LootTunnel.ToString()] = false,
+            };
+
+            public bool IsTunnelTypeEnabled(TunnelType tunnelType)
+            {
+                bool enabled;
+                return EnableTunnelTriggers.TryGetValue(tunnelType.ToString(), out enabled)
+                    ? enabled
+                    : false;
+            }
+
             private EngineSpeeds? _defaultSpeed;
             public EngineSpeeds GetDefaultSpeed()
             {
@@ -2152,6 +2180,7 @@ namespace Oxide.Plugins
             public const string ErrorNoWorkcartFound = "Error.NoWorkcartFound";
             public const string ErrorAutomateBlocked = "Error.AutomateBlocked";
             public const string ErrorUnsupportedTunnel = "Error.UnsupportedTunnel";
+            public const string ErrorTunneLTypeDisabled = "Error.TunnelTypeDisabled";
 
             public const string ToggleOnSuccess = "Toggle.Success.On";
             public const string ToggleOffSuccess = "Toggle.Success.Off";
@@ -2194,6 +2223,7 @@ namespace Oxide.Plugins
                 [Lang.ErrorNoWorkcartFound] = "Error: No workcart found.",
                 [Lang.ErrorAutomateBlocked] = "Error: Another plugin blocked automating that workcart.",
                 [Lang.ErrorUnsupportedTunnel] = "Error: Not a supported train tunnel.",
+                [Lang.ErrorTunneLTypeDisabled] = "Error: Tunnel type <color=#fd4>{0}</color> is currently disabled.",
 
                 [Lang.ToggleOnSuccess] = "That workcart is now automated.",
                 [Lang.ToggleOffSuccess] = "That workcart is no longer automated.",
