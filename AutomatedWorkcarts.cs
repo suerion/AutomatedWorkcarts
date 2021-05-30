@@ -1370,12 +1370,12 @@ namespace Oxide.Plugins
                     foreach (var trigger in triggerList)
                     {
                         if (Vector3.Distance(playerPosition, trigger.Position) <= TriggerDrawDistance)
-                            ShowTrigger(player, trigger);
+                            ShowTrigger(player, trigger, triggerList.Length);
                     }
                 }
             }
 
-            private static void ShowTrigger(BasePlayer player, BaseTriggerWrapper trigger)
+            private static void ShowTrigger(BasePlayer player, BaseTriggerWrapper trigger, int count = 1)
             {
                 var triggerInfo = trigger.TriggerInfo;
                 var color = triggerInfo.GetColor();
@@ -1390,7 +1390,7 @@ namespace Oxide.Plugins
                 };
 
                 if (triggerInfo.TriggerType == WorkcartTriggerType.Tunnel)
-                    infoLines.Add(_pluginInstance.GetMessage(player, Lang.InfoTunnelTrigger, triggerInfo.TunnelType));
+                    infoLines.Add(_pluginInstance.GetMessage(player, Lang.InfoTunnelTrigger, triggerInfo.TunnelType, count));
                 else
                     infoLines.Add(_pluginInstance.GetMessage(player, Lang.InfoMapTrigger, triggerInfo.Id));
 
@@ -2245,7 +2245,7 @@ namespace Oxide.Plugins
                 [Lang.InfoTunnelPrefix] = "T",
 
                 [Lang.InfoMapTrigger] = "Map-specific",
-                [Lang.InfoTunnelTrigger] = "Tunnel type: {0}",
+                [Lang.InfoTunnelTrigger] = "Tunnel type: {0} (x{1})",
                 [Lang.InfoStart] = "Starts automation",
                 [Lang.InfoStopDuration] = "Stop duration: {0}s",
 

@@ -90,7 +90,7 @@ The following command aliases are also available:
   "Info.Trigger.Prefix.Map": "M",
   "Info.Trigger.Prefix.Tunnel": "T",
   "Info.Trigger.Map": "Map-specific",
-  "Info.Trigger.Tunnel": "Tunnel type: {0}",
+  "Info.Trigger.Tunnel": "Tunnel type: {0} (x{1})",
   "Info.Trigger.Start": "Starts automation",
   "Info.Trigger.StopDuration": "Stop duration: {0}s",
   "Info.Trigger.Speed": "Speed: {0}",
