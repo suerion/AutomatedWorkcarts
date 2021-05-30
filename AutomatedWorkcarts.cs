@@ -14,7 +14,7 @@ using static TrainTrackSpline;
 
 namespace Oxide.Plugins
 {
-    [Info("Automated Workcarts", "WhiteThunder", "0.7.1")]
+    [Info("Automated Workcarts", "WhiteThunder", "0.7.2")]
     [Description("Spawns conductor NPCs that drive workcarts between stations.")]
     internal class AutomatedWorkcarts : CovalencePlugin
     {
@@ -686,6 +686,13 @@ namespace Oxide.Plugins
 
             foreach (var dungeon in TerrainMeta.Path.DungeonCells)
             {
+                var dungeonCellWrapper = new DungeonCellWrapper(dungeon);
+                if (dungeonCellWrapper.TunnelType == TunnelType.Unsupported)
+                    continue;
+
+                if (!dungeonCellWrapper.IsInBounds(position))
+                    continue;
+
                 var distance = Vector3.Distance(dungeon.transform.position, position);
                 if (distance < shortestDistance)
                 {
@@ -694,7 +701,7 @@ namespace Oxide.Plugins
                 }
             }
 
-            return new DungeonCellWrapper(closestDungeon);
+            return closestDungeon == null ? null : new DungeonCellWrapper(closestDungeon);
         }
 
         private static List<DungeonCellWrapper> FindAllTunnelsOfType(TunnelType tunnelType)
@@ -759,18 +766,24 @@ namespace Oxide.Plugins
                     : Quaternion.identity;
             }
 
-            private DungeonCell _dungeonCell;
+            public string ShortName { get; private set; }
+            public TunnelType TunnelType { get; private set; }
+            public Vector3 Position { get; private set; }
+            public Quaternion Rotation { get; private set; }
+
+            private OBB _boundingBox;
 
             public DungeonCellWrapper(DungeonCell dungeonCell)
             {
-                _dungeonCell = dungeonCell;
+                ShortName = GetShortName(dungeonCell.name);
+                TunnelType = GetTunnelType(ShortName);
+                Position = dungeonCell.transform.position;
+                Rotation = GetRotation(ShortName);
+
+                Vector3 dimensions;
+                if (DungeonCellDimensions.TryGetValue(TunnelType, out dimensions))
+                    _boundingBox = new OBB(Position + new Vector3(0, dimensions.y / 2, 0), dimensions, Rotation);
             }
-
-            public string ShortName => GetShortName(_dungeonCell.name);
-            public TunnelType TunnelType => GetTunnelType(ShortName);
-
-            public Vector3 Position => _dungeonCell.transform.position;
-            public Quaternion Rotation => GetRotation(ShortName);
 
             // World position to local position.
             public Vector3 InverseTransformPoint(Vector3 worldPosition) =>
@@ -779,6 +792,8 @@ namespace Oxide.Plugins
             // Local position to world position.
             public Vector3 TransformPoint(Vector3 localPosition) =>
                 Position + Rotation * localPosition;
+
+            public bool IsInBounds(Vector3 position) => _boundingBox.Contains(position);
         }
 
         #endregion
@@ -827,6 +842,13 @@ namespace Oxide.Plugins
             ["straight-sn-1"] = TunnelType.LootTunnel,
             ["straight-we-0"] = TunnelType.LootTunnel,
             ["straight-we-1"] = TunnelType.LootTunnel,
+        };
+
+        private static readonly Dictionary<TunnelType, Vector3> DungeonCellDimensions = new Dictionary<TunnelType, Vector3>()
+        {
+            [TunnelType.TrainStation] = new Vector3(16.5f, 8.5f, 216),
+            [TunnelType.BarricadeTunnel] = new Vector3(16.5f, 8.5f, 216),
+            [TunnelType.LootTunnel] = new Vector3(16.5f, 8.5f, 216),
         };
 
         // Don't rename these since the names are persisted in data files.
