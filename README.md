@@ -37,6 +37,7 @@ The following command aliases are also available:
 - `aw.replacetrigger` -> `awt.replace`
 - `aw.movetrigger` -> `awt.move`
 - `aw.removetrigger` -> `awt.remove`
+- `aw.addtunneltrigger` -> `awt.addt`
 
 ## Configuration
 
