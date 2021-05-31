@@ -14,7 +14,7 @@ using static TrainTrackSpline;
 
 namespace Oxide.Plugins
 {
-    [Info("Automated Workcarts", "WhiteThunder", "0.9.0")]
+    [Info("Automated Workcarts", "WhiteThunder", "0.9.1")]
     [Description("Spawns conductor NPCs that drive workcarts between stations.")]
     internal class AutomatedWorkcarts : CovalencePlugin
     {
@@ -223,6 +223,9 @@ namespace Oxide.Plugins
                 {
                     if (_pluginConfig.BulldozeOffendingWorkcarts)
                         ScheduleDestroyWorkcart(workcart);
+                    else
+                        otherController.ChillBriefly();
+
                     return;
                 }
 
@@ -230,6 +233,9 @@ namespace Oxide.Plugins
                 {
                     if (_pluginConfig.BulldozeOffendingWorkcarts)
                         ScheduleDestroyWorkcart(otherWorkcart);
+                    else
+                        controller.ChillBriefly();
+
                     return;
                 }
 
