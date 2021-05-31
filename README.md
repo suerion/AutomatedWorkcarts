@@ -55,9 +55,9 @@ To see the triggers visually, grant the `automatedworkcarts.managetriggers` perm
   - Passing the `Start` option will enable automation for any workcart that enters the trigger. The recommendation is to place this on specific workcart spawn points.
   - Examples:
     - `aw.addtrigger` -- Creates a trigger with speed `Zero`. This causes the workcart to turn its engine off 30 seconds, or the specified duration.
-    - `aw.addtrigger Rev Hi` -- Creates a trigger that will cause workcarts to select max speed.
-    - `aw.addtrigger Rev Hi` -- Creates a trigger that will cause workcarts to turn left at every intersection until another trigger changes the selection.
-    - `aw.addtrigger Start Rev Hi Left` -- Creates a trigger with max forward speed and left track selection, which automatically enables automation for any workcart that enters it.
+    - `aw.addtrigger Hi` -- Creates a trigger that will cause workcarts to select max speed.
+    - `aw.addtrigger Left` -- Creates a trigger that will cause workcarts to turn left at every intersection until another trigger changes the selection.
+    - `aw.addtrigger Start Fwd Hi Left` -- Creates a trigger with max forward speed and left track selection, which automatically enables automation for any workcart that enters it.
 - `aw.addtrunneltrigger <option1> <option2>` -- Adds a trigger to the track position where the player is aiming.
   - Must be in a supported train tunnel (one enabled in plugin configuration).
   - This trigger will be replicated at all train tunnels of the same type.
@@ -68,6 +68,8 @@ To see the triggers visually, grant the `automatedworkcarts.managetriggers` perm
 - `aw.removetrigger <id>` -- Removes the specified trigger.
 - `aw.showtriggers` -- Shows all triggers, including id, speed and track selection. This lasts 60 seconds, but is extended any time you add, update, move or remove a trigger.
   - You must be an admin to see the triggers.
+
+Tip: For the commands that update, move or remove triggers, you can skip the `<id>` argument if you are aiming at a nearby trigger.
 
 The following command aliases are also available:
 - `aw.addtrigger` -> `awt.add`
