@@ -14,7 +14,7 @@ using static TrainTrackSpline;
 
 namespace Oxide.Plugins
 {
-    [Info("Automated Workcarts", "WhiteThunder", "0.9.1")]
+    [Info("Automated Workcarts", "WhiteThunder", "0.9.2")]
     [Description("Spawns conductor NPCs that drive workcarts between stations.")]
     internal class AutomatedWorkcarts : CovalencePlugin
     {
@@ -803,10 +803,10 @@ namespace Oxide.Plugins
             return dungeonCellList;
         }
 
-        private static BaseEntity GetLookEntity(BasePlayer player, float maxDistance = 20)
+        private static BaseEntity GetLookEntity(BasePlayer player, int layerMask = Physics.DefaultRaycastLayers, float maxDistance = 20)
         {
             RaycastHit hit;
-            return Physics.Raycast(player.eyes.HeadRay(), out hit, maxDistance, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore)
+            return Physics.Raycast(player.eyes.HeadRay(), out hit, maxDistance, layerMask, QueryTriggerInteraction.Ignore)
                 ? hit.GetEntity()
                 : null;
         }
@@ -825,7 +825,7 @@ namespace Oxide.Plugins
         }
 
         private static TrainEngine GetPlayerCart(BasePlayer player) =>
-            GetLookEntity(player) as TrainEngine ?? GetMountedCart(player);
+            GetLookEntity(player, Rust.Layers.Mask.Vehicle_Detailed) as TrainEngine ?? GetMountedCart(player);
 
         private static Vector3 GetWorkcartForward(TrainEngine workcart)
         {
