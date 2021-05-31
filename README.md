@@ -36,9 +36,8 @@ To see the triggers visually, grant the `automatedworkcarts.managetriggers` perm
 4. Find a workcart spawn location where you would like workcarts to automatically receive conductors.
 5. Aim at the track and run the command `aw.addtrigger Start Fwd Hi`. Any workcart that spawns on this trigger will automatically receive a conductor, and start driving forward at max speed.
 6. Find a portion of track where you want automated workarts to stop briefly.
-7. Aim at the track and run the command `aw.addtrigger Zero 30`. Any workcart that passes through this trigger will shut off its engine for 30 seconds, before changing to the `DepartureSpeed` from the plugin configuration. You may want to move this trigger back, considering that the workcart may cover a significant distance while rolling to a stop.
-8. To make the workcart slow down more quickly, aim at a point farther back on the track (somewhere before the workcart would reach the `Zero` trigger) and run the command `aw.addtrigger Invert Lo`. This trigger will cause the workcart to reverse its speed (brake) until it reaches the `Zero` trigger. Be careful where you place this, or the workcart may come to a stop and start going backward before reaching the next trigger. One reason for using the `Invert` direction instead of `Rev` is, just in case the workcart does go backward, when it reaches the original `Invert` trigger, it will start moving forward again.
-9. Keep adding/editing triggers and spawning workcarts to refine the routes.
+7. Aim at the track and run the command `aw.addtrigger Brake Zero 30`. Any workcart that passes through this trigger will brake until stopping, wait for 30 seconds, then start moving at `DepartureSpeed` in the plugin configuration.
+8. Keep adding/editing triggers and spawning workcarts to refine the routes.
 
 ## Permission
 
@@ -50,7 +49,7 @@ To see the triggers visually, grant the `automatedworkcarts.managetriggers` perm
 - `aw.toggle` -- Toggles automation for the workcart you are standing on or looking at.
 - `aw.addtrigger <option1> <option2> ...` -- Adds a trigger to the track position where the player is aiming, with the specified options. Automated workcarts that pass through the trigger will be affected by the trigger's options.
   - Speed options: `Hi` | `Med` | `Lo` | `Zero`.
-  - Direction options: `Fwd` | `Rev` | `Invert`.
+  - Direction options: `Fwd` | `Rev` | `Invert` | `Brake`.
   - Track selection options: `Default` | `Left` | `Right` | `Swap`.
   - Passing the `Start` option will enable automation for any workcart that enters the trigger. The recommendation is to place this on specific workcart spawn points.
   - Examples:

@@ -14,7 +14,7 @@ using static TrainTrackSpline;
 
 namespace Oxide.Plugins
 {
-    [Info("Automated Workcarts", "WhiteThunder", "0.9.2")]
+    [Info("Automated Workcarts", "WhiteThunder", "0.10.0")]
     [Description("Spawns conductor NPCs that drive workcarts between stations.")]
     internal class AutomatedWorkcarts : CovalencePlugin
     {
@@ -187,7 +187,7 @@ namespace Oxide.Plugins
 
                 if (forwardController != null)
                 {
-                    forwardController.BeginEarlyDeparture();
+                    forwardController.DepartEarlyIfStoppedOrStopping();
                 }
                 else if (Math.Abs(EngineSpeedToNumber(forwardWorkcart.CurThrottleSetting)) < Math.Abs(EngineSpeedToNumber(backwardWorkcart.CurThrottleSetting)))
                 {
@@ -197,7 +197,7 @@ namespace Oxide.Plugins
                 }
 
                 if (backController != null)
-                    backController.ChillBriefly();
+                    backController.StartChilling();
             }
             else
             {
@@ -213,7 +213,7 @@ namespace Oxide.Plugins
                 {
                     // Not a head on collision. One is braking while hitting the other.
                     if (controller != null)
-                        controller.BeginEarlyDeparture();
+                        controller.DepartEarlyIfStoppedOrStopping();
 
                     return;
                 }
@@ -224,7 +224,7 @@ namespace Oxide.Plugins
                     if (_pluginConfig.BulldozeOffendingWorkcarts)
                         ScheduleDestroyWorkcart(workcart);
                     else
-                        otherController.ChillBriefly();
+                        otherController.StartChilling();
 
                     return;
                 }
@@ -234,7 +234,7 @@ namespace Oxide.Plugins
                     if (_pluginConfig.BulldozeOffendingWorkcarts)
                         ScheduleDestroyWorkcart(otherWorkcart);
                     else
-                        controller.ChillBriefly();
+                        controller.StartChilling();
 
                     return;
                 }
@@ -302,10 +302,8 @@ namespace Oxide.Plugins
                 || !VerifyPermission(player, PermissionManageTriggers))
                 return;
 
-            var basePlayer = player.Object as BasePlayer;
-
             Vector3 trackPosition;
-            if (!TryGetTrackPosition(basePlayer, out trackPosition))
+            if (!TryGetTrackPosition(player.Object as BasePlayer, out trackPosition))
             {
                 ReplyToPlayer(player, Lang.ErrorNoTrackFound);
                 return;
@@ -313,22 +311,7 @@ namespace Oxide.Plugins
 
             var triggerInfo = new WorkcartTriggerInfo() { Position = trackPosition };
 
-            if (args.Length == 0)
-            {
-                triggerInfo.Speed = EngineSpeeds.Zero.ToString();
-            }
-            else
-            {
-                foreach (var arg in args)
-                {
-                    if (!VerifyValidArg(player, cmd, arg, triggerInfo, Lang.AddTriggerSyntax))
-                        return;
-                }
-            }
-
-            _triggerManager.AddTrigger(triggerInfo);
-            _triggerManager.ShowAllRepeatedly(basePlayer);
-            ReplyToPlayer(player, Lang.AddTriggerSuccess, GetTriggerPrefix(player, triggerInfo), triggerInfo.Id);
+            AddTriggerShared(player, cmd, args, triggerInfo);
         }
 
         [Command("aw.addtunneltrigger", "awt.addt")]
@@ -338,10 +321,8 @@ namespace Oxide.Plugins
                 || !VerifyPermission(player, PermissionManageTriggers))
                 return;
 
-            var basePlayer = player.Object as BasePlayer;
-
             Vector3 trackPosition;
-            if (!TryGetTrackPosition(basePlayer, out trackPosition))
+            if (!TryGetTrackPosition(player.Object as BasePlayer, out trackPosition))
             {
                 ReplyToPlayer(player, Lang.ErrorNoTrackFound);
                 return;
@@ -363,6 +344,11 @@ namespace Oxide.Plugins
                 Position = dungeonCellWrapper.InverseTransformPoint(trackPosition),
             };
 
+            AddTriggerShared(player, cmd, args, triggerInfo);
+        }
+
+        private void AddTriggerShared(IPlayer player, string cmd, string[] args, WorkcartTriggerInfo triggerInfo)
+        {
             if (args.Length == 0)
             {
                 triggerInfo.Speed = EngineSpeeds.Zero.ToString();
@@ -371,13 +357,17 @@ namespace Oxide.Plugins
             {
                 foreach (var arg in args)
                 {
-                    if (!VerifyValidArg(player, cmd, arg, triggerInfo, Lang.AddTriggerSyntax))
+                    if (!VerifyValidArgAndModifyTrigger(player, cmd, arg, triggerInfo, Lang.AddTriggerSyntax))
                         return;
                 }
             }
 
+            if (triggerInfo.GetDirection() == WorkcartDirection.Brake
+                && triggerInfo.GetSpeed() == null)
+                triggerInfo.Speed = EngineSpeeds.Zero.ToString();
+
             _triggerManager.AddTrigger(triggerInfo);
-            _triggerManager.ShowAllRepeatedly(basePlayer);
+            _triggerManager.ShowAllRepeatedly(player.Object as BasePlayer);
             ReplyToPlayer(player, Lang.AddTriggerSuccess, GetTriggerPrefix(player, triggerInfo), triggerInfo.Id);
         }
 
@@ -404,7 +394,7 @@ namespace Oxide.Plugins
 
             foreach (var arg in optionArgs)
             {
-                if (!VerifyValidArg(player, cmd, arg, triggerInfo, Lang.UpdateTriggerSyntax))
+                if (!VerifyValidArgAndModifyTrigger(player, cmd, arg, triggerInfo, Lang.UpdateTriggerSyntax))
                     return;
             }
 
@@ -437,7 +427,7 @@ namespace Oxide.Plugins
             var newTriggerInfo = new WorkcartTriggerInfo();
             foreach (var arg in optionArgs)
             {
-                if (!VerifyValidArg(player, cmd, arg, newTriggerInfo, Lang.UpdateTriggerSyntax))
+                if (!VerifyValidArgAndModifyTrigger(player, cmd, arg, newTriggerInfo, Lang.UpdateTriggerSyntax))
                     return;
             }
 
@@ -623,7 +613,7 @@ namespace Oxide.Plugins
             return true;
         }
 
-        private bool VerifyValidArg(IPlayer player, string cmd, string arg, WorkcartTriggerInfo triggerInfo, string errorMessageName)
+        private bool VerifyValidArgAndModifyTrigger(IPlayer player, string cmd, string arg, WorkcartTriggerInfo triggerInfo, string errorMessageName)
         {
             if (arg.ToLower() == "start")
             {
@@ -1020,7 +1010,8 @@ namespace Oxide.Plugins
         {
             Fwd,
             Rev,
-            Invert
+            Invert,
+            Brake
         }
 
         // Don't rename these since the names are persisted in data files.
@@ -1071,11 +1062,15 @@ namespace Oxide.Plugins
             // 1 or -1
             var sign = signedSpeed == 0 ? 1 : signedSpeed / unsignedSpeed;
 
+            if (desiredDirection == WorkcartDirection.Brake)
+                return EngineSpeedFromNumber(sign * -1);
+
             if (desiredDirection == WorkcartDirection.Fwd)
                 sign = 1;
             else if (desiredDirection == WorkcartDirection.Rev)
                 sign = -1;
-            else if (desiredDirection == WorkcartDirection.Invert)
+            else if (desiredDirection == WorkcartDirection.Invert
+                || desiredDirection == WorkcartDirection.Brake)
                 sign *= -1;
 
             if (desiredSpeed == WorkcartSpeed.Hi)
@@ -1136,11 +1131,11 @@ namespace Oxide.Plugins
             [JsonProperty("StartsAutomation", DefaultValueHandling = DefaultValueHandling.Ignore)]
             public bool StartsAutomation = false;
 
-            [JsonProperty("Speed", DefaultValueHandling = DefaultValueHandling.Ignore)]
-            public string Speed;
-
             [JsonProperty("Direction", DefaultValueHandling = DefaultValueHandling.Ignore)]
             public string Direction;
+
+            [JsonProperty("Speed", DefaultValueHandling = DefaultValueHandling.Ignore)]
+            public string Speed;
 
             [JsonProperty("TrackSelection", DefaultValueHandling = DefaultValueHandling.Ignore)]
             public string TrackSelection;
@@ -1239,13 +1234,25 @@ namespace Oxide.Plugins
                 var direction = GetDirection();
                 var trackSelection = GetTrackSelection();
 
+                float hue, saturation;
+
+                if (direction == WorkcartDirection.Brake)
+                {
+                    // Orange
+                    hue = 0.5f/6f;
+                    saturation = speed == WorkcartSpeed.Zero ? 1
+                        : speed == WorkcartSpeed.Lo ? 0.8f
+                        : 0.6f;
+                    return Color.HSVToRGB(0.5f/6f, saturation, 1);
+                }
+
                 if (speed == WorkcartSpeed.Zero)
                     return Color.white;
 
                 if (speed == null && direction == null && trackSelection != null)
                     return Color.magenta;
 
-                var hue = direction == WorkcartDirection.Fwd
+                hue = direction == WorkcartDirection.Fwd
                     ? 1/3f // Green
                     : direction == WorkcartDirection.Rev
                     ? 0 // Red
@@ -1253,7 +1260,7 @@ namespace Oxide.Plugins
                     ? 0.5f/6f // Orange
                     : 1/6f; // Yellow
 
-                var saturation = speed == WorkcartSpeed.Hi
+                saturation = speed == WorkcartSpeed.Hi
                     ? 1
                     : speed == WorkcartSpeed.Med
                     ? 0.8f
@@ -1546,16 +1553,16 @@ namespace Oxide.Plugins
                 if (triggerInfo.StartsAutomation)
                     infoLines.Add(_pluginInstance.GetMessage(player, Lang.InfoStart));
 
+                var direction = triggerInfo.GetDirection();
+                if (direction != null)
+                    infoLines.Add(_pluginInstance.GetMessage(player, Lang.InfoTriggerDirection, direction));
+
                 var speed = triggerInfo.GetSpeed();
                 if (speed != null)
                     infoLines.Add(_pluginInstance.GetMessage(player, Lang.InfoTriggerSpeed, speed));
 
                 if (speed == WorkcartSpeed.Zero)
                     infoLines.Add(_pluginInstance.GetMessage(player, Lang.InfoStopDuration, triggerInfo.GetStopDuration()));
-
-                var direction = triggerInfo.GetDirection();
-                if (direction != null)
-                    infoLines.Add(_pluginInstance.GetMessage(player, Lang.InfoTriggerDirection, direction));
 
                 var trackSelection = triggerInfo.GetTrackSelection();
                 if (trackSelection != null)
@@ -1632,7 +1639,8 @@ namespace Oxide.Plugins
 
             public BasePlayer Conductor { get; private set; }
             private TrainEngine _workcart;
-            private EngineSpeeds _speedBeforeChilling;
+            private EngineSpeeds _targetSpeed;
+            private float _stopDuration;
             private VendingMachineMapMarker _mapMarker;
 
             private void Awake()
@@ -1660,64 +1668,135 @@ namespace Oxide.Plugins
 
             public void HandleWorkcartTrigger(WorkcartTriggerInfo triggerInfo)
             {
-                CancelInvoke(StopChilling);
+                CancelWaitingAtStop();
+                CancelChilling();
 
-                var engineSpeed = GetNextVelocity(_workcart.CurThrottleSetting, triggerInfo.GetSpeed(), triggerInfo.GetDirection());
-                SetThrottle(engineSpeed);
+                var speed = triggerInfo.GetSpeed();
+                var direction = triggerInfo.GetDirection();
+                var stopDuration = triggerInfo.GetStopDuration();
+                var currentSpeed = IsBraking ? _targetSpeed : _workcart.CurThrottleSetting;
+                var nextSpeed = GetNextVelocity(currentSpeed, speed, direction);
 
-                if (engineSpeed == EngineSpeeds.Zero)
-                    Invoke(ScheduledDeparture, triggerInfo.GetStopDuration());
-                else
-                    CancelInvoke(ScheduledDeparture);
+                if (IsBraking && speed != null)
+                    CancelBraking();
+
+                if (direction == WorkcartDirection.Brake)
+                {
+                    var futureSpeed = GetNextVelocity(currentSpeed, triggerInfo.GetSpeed(), null);
+                    StartBraking(futureSpeed);
+
+                    if (futureSpeed == EngineSpeeds.Zero)
+                        _stopDuration = stopDuration;
+                }
+                else if (nextSpeed == EngineSpeeds.Zero)
+                {
+                    BeginStop(stopDuration);
+                }
+
+                SetThrottle(nextSpeed);
 
                 _workcart.SetTrackSelection(GetNextTrackSelection(_workcart.curTrackSelection, triggerInfo.GetTrackSelection()));
             }
 
-            public void BeginEarlyDeparture()
+            private void BeginStop(float stopDuration)
             {
-                if (!IsInvoking(ScheduledDeparture))
-                    return;
-
-                CancelInvoke(ScheduledDeparture);
-                ScheduledDeparture();
+                Invoke(DepartFromStop, stopDuration);
             }
 
-            public void ScheduledDeparture()
+            public void DepartEarlyIfStoppedOrStopping()
             {
-                SetThrottle(_pluginConfig.GetDepartureSpeed());
+                if (IsWaitingAtStop || IsBraking)
+                {
+                    CancelWaitingAtStop();
+                    CancelBraking();
+                    DepartFromStop();
+                }
             }
+
+            public void DepartFromStop() => SetThrottle(_pluginConfig.GetDepartureSpeed());
+            private bool IsWaitingAtStop => IsInvoking(DepartFromStop);
+            public void CancelWaitingAtStop() => CancelInvoke(DepartFromStop);
 
             public void SetThrottle(EngineSpeeds engineSpeed)
             {
                 _workcart.SetThrottle(engineSpeed);
             }
 
-            public void StopEngine() => _workcart.SetThrottle(EngineSpeeds.Zero);
-
             public void ScheduleDestruction() => Invoke(DestroyCinematically, 0);
-            private void DestroyCinematically() => DestroyWorkcart(_workcart);
             public bool IsDestroying => IsInvoking(DestroyCinematically);
+            private void DestroyCinematically() => DestroyWorkcart(_workcart);
 
-            public void ChillBriefly()
+            private void StartBraking(EngineSpeeds desiredSpeed)
+            {
+                CancelBraking();
+                _targetSpeed = desiredSpeed;
+                InvokeRepeating(BrakeUpdate, 0, 0);
+            }
+            private bool IsBraking => IsInvoking(BrakeUpdate);
+            private void CancelBraking() => CancelInvoke(BrakeUpdate);
+
+            private void BrakeUpdate()
+            {
+                if (IsNearOrBelowSpeed(_targetSpeed))
+                {
+                    SetThrottle(_targetSpeed);
+                    if (_targetSpeed == EngineSpeeds.Zero)
+                        BeginStop(_stopDuration);
+
+                    CancelBraking();
+                }
+            }
+
+            public void StartChilling()
             {
                 if (!IsChilling)
                 {
-                    _speedBeforeChilling = _workcart.CurThrottleSetting;
+                    if (!IsBraking)
+                        _targetSpeed = _workcart.CurThrottleSetting;
+                    else if (_targetSpeed == EngineSpeeds.Zero)
+                        _targetSpeed = _pluginConfig.GetDepartureSpeed();
+
                     SetThrottle(EngineSpeeds.Zero);
                 }
 
-                CancelInvoke(StopChilling);
-                Invoke(StopChilling, ChillDuration);
+                CancelBraking();
+                CancelChilling();
+                Invoke(EndChilling, ChillDuration);
             }
 
-            public void StopChilling() => SetThrottle(_speedBeforeChilling);
-            public bool IsChilling => IsInvoking(StopChilling);
+            private bool IsChilling => IsInvoking(EndChilling);
+            private void EndChilling() => SetThrottle(_targetSpeed);
+            private void CancelChilling() => CancelInvoke(EndChilling);
 
-            public EngineSpeeds DesiredThrottle => IsChilling
-                ? _speedBeforeChilling
+            public EngineSpeeds DesiredThrottle => IsChilling || IsBraking
+                ? _targetSpeed
                 : _workcart.CurThrottleSetting == EngineSpeeds.Zero
                 ? _pluginConfig.GetDepartureSpeed()
                 : _workcart.CurThrottleSetting;
+
+            private float GetThrottleFraction(EngineSpeeds throttle)
+            {
+                switch (throttle)
+                {
+                    case EngineSpeeds.Rev_Hi: return -1;
+                    case EngineSpeeds.Rev_Med: return -0.5f;
+                    case EngineSpeeds.Rev_Lo: return -0.2f;
+                    case EngineSpeeds.Fwd_Lo: return 0.2f;
+                    case EngineSpeeds.Fwd_Med: return 0.5f;
+                    case EngineSpeeds.Fwd_Hi: return 1;
+                    default: return 0;
+                }
+            }
+
+            private bool IsNearOrBelowSpeed(EngineSpeeds desiredThrottle, float leeway = 0.1f)
+            {
+                var currentSpeed = Vector3.Dot(_workcart.transform.forward, _workcart.GetLocalVelocity());
+                var desiredSpeed = _workcart.maxSpeed * GetThrottleFraction(desiredThrottle);
+
+                return desiredSpeed < 0 || (desiredSpeed == 0 && currentSpeed < 0)
+                    ? currentSpeed + leeway >= desiredSpeed
+                    : currentSpeed - leeway <= desiredSpeed;
+            }
 
             private void AddConductor()
             {
@@ -1916,8 +1995,8 @@ namespace Oxide.Plugins
 
             public static StoredTunnelData GetDefaultData()
             {
-                var stationStopDuration = 12.5f;
-                var quickStopDuration = 7.5f;
+                var stationStopDuration = 15f;
+                var quickStopDuration = 5f;
                 var triggerHeight = 0.29f;
 
                 return new StoredTunnelData()
@@ -1927,209 +2006,135 @@ namespace Oxide.Plugins
                         new WorkcartTriggerInfo
                         {
                             Id = 1,
-                            Position = new Vector3(4.5f, triggerHeight, 74),
+                            Position = new Vector3(4.5f, triggerHeight, 53),
                             TunnelType = TunnelType.TrainStation.ToString(),
-                            Speed = WorkcartSpeed.Lo.ToString(),
-                            Direction = WorkcartDirection.Invert.ToString(),
-                        },
-                        new WorkcartTriggerInfo
-                        {
-                            Id = 2,
-                            Position = new Vector3(4.5f, triggerHeight, 46),
-                            TunnelType = TunnelType.TrainStation.ToString(),
-                            Speed = WorkcartSpeed.Lo.ToString(),
-                            Direction = WorkcartDirection.Fwd.ToString(),
-                        },
-                        new WorkcartTriggerInfo
-                        {
-                            Id = 3,
-                            Position = new Vector3(4.5f, triggerHeight, 16),
-                            TunnelType = TunnelType.TrainStation.ToString(),
+                            Direction = WorkcartDirection.Brake.ToString(),
                             Speed = WorkcartSpeed.Zero.ToString(),
                             StopDuration = stationStopDuration,
                         },
                         new WorkcartTriggerInfo
                         {
-                            Id = 4,
-                            Position = new Vector3(4.5f, triggerHeight, -74),
+                            Id = 2,
+                            Position = new Vector3(4.5f, triggerHeight, -2),
                             TunnelType = TunnelType.TrainStation.ToString(),
                             Speed = WorkcartSpeed.Hi.ToString(),
                         },
                         new WorkcartTriggerInfo
                         {
-                            Id = 5,
+                            Id = 3,
                             Position = new Vector3(0, triggerHeight, -84),
                             TunnelType = TunnelType.TrainStation.ToString(),
                             StartsAutomation = true,
-                            Speed = WorkcartSpeed.Hi.ToString(),
                             Direction = WorkcartDirection.Fwd.ToString(),
-                            TrackSelection = WorkcartTrackSelection.Left.ToString(),
-                        },
-
-                        new WorkcartTriggerInfo
-                        {
-                            Id = 6,
-                            Position = new Vector3(-4.5f, triggerHeight, -34),
-                            TunnelType = TunnelType.TrainStation.ToString(),
-                            Speed = WorkcartSpeed.Lo.ToString(),
-                            Direction = WorkcartDirection.Invert.ToString(),
-                        },
-                        new WorkcartTriggerInfo
-                        {
-                            Id = 7,
-                            Position = new Vector3(-4.5f, triggerHeight, -4),
-                            TunnelType = TunnelType.TrainStation.ToString(),
-                            Speed = WorkcartSpeed.Lo.ToString(),
-                            Direction = WorkcartDirection.Fwd.ToString(),
-                        },
-                        new WorkcartTriggerInfo
-                        {
-                            Id = 8,
-                            Position = new Vector3(-4.5f, triggerHeight, 26),
-                            TunnelType = TunnelType.TrainStation.ToString(),
-                            Speed = WorkcartSpeed.Zero.ToString(),
-                            StopDuration = stationStopDuration
-                        },
-                        new WorkcartTriggerInfo
-                        {
-                            Id = 9,
-                            Position = new Vector3(-4.5f, triggerHeight, 74),
-                            TunnelType = TunnelType.TrainStation.ToString(),
                             Speed = WorkcartSpeed.Hi.ToString(),
-                        },
-                        new WorkcartTriggerInfo
-                        {
-                            Id = 10,
-                            Position = new Vector3(0, triggerHeight, 84),
-                            TunnelType = TunnelType.TrainStation.ToString(),
-                            StartsAutomation = true,
-                            Speed = WorkcartSpeed.Hi.ToString(),
-                            Direction = WorkcartDirection.Fwd.ToString(),
                             TrackSelection = WorkcartTrackSelection.Left.ToString(),
                         },
 
                         new WorkcartTriggerInfo
                         {
                             Id = 11,
-                            Position = new Vector3(-4.45f, triggerHeight, -72),
-                            TunnelType = TunnelType.BarricadeTunnel.ToString(),
-                            Speed = WorkcartSpeed.Lo.ToString(),
-                            Direction = WorkcartDirection.Invert.ToString(),
+                            Position = new Vector3(-4.5f, triggerHeight, -13),
+                            TunnelType = TunnelType.TrainStation.ToString(),
+                            Direction = WorkcartDirection.Brake.ToString(),
+                            Speed = WorkcartSpeed.Zero.ToString(),
+                            StopDuration = stationStopDuration,
                         },
                         new WorkcartTriggerInfo
                         {
                             Id = 12,
-                            Position = new Vector3(-4.5f, triggerHeight, -52),
-                            TunnelType = TunnelType.BarricadeTunnel.ToString(),
-                            Speed = WorkcartSpeed.Lo.ToString(),
-                            Direction = WorkcartDirection.Fwd.ToString(),
+                            Position = new Vector3(-4.5f, triggerHeight, 44),
+                            TunnelType = TunnelType.TrainStation.ToString(),
+                            Speed = WorkcartSpeed.Hi.ToString(),
                         },
                         new WorkcartTriggerInfo
                         {
                             Id = 13,
-                            Position = new Vector3(-4.5f, triggerHeight, 5),
+                            Position = new Vector3(0, triggerHeight, 84),
+                            TunnelType = TunnelType.TrainStation.ToString(),
+                            StartsAutomation = true,
+                            Direction = WorkcartDirection.Fwd.ToString(),
+                            Speed = WorkcartSpeed.Hi.ToString(),
+                            TrackSelection = WorkcartTrackSelection.Left.ToString(),
+                        },
+
+                        new WorkcartTriggerInfo
+                        {
+                            Id = 21,
+                            Position = new Vector3(-4.45f, triggerHeight, -35),
                             TunnelType = TunnelType.BarricadeTunnel.ToString(),
-                            Speed = WorkcartSpeed.Zero.ToString(),
-                            StopDuration = quickStopDuration,
+                            Direction = WorkcartDirection.Brake.ToString(),
+                            Speed = WorkcartSpeed.Med.ToString(),
                         },
                         new WorkcartTriggerInfo
                         {
-                            Id = 14,
-                            Position = new Vector3(-4.5f, triggerHeight, 52),
+                            Id = 22,
+                            Position = new Vector3(-4.5f, triggerHeight, -1f),
+                            TunnelType = TunnelType.BarricadeTunnel.ToString(),
+                            Direction = WorkcartDirection.Brake.ToString(),
+                            Speed = WorkcartSpeed.Zero.ToString(),
+                            StopDuration = 5
+                        },
+                        new WorkcartTriggerInfo
+                        {
+                            Id = 23,
+                            Position = new Vector3(-4.5f, triggerHeight, 15),
                             TunnelType = TunnelType.BarricadeTunnel.ToString(),
                             Speed = WorkcartSpeed.Hi.ToString(),
                         },
                         new WorkcartTriggerInfo
                         {
-                            Id = 15,
-                            Position = new Vector3(4.45f, triggerHeight, 72),
+                            Id = 31,
+                            Position = new Vector3(4.45f, triggerHeight, 35),
                             TunnelType = TunnelType.BarricadeTunnel.ToString(),
-                            Speed = WorkcartSpeed.Lo.ToString(),
-                            Direction = WorkcartDirection.Invert.ToString(),
+                            Direction = WorkcartDirection.Brake.ToString(),
+                            Speed = WorkcartSpeed.Med.ToString(),
                         },
                         new WorkcartTriggerInfo
                         {
-                            Id = 16,
-                            Position = new Vector3(4.5f, triggerHeight, 52),
+                            Id = 32,
+                            Position = new Vector3(4.5f, triggerHeight, 9f),
                             TunnelType = TunnelType.BarricadeTunnel.ToString(),
-                            Speed = WorkcartSpeed.Lo.ToString(),
-                            Direction = WorkcartDirection.Fwd.ToString(),
-                        },
-                        new WorkcartTriggerInfo
-                        {
-                            Id = 17,
-                            Position = new Vector3(4.5f, triggerHeight, 3f),
-                            TunnelType = TunnelType.BarricadeTunnel.ToString(),
+                            Direction = WorkcartDirection.Brake.ToString(),
                             Speed = WorkcartSpeed.Zero.ToString(),
-                            StopDuration = quickStopDuration,
+                            StopDuration = 5
                         },
                         new WorkcartTriggerInfo
                         {
-                            Id = 18,
-                            Position = new Vector3(4.5f, triggerHeight, -52),
+                            Id = 33,
+                            Position = new Vector3(4.5f, triggerHeight, -7),
                             TunnelType = TunnelType.BarricadeTunnel.ToString(),
                             Speed = WorkcartSpeed.Hi.ToString(),
                         },
 
                         new WorkcartTriggerInfo
                         {
-                            Id = 19,
-                            Position = new Vector3(3, triggerHeight, 59),
+                            Id = 41,
+                            Position = new Vector3(3, triggerHeight, 35f),
                             TunnelType = TunnelType.LootTunnel.ToString(),
-                            Speed = WorkcartSpeed.Lo.ToString(),
-                            Direction = WorkcartDirection.Invert.ToString(),
-                        },
-                        new WorkcartTriggerInfo
-                        {
-                            Id = 20,
-                            Position = new Vector3(3, triggerHeight, 29),
-                            TunnelType = TunnelType.LootTunnel.ToString(),
-                            Speed = WorkcartSpeed.Lo.ToString(),
-                            Direction = WorkcartDirection.Fwd.ToString(),
-                        },
-                        new WorkcartTriggerInfo
-                        {
-                            Id = 21,
-                            Position = new Vector3(3, triggerHeight, -1),
-                            TunnelType = TunnelType.LootTunnel.ToString(),
+                            Direction = WorkcartDirection.Brake.ToString(),
                             Speed = WorkcartSpeed.Zero.ToString(),
                             StopDuration = quickStopDuration,
                         },
                         new WorkcartTriggerInfo
                         {
-                            Id = 22,
-                            Position = new Vector3(3, triggerHeight, -31),
+                            Id = 42,
+                            Position = new Vector3(3, triggerHeight, -15),
                             TunnelType = TunnelType.LootTunnel.ToString(),
                             Speed = WorkcartSpeed.Hi.ToString(),
                         },
                         new WorkcartTriggerInfo
                         {
-                            Id = 23,
-                            Position = new Vector3(-3, triggerHeight, -61),
+                            Id = 51,
+                            Position = new Vector3(-3, triggerHeight, -35f),
                             TunnelType = TunnelType.LootTunnel.ToString(),
-                            Speed = WorkcartSpeed.Lo.ToString(),
-                            Direction = WorkcartDirection.Invert.ToString(),
-                        },
-                        new WorkcartTriggerInfo
-                        {
-                            Id = 24,
-                            Position = new Vector3(-3, triggerHeight, -31),
-                            TunnelType = TunnelType.LootTunnel.ToString(),
-                            Speed = WorkcartSpeed.Lo.ToString(),
-                            Direction = WorkcartDirection.Fwd.ToString(),
-                        },
-                        new WorkcartTriggerInfo
-                        {
-                            Id = 25,
-                            Position = new Vector3(-3, triggerHeight, 1),
-                            TunnelType = TunnelType.LootTunnel.ToString(),
+                            Direction = WorkcartDirection.Brake.ToString(),
                             Speed = WorkcartSpeed.Zero.ToString(),
                             StopDuration = quickStopDuration,
                         },
                         new WorkcartTriggerInfo
                         {
-                            Id = 26,
-                            Position = new Vector3(-3, triggerHeight, 29),
+                            Id = 52,
+                            Position = new Vector3(-3, triggerHeight, 15),
                             TunnelType = TunnelType.LootTunnel.ToString(),
                             Speed = WorkcartSpeed.Hi.ToString(),
                         },
