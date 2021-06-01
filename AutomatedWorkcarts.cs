@@ -14,7 +14,7 @@ using static TrainTrackSpline;
 
 namespace Oxide.Plugins
 {
-    [Info("Automated Workcarts", "WhiteThunder", "0.12.2")]
+    [Info("Automated Workcarts", "WhiteThunder", "0.13.1")]
     [Description("Spawns conductor NPCs that drive workcarts between stations.")]
     internal class AutomatedWorkcarts : CovalencePlugin
     {
@@ -1904,20 +1904,11 @@ namespace Oxide.Plugins
             {
                 Conductor.inventory.Strip();
 
-                var container = Conductor.inventory.containerWear;
-
-                // TODO: Kits
-                var items = new string[] { "jumpsuit.suit", "sunglasses03chrome", "hat.boonie" };
-
-                foreach (var itemShortName in items)
+                foreach (var itemInfo in _pluginConfig.ConductorOutfit)
                 {
-                    var item = ItemManager.CreateByName(itemShortName);
-                    if (item == null)
-                        // TODO: Error logging
-                        continue;
-
-                    if (!item.MoveToContainer(container))
-                        item.Remove();
+                    var itemDefinition = itemInfo.GetItemDefinition();
+                    if (itemDefinition != null)
+                        Conductor.inventory.containerWear.AddItem(itemDefinition, 1, itemInfo.SkinId);
                 }
 
                 Conductor.SendNetworkUpdate();
@@ -1983,6 +1974,7 @@ namespace Oxide.Plugins
                 return this;
             }
 
+            [JsonIgnore]
             public int NumConductors => AutomatedWorkcardIds.Count;
 
             public bool HasWorkcart(TrainEngine workcart)
@@ -2196,11 +2188,35 @@ namespace Oxide.Plugins
 
         #region Configuration
 
+        private class ItemInfo
+        {
+            [JsonProperty("ShortName")]
+            public string ShortName;
+
+            [JsonProperty("Skin")]
+            public ulong SkinId;
+
+            private bool _isValidated = false;
+            private ItemDefinition _itemDefinition;
+            public ItemDefinition GetItemDefinition()
+            {
+                if (!_isValidated)
+                {
+                    var itemDefinition = ItemManager.FindItemDefinition(ShortName);
+                    if (itemDefinition != null)
+                        _itemDefinition = itemDefinition;
+                    else
+                        _pluginInstance.LogError($"Invalid item short name in config: '{ShortName}'");
+
+                    _isValidated = true;
+                }
+
+                return _itemDefinition;
+            }
+        }
+
         private class Configuration : SerializableConfiguration
         {
-            [JsonProperty("MaxConductors")]
-            public int MaxConductors = -1;
-
             [JsonProperty("DefaultSpeed")]
             public string DefaultSpeed = EngineSpeeds.Fwd_Hi.ToString();
 
@@ -2219,6 +2235,17 @@ namespace Oxide.Plugins
                 [TunnelType.TrainStation.ToString()] = false,
                 [TunnelType.BarricadeTunnel.ToString()] = false,
                 [TunnelType.LootTunnel.ToString()] = false,
+            };
+
+            [JsonProperty("MaxConductors")]
+            public int MaxConductors = -1;
+
+            [JsonProperty("ConductorOutfit")]
+            public ItemInfo[] ConductorOutfit = new ItemInfo[]
+            {
+                new ItemInfo { ShortName = "jumpsuit.suit" },
+                new ItemInfo { ShortName = "sunglasses03chrome" },
+                new ItemInfo { ShortName = "hat.boonie" },
             };
 
             public bool IsTunnelTypeEnabled(TunnelType tunnelType)

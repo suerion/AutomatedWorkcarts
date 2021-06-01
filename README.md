@@ -92,7 +92,6 @@ The following command aliases are also available:
 
 ```json
 {
-  "MaxConductors": -1,
   "DefaultSpeed": "Fwd_Hi",
   "DefaultTrackSelection": "Left",
   "DestroyOffendingWorkcarts": false,
@@ -101,11 +100,25 @@ The following command aliases are also available:
     "TrainStation": false,
     "BarricadeTunnel": false,
     "LootTunnel": false
-  }
+  },
+  "MaxConductors": -1,
+  "ConductorOutfit": [
+    {
+      "ShortName": "jumpsuit.suit",
+      "Skin": 0
+    },
+    {
+      "ShortName": "sunglasses03chrome",
+      "Skin": 0
+    },
+    {
+      "ShortName": "hat.boonie",
+      "Skin": 0
+    }
+  ]
 }
 ```
 
-- `MaxConductors` -- The maximum number of conductors allowed on the map at once. Set to `-1` for no limit.
 - `DefaultSpeed` -- Default speed to use when a workcart starts being automated.
   - Allowed values: `"Rev_Hi"` | `"Rev_Med"` | `"Rev_Lo"` | `"Zero"` | `"Fwd_Lo"` | `"Fwd_Med"` | `"Fwd_Hi"`.
   - This value is ignored if the workcart is on a trigger that specifies speed.
@@ -119,6 +132,8 @@ The following command aliases are also available:
   - `TrainStation` (`true` or `false`) -- Self-explanatory.
   - `BarricadeTunnel` (`true` or `false`) -- This affects straight tunnels that spawn NPCs, loot, as well as barricades on the tracks.
   - `LootTunnel` (`true` or `false`) -- This affects straight tunnels that spawn NPCs and loot.
+- `MaxConductors` -- The maximum number of conductors allowed on the map at once. Set to `-1` for no limit.
+- `ConductorOutfit` -- Item to use for the outfit of each conductor.
 
 ## FAQ
 
