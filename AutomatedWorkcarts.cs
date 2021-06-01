@@ -14,7 +14,7 @@ using static TrainTrackSpline;
 
 namespace Oxide.Plugins
 {
-    [Info("Automated Workcarts", "WhiteThunder", "0.14.0")]
+    [Info("Automated Workcarts", "WhiteThunder", "0.14.1")]
     [Description("Spawns conductor NPCs that drive workcarts between stations.")]
     internal class AutomatedWorkcarts : CovalencePlugin
     {
@@ -203,6 +203,7 @@ namespace Oxide.Plugins
                 else if (Math.Abs(EngineSpeedToNumber(forwardWorkcart.CurThrottleSetting)) < Math.Abs(EngineSpeedToNumber(backwardWorkcart.CurThrottleSetting)))
                 {
                     // Destroy the forward workcart if it's not automated and going too slow.
+                    _pluginInstance.LogWarning($"Destroying non-automated workcart due to insufficient speed.");
                     ScheduleDestroyWorkcart(forwardWorkcart);
                     return;
                 }
@@ -233,7 +234,10 @@ namespace Oxide.Plugins
                 if (controller == null)
                 {
                     if (_pluginConfig.BulldozeOffendingWorkcarts)
+                    {
+                        _pluginInstance.LogWarning($"Destroying non-automated workcart due to head-on collision with an automated workcart.");
                         ScheduleDestroyWorkcart(workcart);
+                    }
                     else
                         otherController.StartChilling();
 
@@ -243,7 +247,10 @@ namespace Oxide.Plugins
                 if (otherController == null)
                 {
                     if (_pluginConfig.BulldozeOffendingWorkcarts)
+                    {
+                        _pluginInstance.LogWarning($"Destroying non-automated workcart due to head-on collision with an automated workcart.");
                         ScheduleDestroyWorkcart(otherWorkcart);
+                    }
                     else
                         controller.StartChilling();
 
@@ -255,6 +262,7 @@ namespace Oxide.Plugins
                     return;
 
                 // If both are automated, destroy the slower one (if same speed, will be random).
+                _pluginInstance.LogWarning($"Destroying automated workcart due to head-on collision with another.");
                 if (GetFasterWorkcart(workcart, otherWorkcart) == workcart)
                     otherController.ScheduleDestruction();
                 else
@@ -1746,6 +1754,9 @@ namespace Oxide.Plugins
             {
                 foreach (var workcart in _automatedWorkcarts)
                 {
+                    if (workcart == null)
+                        continue;
+
                     var controller = workcart.GetComponent<TrainController>();
                     if (controller == null)
                         continue;
