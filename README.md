@@ -92,6 +92,7 @@ The following command aliases are also available:
 
 ```json
 {
+  "MaxConductors": -1,
   "DefaultSpeed": "Fwd_Hi",
   "DefaultTrackSelection": "Left",
   "DestroyOffendingWorkcarts": false,
@@ -104,6 +105,7 @@ The following command aliases are also available:
 }
 ```
 
+- `MaxConductors` -- The maximum number of conductors allowed on the map at once. Set to `-1` for no limit.
 - `DefaultSpeed` -- Default speed to use when a workcart starts being automated.
   - Allowed values: `"Rev_Hi"` | `"Rev_Med"` | `"Rev_Lo"` | `"Zero"` | `"Fwd_Lo"` | `"Fwd_Med"` | `"Fwd_Hi"`.
   - This value is ignored if the workcart is on a trigger that specifies speed.
@@ -168,6 +170,7 @@ The best practice is to have separate, independent tracks for player vs automate
   "Error.UnsupportedTunnel": "Error: Not a supported train tunnel.",
   "Error.TunnelTypeDisabled": "Error: Tunnel type <color=#fd4>{0}</color> is currently disabled.",
   "Error.MapTriggersDisabled": "Error: Map triggers are disabled.",
+  "Error.MaxConductors": "Error: There are already {0} out of {1} conductors.",
   "Toggle.Success.On": "That workcart is now automated.",
   "Toggle.Success.Off": "That workcart is no longer automated.",
   "AddTrigger.Syntax": "Syntax: <color=#fd4>{0} <option1> <option2> ...</color>\n{1}",
@@ -177,6 +180,8 @@ The best practice is to have separate, independent tracks for player vs automate
   "MoveTrigger.Success": "Successfully moved trigger #{0}{1}",
   "RemoveTrigger.Syntax": "Syntax: <color=#fd4>{0} <id></color>",
   "RemoveTrigger.Success": "Trigger #{0}{1} successfully removed.",
+  "Info.ConductorCount.Limited": "Conductors: {0}/{1}.",
+  "Info.ConductorCount.Unlimited": "Conductors: {0}.",
   "Help.SpeedOptions": "Speeds: {0}",
   "Help.DirectionOptions": "Directions: {0}",
   "Help.TrackSelectionOptions": "Track selection: {0}",

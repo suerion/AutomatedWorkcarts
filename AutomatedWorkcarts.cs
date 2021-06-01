@@ -14,7 +14,7 @@ using static TrainTrackSpline;
 
 namespace Oxide.Plugins
 {
-    [Info("Automated Workcarts", "WhiteThunder", "0.11.2")]
+    [Info("Automated Workcarts", "WhiteThunder", "0.12.0")]
     [Description("Spawns conductor NPCs that drive workcarts between stations.")]
     internal class AutomatedWorkcarts : CovalencePlugin
     {
@@ -68,14 +68,19 @@ namespace Oxide.Plugins
         private void OnServerInitialized()
         {
             _mapData = StoredMapData.Load();
-
             _triggerManager.CreateAll();
+
+            var foundWorkcarts = new List<uint>();
 
             foreach (var entity in BaseNetworkable.serverEntities)
             {
                 var workcart = entity as TrainEngine;
-                if (workcart != null && _pluginData.AutomatedWorkcardIds.Contains(workcart.net.ID))
+                if (workcart == null)
+                    continue;
+
+                if (_pluginData.HasWorkcart(workcart))
                 {
+                    foundWorkcarts.Add(workcart.net.ID);
                     timer.Once(UnityEngine.Random.Range(0, 1f), () =>
                     {
                         if (workcart != null)
@@ -83,6 +88,8 @@ namespace Oxide.Plugins
                     });
                 }
             }
+
+            _pluginData.ReplaceWorkcartIds(foundWorkcarts);
         }
 
         private void OnServerSave()
@@ -147,7 +154,7 @@ namespace Oxide.Plugins
             var trainController = workcart.GetComponent<TrainController>();
             if (trainController == null)
             {
-                if (trigger.TriggerInfo.AddConductor)
+                if (trigger.TriggerInfo.AddConductor && CanHaveMoreConductors())
                 {
                     TryAddTrainController(workcart, trigger.TriggerInfo);
                     _pluginData.AddWorkcart(workcart);
@@ -279,10 +286,16 @@ namespace Oxide.Plugins
             var trainController = workcart.GetComponent<TrainController>();
             if (trainController == null)
             {
+                if (!CanHaveMoreConductors())
+                {
+                    ReplyToPlayer(player, Lang.ErrorMaxConductors, _pluginData.NumConductors, _pluginConfig.MaxConductors);
+                    return;
+                }
+
                 if (TryAddTrainController(workcart))
                 {
                     _pluginData.AddWorkcart(workcart);
-                    ReplyToPlayer(player, Lang.ToggleOnSuccess);
+                    player.Reply(GetMessage(player, Lang.ToggleOnSuccess, _pluginData.NumConductors) + " " + GetConductorCountMessage(player));
                 }
                 else
                     ReplyToPlayer(player, Lang.ErrorAutomateBlocked);
@@ -290,8 +303,8 @@ namespace Oxide.Plugins
             else
             {
                 UnityEngine.Object.Destroy(trainController);
-                ReplyToPlayer(player, Lang.ToggleOffSuccess);
                 _pluginData.RemoveWorkcart(workcart);
+                player.Reply(GetMessage(player, Lang.ToggleOffSuccess) + " " + GetConductorCountMessage(player));
             }
         }
 
@@ -684,6 +697,10 @@ namespace Oxide.Plugins
 
             return false;
         }
+
+        private bool CanHaveMoreConductors() =>
+            _pluginConfig.MaxConductors < 0
+            || _pluginData.NumConductors < _pluginConfig.MaxConductors;
 
         private static bool TryAddTrainController(TrainEngine workcart, WorkcartTriggerInfo triggerInfo = null)
         {
@@ -1943,6 +1960,13 @@ namespace Oxide.Plugins
                 return this;
             }
 
+            public int NumConductors => AutomatedWorkcardIds.Count;
+
+            public bool HasWorkcart(TrainEngine workcart)
+            {
+                return AutomatedWorkcardIds.Contains(workcart.net.ID);
+            }
+
             public void AddWorkcart(TrainEngine workcart)
             {
                 AutomatedWorkcardIds.Add(workcart.net.ID);
@@ -1951,7 +1975,13 @@ namespace Oxide.Plugins
 
             public void RemoveWorkcart(TrainEngine workcart)
             {
-                AutomatedWorkcardIds.Remove(workcart.net.ID);
+                if (AutomatedWorkcardIds.Remove(workcart.net.ID))
+                    Save();
+            }
+
+            public void ReplaceWorkcartIds(List<uint> workcardIds)
+            {
+                AutomatedWorkcardIds = new HashSet<uint>(workcardIds);
                 Save();
             }
         }
@@ -2145,6 +2175,9 @@ namespace Oxide.Plugins
 
         private class Configuration : SerializableConfiguration
         {
+            [JsonProperty("MaxConductors")]
+            public int MaxConductors = -1;
+
             [JsonProperty("DefaultSpeed")]
             public string DefaultSpeed = EngineSpeeds.Fwd_Hi.ToString();
 
@@ -2357,6 +2390,11 @@ namespace Oxide.Plugins
         private string GetTriggerPrefix(BasePlayer player, WorkcartTriggerInfo triggerInfo) =>
             GetTriggerPrefix(player.IPlayer, triggerInfo.TriggerType);
 
+        private string GetConductorCountMessage(IPlayer player) =>
+             _pluginConfig.MaxConductors >= 0
+             ? GetMessage(player, Lang.InfoConductorCountLimited, _pluginData.NumConductors, _pluginConfig.MaxConductors)
+             : GetMessage(player, Lang.InfoConductorCountUnlimited, _pluginData.NumConductors);
+
         private class Lang
         {
             public const string ErrorNoPermission = "Error.NoPermission";
@@ -2368,6 +2406,7 @@ namespace Oxide.Plugins
             public const string ErrorUnsupportedTunnel = "Error.UnsupportedTunnel";
             public const string ErrorTunnelTypeDisabled = "Error.TunnelTypeDisabled";
             public const string ErrorMapTriggersDisabled = "Error.MapTriggersDisabled";
+            public const string ErrorMaxConductors = "Error.MaxConductors";
 
             public const string ToggleOnSuccess = "Toggle.Success.On";
             public const string ToggleOffSuccess = "Toggle.Success.Off";
@@ -2379,6 +2418,9 @@ namespace Oxide.Plugins
             public const string UpdateTriggerSuccess = "UpdateTrigger.Success";
             public const string RemoveTriggerSyntax = "RemoveTrigger.Syntax";
             public const string RemoveTriggerSuccess = "RemoveTrigger.Success";
+
+            public const string InfoConductorCountLimited = "Info.ConductorCount.Limited";
+            public const string InfoConductorCountUnlimited = "Info.ConductorCount.Unlimited";
 
             public const string HelpSpeedOptions = "Help.SpeedOptions";
             public const string HelpDirectionOptions = "Help.DirectionOptions";
@@ -2415,6 +2457,7 @@ namespace Oxide.Plugins
                 [Lang.ErrorUnsupportedTunnel] = "Error: Not a supported train tunnel.",
                 [Lang.ErrorTunnelTypeDisabled] = "Error: Tunnel type <color=#fd4>{0}</color> is currently disabled.",
                 [Lang.ErrorMapTriggersDisabled] = "Error: Map triggers are disabled.",
+                [Lang.ErrorMaxConductors] = "Error: There are already {0} out of {1} conductors.",
 
                 [Lang.ToggleOnSuccess] = "That workcart is now automated.",
                 [Lang.ToggleOffSuccess] = "That workcart is no longer automated.",
@@ -2425,6 +2468,9 @@ namespace Oxide.Plugins
                 [Lang.MoveTriggerSuccess] = "Successfully moved trigger #{0}{1}",
                 [Lang.RemoveTriggerSyntax] = "Syntax: <color=#fd4>{0} <id></color>",
                 [Lang.RemoveTriggerSuccess] = "Trigger #{0}{1} successfully removed.",
+
+                [Lang.InfoConductorCountLimited] = "Conductors: {0}/{1}.",
+                [Lang.InfoConductorCountUnlimited] = "Conductors: {0}.",
 
                 [Lang.HelpSpeedOptions] = "Speeds: {0}",
                 [Lang.HelpDirectionOptions] = "Directions: {0}",
