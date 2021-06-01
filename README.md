@@ -42,11 +42,15 @@ To see the triggers visually, grant the `automatedworkcarts.managetriggers` perm
 ## Permission
 
 - `automatedworkcarts.toggle` -- Allows usage of the `aw.toggle` command.
+- `automatedworkcarts.viewmarkers` -- Allows usage of the `aw.showmarkers` command.
 - `automatedworkcarts.managetriggers` -- Allows adding and removing triggers.
 
 ## Commands
 
 - `aw.toggle` -- Toggles automation for the workcart you are standing on or looking at.
+- `aw.showmarkers <seconds>` -- Temporarily creates map markers for all currently automated workcarts (using delivery drone icons).
+  - The duration defaults to 60 seconds unless otherwise specified.
+  - Only the players that runs this command can see the markers.
 - `aw.addtrigger <option1> <option2> ...` -- Adds a trigger to the track position where the player is aiming, with the specified options. Automated workcarts that pass through the trigger will be affected by the trigger's options.
   - Speed options: `Hi` | `Med` | `Lo` | `Zero`.
   - Direction options: `Fwd` | `Rev` | `Invert`.
@@ -178,26 +182,28 @@ The best practice is to have separate, independent tracks for player vs automate
 {
   "Error.NoPermission": "You don't have permission to do that.",
   "Error.NoTriggers": "There are no workcart triggers on this map.",
-  "Error.TriggerNotFound": "Error: Trigger id #{0}{1} not found.",
+  "Error.TriggerNotFound": "Error: Trigger id #<color=#fd4>{0}{1}</color> not found.",
   "Error.ErrorNoTrackFound": "Error: No track found nearby.",
   "Error.NoWorkcartFound": "Error: No workcart found.",
   "Error.AutomateBlocked": "Error: Another plugin blocked automating that workcart.",
   "Error.UnsupportedTunnel": "Error: Not a supported train tunnel.",
   "Error.TunnelTypeDisabled": "Error: Tunnel type <color=#fd4>{0}</color> is currently disabled.",
   "Error.MapTriggersDisabled": "Error: Map triggers are disabled.",
-  "Error.MaxConductors": "Error: There are already {0} out of {1} conductors.",
+  "Error.MaxConductors": "Error: There are already <color=#fd4>{0}</color> out of <color=#fd4>{1}</color> conductors.",
   "Error.WorkcartOwned": "Error: That workcart has an owner.",
+  "Error.NoAutomatedWorkcarts": "Error: There are no automated workcarts.",
   "Toggle.Success.On": "That workcart is now automated.",
   "Toggle.Success.Off": "That workcart is no longer automated.",
+  "ShowMarkers.Success": "Showing map markers of all <color=#fd4>{0}</color> automated workcarts for <color=#fd4>{1}</color>. Only you can see them.",
   "AddTrigger.Syntax": "Syntax: <color=#fd4>{0} <option1> <option2> ...</color>\n{1}",
-  "AddTrigger.Success": "Successfully added trigger #{0}{1}.",
+  "AddTrigger.Success": "Successfully added trigger #<color=#fd4>{0}{1}</color>.",
   "UpdateTrigger.Syntax": "Syntax: <color=#fd4>{0} <id> <option1> <option2> ...</color>\n{1}",
-  "UpdateTrigger.Success": "Successfully updated trigger #{0}{1}",
-  "MoveTrigger.Success": "Successfully moved trigger #{0}{1}",
+  "UpdateTrigger.Success": "Successfully updated trigger #<color=#fd4>{0}{1}</color>",
+  "MoveTrigger.Success": "Successfully moved trigger #<color=#fd4>{0}{1}</color>",
   "RemoveTrigger.Syntax": "Syntax: <color=#fd4>{0} <id></color>",
-  "RemoveTrigger.Success": "Trigger #{0}{1} successfully removed.",
-  "Info.ConductorCount.Limited": "Conductors: {0}/{1}.",
-  "Info.ConductorCount.Unlimited": "Conductors: {0}.",
+  "RemoveTrigger.Success": "Trigger #<color=#fd4>{0}{1}</color> successfully removed.",
+  "Info.ConductorCount.Limited": "Total conductors: <color=#fd4>{0}/{1}</color>.",
+  "Info.ConductorCount.Unlimited": "Total conductors: <color=#fd4>{0}</color>.",
   "Help.SpeedOptions": "Speeds: {0}",
   "Help.DirectionOptions": "Directions: {0}",
   "Help.TrackSelectionOptions": "Track selection: {0}",

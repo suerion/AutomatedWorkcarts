@@ -14,7 +14,7 @@ using static TrainTrackSpline;
 
 namespace Oxide.Plugins
 {
-    [Info("Automated Workcarts", "WhiteThunder", "0.13.1")]
+    [Info("Automated Workcarts", "WhiteThunder", "0.14.0")]
     [Description("Spawns conductor NPCs that drive workcarts between stations.")]
     internal class AutomatedWorkcarts : CovalencePlugin
     {
@@ -31,12 +31,13 @@ namespace Oxide.Plugins
 
         private const string PermissionToggle = "automatedworkcarts.toggle";
         private const string PermissionManageTriggers = "automatedworkcarts.managetriggers";
+        private const string PermissionViewMarkers = "automatedworkcarts.viewmarkers";
 
         private const string PlayerPrefab = "assets/prefabs/player/player.prefab";
-        private const string VendingMachineMapMarkerPrefab = "assets/prefabs/deployable/vendingmachine/vending_mapmarker.prefab";
-        private const string DroneMapMarkerPrefab = "assets/prefabs/misc/marketplace/deliverydronemarker.prefab";
+        private const string DeliveryDroneMarkerPrefab = "assets/prefabs/misc/marketplace/deliverydronemarker.prefab";
 
         private WorkcartTriggerManager _triggerManager = new WorkcartTriggerManager();
+        private AutomatedWorkcartManager _workcartManager = new AutomatedWorkcartManager();
 
         #endregion
 
@@ -50,12 +51,13 @@ namespace Oxide.Plugins
 
             permission.RegisterPermission(PermissionToggle, this);
             permission.RegisterPermission(PermissionManageTriggers, this);
+            permission.RegisterPermission(PermissionViewMarkers, this);
         }
 
         private void Unload()
         {
+            _pluginData.Save();
             _triggerManager.DestroyAll();
-
             TrainController.DestroyAll();
 
             _mapData = null;
@@ -78,7 +80,7 @@ namespace Oxide.Plugins
                 if (workcart == null)
                     continue;
 
-                if (_pluginData.HasWorkcart(workcart))
+                if (_pluginData.HasWorkcartId(workcart.net.ID))
                 {
                     foundWorkcarts.Add(workcart.net.ID);
                     timer.Once(UnityEngine.Random.Range(0, 1f), () =>
@@ -107,7 +109,7 @@ namespace Oxide.Plugins
             if (workcart == null || workcart.net == null)
                 return;
 
-            _pluginData.RemoveWorkcart(workcart);
+            _workcartManager.Unregister(workcart);
         }
 
         private bool? OnEntityTakeDamage(TrainEngine workcart)
@@ -159,7 +161,7 @@ namespace Oxide.Plugins
                     && CanHaveMoreConductors())
                 {
                     TryAddTrainController(workcart, trigger.TriggerInfo);
-                    _pluginData.AddWorkcart(workcart);
+                    _pluginData.AddWorkcartId(workcart.net.ID);
                 }
 
                 return;
@@ -264,17 +266,34 @@ namespace Oxide.Plugins
 
         #region Commands
 
+        [Command("aw.showmarkers")]
+        private void CommandShowMarkers(IPlayer player, string cmd, string[] args)
+        {
+            if (player.IsServer
+                || !VerifyPermission(player, PermissionViewMarkers))
+                return;
+
+            if (_workcartManager.NumWorkcarts == 0)
+            {
+                ReplyToPlayer(player, Lang.ErrorNoAutomatedWorkcarts);
+                return;
+            }
+
+            float duration;
+            if (args.Length == 0 || !float.TryParse(args[0], out duration))
+                duration = 60;
+
+            var basePlayer = player.Object as BasePlayer;
+            _workcartManager.ShowMarkersToPlayer(basePlayer.userID, duration);
+            ReplyToPlayer(player, Lang.ShowMarkersSuccess, _workcartManager.NumWorkcarts, FormatTime(duration));
+        }
+
         [Command("aw.toggle")]
         private void CommandAutomateWorkcart(IPlayer player, string cmd, string[] args)
         {
-            if (player.IsServer)
+            if (player.IsServer
+                || !VerifyPermission(player, PermissionToggle))
                 return;
-
-            if (!player.HasPermission(PermissionToggle))
-            {
-                ReplyToPlayer(player, Lang.ErrorNoPermission);
-                return;
-            }
 
             var basePlayer = player.Object as BasePlayer;
 
@@ -296,14 +315,14 @@ namespace Oxide.Plugins
 
                 if (!CanHaveMoreConductors())
                 {
-                    ReplyToPlayer(player, Lang.ErrorMaxConductors, _pluginData.NumConductors, _pluginConfig.MaxConductors);
+                    ReplyToPlayer(player, Lang.ErrorMaxConductors, _workcartManager.NumWorkcarts, _pluginConfig.MaxConductors);
                     return;
                 }
 
                 if (TryAddTrainController(workcart))
                 {
-                    _pluginData.AddWorkcart(workcart);
-                    player.Reply(GetMessage(player, Lang.ToggleOnSuccess, _pluginData.NumConductors) + " " + GetConductorCountMessage(player));
+                    _pluginData.AddWorkcartId(workcart.net.ID);
+                    player.Reply(GetMessage(player, Lang.ToggleOnSuccess, _workcartManager.NumWorkcarts) + " " + GetConductorCountMessage(player));
                 }
                 else
                     ReplyToPlayer(player, Lang.ErrorAutomateBlocked);
@@ -311,7 +330,7 @@ namespace Oxide.Plugins
             else
             {
                 UnityEngine.Object.Destroy(trainController);
-                _pluginData.RemoveWorkcart(workcart);
+                _workcartManager.Unregister(workcart);
                 player.Reply(GetMessage(player, Lang.ToggleOffSuccess) + " " + GetConductorCountMessage(player));
             }
         }
@@ -708,7 +727,7 @@ namespace Oxide.Plugins
 
         private static bool CanHaveMoreConductors() =>
             _pluginConfig.MaxConductors < 0
-            || _pluginData.NumConductors < _pluginConfig.MaxConductors;
+            || _pluginInstance._workcartManager.NumWorkcarts < _pluginConfig.MaxConductors;
 
         private static bool IsWorkcartOwned(TrainEngine workcart) => workcart.OwnerID != 0;
 
@@ -722,6 +741,7 @@ namespace Oxide.Plugins
                 trainController.StartImmediately(triggerInfo);
 
             workcart.SetHealth(workcart.MaxHealth());
+            _pluginInstance._workcartManager.Register(workcart);
             Interface.CallHook("OnWorkcartAutomated", workcart);
 
             return true;
@@ -905,6 +925,25 @@ namespace Oxide.Plugins
         private static void ScheduleDestroyWorkcart(TrainEngine workcart)
         {
             workcart.Invoke(() => DestroyWorkcart(workcart), 0);
+        }
+
+        private static string FormatTime(double seconds) =>
+            TimeSpan.FromSeconds(seconds).ToString("g");
+
+        private static void EnableGlobalBroadcastFixed(BaseEntity entity, bool wants)
+        {
+            entity.globalBroadcast = wants;
+
+            if (wants)
+            {
+                entity.UpdateNetworkGroup();
+            }
+            else if (entity.net?.group?.ID == 0)
+            {
+                // Fix vanilla bug that prevents leaving the global network group.
+                var group = entity.net.sv.visibility.GetGroup(entity.transform.position);
+                entity.net.SwitchGroup(group);
+            }
         }
 
         #endregion
@@ -1683,6 +1722,41 @@ namespace Oxide.Plugins
 
         #endregion
 
+        #region Workcart Manager
+
+        private class AutomatedWorkcartManager
+        {
+            private List<TrainEngine> _automatedWorkcarts = new List<TrainEngine>();
+
+            public int NumWorkcarts => _automatedWorkcarts.Count;
+
+            public void Register(TrainEngine workcart)
+            {
+                _automatedWorkcarts.Add(workcart);
+                _pluginData.AddWorkcartId(workcart.net.ID);
+            }
+
+            public void Unregister(TrainEngine workcart)
+            {
+                _automatedWorkcarts.Remove(workcart);
+                _pluginData.RemoveWorkcartId(workcart.net.ID);
+            }
+
+            public void ShowMarkersToPlayer(ulong userId, float duration)
+            {
+                foreach (var workcart in _automatedWorkcarts)
+                {
+                    var controller = workcart.GetComponent<TrainController>();
+                    if (controller == null)
+                        continue;
+
+                    controller.AddMakerForPlayer(userId, duration);
+                }
+            }
+        }
+
+        #endregion
+
         #region Train Controller
 
         private class TrainController : FacepunchBehaviour
@@ -1710,7 +1784,8 @@ namespace Oxide.Plugins
             private EngineSpeeds _targetVelocity;
             private EngineSpeeds _departureVelocity;
             private float _stopDuration;
-            private VendingMachineMapMarker _mapMarker;
+
+            private Dictionary<ulong, Action> _mapMarkerCleanupFunctions = new Dictionary<ulong, Action>();
 
             private void Awake()
             {
@@ -1718,7 +1793,6 @@ namespace Oxide.Plugins
                 if (_workcart == null)
                     return;
 
-                // AddMapMarker();
                 AddConductor();
                 EnableUnlimitedFuel();
                 StartTrain(_pluginConfig.GetDefaultSpeed());
@@ -1914,32 +1988,6 @@ namespace Oxide.Plugins
                 Conductor.SendNetworkUpdate();
             }
 
-            private void AddMapMarker()
-            {
-                _mapMarker = GameManager.server.CreateEntity(VendingMachineMapMarkerPrefab) as VendingMachineMapMarker;
-                if (_mapMarker == null)
-                    return;
-
-                _workcart.EnableGlobalBroadcast(true);
-
-                _mapMarker.enableSaving = false;
-                _mapMarker.markerShopName = "Workcart";
-
-                _mapMarker.SetParent(_workcart);
-                _mapMarker.Spawn();
-            }
-
-            private void OnDestroy()
-            {
-                if (_mapMarker != null)
-                    _mapMarker.Kill();
-
-                if (Conductor != null)
-                    Conductor.Kill();
-
-                DisableUnlimitedFuel();
-            }
-
             private void EnableUnlimitedFuel()
             {
                 _workcart.fuelSystem.cachedHasFuel = true;
@@ -1949,6 +1997,65 @@ namespace Oxide.Plugins
             private void DisableUnlimitedFuel()
             {
                 _workcart.fuelSystem.nextFuelCheckTime = 0;
+            }
+
+            private void OnDestroy()
+            {
+                if (Conductor != null)
+                    Conductor.Kill();
+
+                DisableUnlimitedFuel();
+
+                foreach (var cleanupFunction in _mapMarkerCleanupFunctions.Values.ToArray())
+                    cleanupFunction();
+
+                if (_workcart.globalBroadcast)
+                    EnableGlobalBroadcastFixed(_workcart, false);
+            }
+
+            public bool HasMarkers() => !_mapMarkerCleanupFunctions.IsEmpty();
+
+            private MapMarkerDeliveryDrone AddDroneMapMarker(ulong userId)
+            {
+                var mapMarker = GameManager.server.CreateEntity(DeliveryDroneMarkerPrefab) as MapMarkerDeliveryDrone;
+                if (mapMarker == null)
+                    return null;
+
+                mapMarker.EnableSaving(false);
+                mapMarker.OwnerID = userId;
+                mapMarker.SetParent(_workcart);
+                mapMarker.Spawn();
+
+                return mapMarker;
+            }
+
+            public void AddMakerForPlayer(ulong userId, float duration)
+            {
+                Action cleanupFunction;
+                if (_mapMarkerCleanupFunctions.TryGetValue(userId, out cleanupFunction))
+                {
+                    CancelInvoke(cleanupFunction);
+                    Invoke(cleanupFunction, duration);
+                    return;
+                }
+
+                var marker = AddDroneMapMarker(userId);
+                cleanupFunction = () =>
+                {
+                    if (!marker.IsDestroyed)
+                        marker.Kill();
+
+                    _mapMarkerCleanupFunctions.Remove(userId);
+
+                    if (_workcart.globalBroadcast && _mapMarkerCleanupFunctions.IsEmpty())
+                        EnableGlobalBroadcastFixed(_workcart, false);
+                };
+
+                _mapMarkerCleanupFunctions.Add(userId, cleanupFunction);
+                Invoke(cleanupFunction, duration);
+
+                if (!_workcart.globalBroadcast)
+                    _workcart.EnableGlobalBroadcast(true);
             }
         }
 
@@ -1974,24 +2081,19 @@ namespace Oxide.Plugins
                 return this;
             }
 
-            [JsonIgnore]
-            public int NumConductors => AutomatedWorkcardIds.Count;
-
-            public bool HasWorkcart(TrainEngine workcart)
+            public bool HasWorkcartId(uint workcartId)
             {
-                return AutomatedWorkcardIds.Contains(workcart.net.ID);
+                return AutomatedWorkcardIds.Contains(workcartId);
             }
 
-            public void AddWorkcart(TrainEngine workcart)
+            public void AddWorkcartId(uint workcartId)
             {
-                AutomatedWorkcardIds.Add(workcart.net.ID);
-                Save();
+                AutomatedWorkcardIds.Add(workcartId);
             }
 
-            public void RemoveWorkcart(TrainEngine workcart)
+            public void RemoveWorkcartId(uint workcartId)
             {
-                if (AutomatedWorkcardIds.Remove(workcart.net.ID))
-                    Save();
+                AutomatedWorkcardIds.Remove(workcartId);
             }
 
             public void ReplaceWorkcartIds(List<uint> workcardIds)
@@ -2442,8 +2544,8 @@ namespace Oxide.Plugins
 
         private string GetConductorCountMessage(IPlayer player) =>
              _pluginConfig.MaxConductors >= 0
-             ? GetMessage(player, Lang.InfoConductorCountLimited, _pluginData.NumConductors, _pluginConfig.MaxConductors)
-             : GetMessage(player, Lang.InfoConductorCountUnlimited, _pluginData.NumConductors);
+             ? GetMessage(player, Lang.InfoConductorCountLimited, _workcartManager.NumWorkcarts, _pluginConfig.MaxConductors)
+             : GetMessage(player, Lang.InfoConductorCountUnlimited, _workcartManager.NumWorkcarts);
 
         private class Lang
         {
@@ -2458,9 +2560,11 @@ namespace Oxide.Plugins
             public const string ErrorMapTriggersDisabled = "Error.MapTriggersDisabled";
             public const string ErrorMaxConductors = "Error.MaxConductors";
             public const string ErrorWorkcartOwned = "Error.WorkcartOwned";
+            public const string ErrorNoAutomatedWorkcarts = "Error.NoAutomatedWorkcarts";
 
             public const string ToggleOnSuccess = "Toggle.Success.On";
             public const string ToggleOffSuccess = "Toggle.Success.Off";
+            public const string ShowMarkersSuccess = "ShowMarkers.Success";
 
             public const string AddTriggerSyntax = "AddTrigger.Syntax";
             public const string AddTriggerSuccess = "AddTrigger.Success";
@@ -2501,28 +2605,31 @@ namespace Oxide.Plugins
             {
                 [Lang.ErrorNoPermission] = "You don't have permission to do that.",
                 [Lang.ErrorNoTriggers] = "There are no workcart triggers on this map.",
-                [Lang.ErrorTriggerNotFound] = "Error: Trigger id #{0}{1} not found.",
+                [Lang.ErrorTriggerNotFound] = "Error: Trigger id #<color=#fd4>{0}{1}</color> not found.",
                 [Lang.ErrorNoTrackFound] = "Error: No track found nearby.",
                 [Lang.ErrorNoWorkcartFound] = "Error: No workcart found.",
                 [Lang.ErrorAutomateBlocked] = "Error: Another plugin blocked automating that workcart.",
                 [Lang.ErrorUnsupportedTunnel] = "Error: Not a supported train tunnel.",
                 [Lang.ErrorTunnelTypeDisabled] = "Error: Tunnel type <color=#fd4>{0}</color> is currently disabled.",
                 [Lang.ErrorMapTriggersDisabled] = "Error: Map triggers are disabled.",
-                [Lang.ErrorMaxConductors] = "Error: There are already {0} out of {1} conductors.",
+                [Lang.ErrorMaxConductors] = "Error: There are already <color=#fd4>{0}</color> out of <color=#fd4>{1}</color> conductors.",
                 [Lang.ErrorWorkcartOwned] = "Error: That workcart has an owner.",
+                [Lang.ErrorNoAutomatedWorkcarts] = "Error: There are no automated workcarts.",
 
                 [Lang.ToggleOnSuccess] = "That workcart is now automated.",
                 [Lang.ToggleOffSuccess] = "That workcart is no longer automated.",
-                [Lang.AddTriggerSyntax] = "Syntax: <color=#fd4>{0} <option1> <option2> ...</color>\n{1}",
-                [Lang.AddTriggerSuccess] = "Successfully added trigger #{0}{1}.",
-                [Lang.UpdateTriggerSyntax] = "Syntax: <color=#fd4>{0} <id> <option1> <option2> ...</color>\n{1}",
-                [Lang.UpdateTriggerSuccess] = "Successfully updated trigger #{0}{1}",
-                [Lang.MoveTriggerSuccess] = "Successfully moved trigger #{0}{1}",
-                [Lang.RemoveTriggerSyntax] = "Syntax: <color=#fd4>{0} <id></color>",
-                [Lang.RemoveTriggerSuccess] = "Trigger #{0}{1} successfully removed.",
+                [Lang.ShowMarkersSuccess] = "Showing map markers of all <color=#fd4>{0}</color> automated workcarts for <color=#fd4>{1}</color>. Only you can see them.",
 
-                [Lang.InfoConductorCountLimited] = "Conductors: {0}/{1}.",
-                [Lang.InfoConductorCountUnlimited] = "Conductors: {0}.",
+                [Lang.AddTriggerSyntax] = "Syntax: <color=#fd4>{0} <option1> <option2> ...</color>\n{1}",
+                [Lang.AddTriggerSuccess] = "Successfully added trigger #<color=#fd4>{0}{1}</color>.",
+                [Lang.UpdateTriggerSyntax] = "Syntax: <color=#fd4>{0} <id> <option1> <option2> ...</color>\n{1}",
+                [Lang.UpdateTriggerSuccess] = "Successfully updated trigger #<color=#fd4>{0}{1}</color>",
+                [Lang.MoveTriggerSuccess] = "Successfully moved trigger #<color=#fd4>{0}{1}</color>",
+                [Lang.RemoveTriggerSyntax] = "Syntax: <color=#fd4>{0} <id></color>",
+                [Lang.RemoveTriggerSuccess] = "Trigger #<color=#fd4>{0}{1}</color> successfully removed.",
+
+                [Lang.InfoConductorCountLimited] = "Total conductors: <color=#fd4>{0}/{1}</color>.",
+                [Lang.InfoConductorCountUnlimited] = "Total conductors: <color=#fd4>{0}</color>.",
 
                 [Lang.HelpSpeedOptions] = "Speeds: {0}",
                 [Lang.HelpDirectionOptions] = "Directions: {0}",
