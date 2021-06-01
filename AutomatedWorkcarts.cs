@@ -14,7 +14,7 @@ using static TrainTrackSpline;
 
 namespace Oxide.Plugins
 {
-    [Info("Automated Workcarts", "WhiteThunder", "0.12.1")]
+    [Info("Automated Workcarts", "WhiteThunder", "0.12.2")]
     [Description("Spawns conductor NPCs that drive workcarts between stations.")]
     internal class AutomatedWorkcarts : CovalencePlugin
     {
@@ -83,7 +83,7 @@ namespace Oxide.Plugins
                     foundWorkcarts.Add(workcart.net.ID);
                     timer.Once(UnityEngine.Random.Range(0, 1f), () =>
                     {
-                        if (workcart != null)
+                        if (workcart != null && !IsWorkcartOwned(workcart))
                             TryAddTrainController(workcart);
                     });
                 }
@@ -154,7 +154,9 @@ namespace Oxide.Plugins
             var trainController = workcart.GetComponent<TrainController>();
             if (trainController == null)
             {
-                if (trigger.TriggerInfo.AddConductor && CanHaveMoreConductors())
+                if (trigger.TriggerInfo.AddConductor
+                    && !IsWorkcartOwned(workcart)
+                    && CanHaveMoreConductors())
                 {
                     TryAddTrainController(workcart, trigger.TriggerInfo);
                     _pluginData.AddWorkcart(workcart);
@@ -286,6 +288,12 @@ namespace Oxide.Plugins
             var trainController = workcart.GetComponent<TrainController>();
             if (trainController == null)
             {
+                if (IsWorkcartOwned(workcart))
+                {
+                    ReplyToPlayer(player, Lang.ErrorWorkcartOwned);
+                    return;
+                }
+
                 if (!CanHaveMoreConductors())
                 {
                     ReplyToPlayer(player, Lang.ErrorMaxConductors, _pluginData.NumConductors, _pluginConfig.MaxConductors);
@@ -698,9 +706,11 @@ namespace Oxide.Plugins
             return false;
         }
 
-        private bool CanHaveMoreConductors() =>
+        private static bool CanHaveMoreConductors() =>
             _pluginConfig.MaxConductors < 0
             || _pluginData.NumConductors < _pluginConfig.MaxConductors;
+
+        private static bool IsWorkcartOwned(TrainEngine workcart) => workcart.OwnerID != 0;
 
         private static bool TryAddTrainController(TrainEngine workcart, WorkcartTriggerInfo triggerInfo = null)
         {
@@ -2420,6 +2430,7 @@ namespace Oxide.Plugins
             public const string ErrorTunnelTypeDisabled = "Error.TunnelTypeDisabled";
             public const string ErrorMapTriggersDisabled = "Error.MapTriggersDisabled";
             public const string ErrorMaxConductors = "Error.MaxConductors";
+            public const string ErrorWorkcartOwned = "Error.WorkcartOwned";
 
             public const string ToggleOnSuccess = "Toggle.Success.On";
             public const string ToggleOffSuccess = "Toggle.Success.Off";
@@ -2471,6 +2482,7 @@ namespace Oxide.Plugins
                 [Lang.ErrorTunnelTypeDisabled] = "Error: Tunnel type <color=#fd4>{0}</color> is currently disabled.",
                 [Lang.ErrorMapTriggersDisabled] = "Error: Map triggers are disabled.",
                 [Lang.ErrorMaxConductors] = "Error: There are already {0} out of {1} conductors.",
+                [Lang.ErrorWorkcartOwned] = "Error: That workcart has an owner.",
 
                 [Lang.ToggleOnSuccess] = "That workcart is now automated.",
                 [Lang.ToggleOffSuccess] = "That workcart is no longer automated.",

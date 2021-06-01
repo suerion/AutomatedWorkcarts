@@ -53,6 +53,7 @@ To see the triggers visually, grant the `automatedworkcarts.managetriggers` perm
   - Track selection options: `Default` | `Left` | `Right` | `Swap`.
   - Other options:
     - `Conductor` -- Adds a conductor to the workcart if not already present. Recommended to place on some or all workcart spawn locations, depending on how many workcarts you want to automate.
+      - Note: Owned workcarts cannot receive conductors.
     - `Brake` -- Instructs the workcart to brake until it reaches the designated speed. For example, if the workcart is going `Fwd_Hi` and enters a `Brake Med` trigger, it will temporarily go `Rev_Lo` until it slows down enough, then it will go `Fwd Med`.
   - Simple examples:
     - `aw.addtrigger Lo` -- Causes the workcart to move at `Lo` speed in its current direction. Exmaple: `Fwd_Hi` -> `Fwd_Lo`.
@@ -170,6 +171,7 @@ The best practice is to have separate, independent tracks for player vs automate
   "Error.TunnelTypeDisabled": "Error: Tunnel type <color=#fd4>{0}</color> is currently disabled.",
   "Error.MapTriggersDisabled": "Error: Map triggers are disabled.",
   "Error.MaxConductors": "Error: There are already {0} out of {1} conductors.",
+  "Error.WorkcartOwned": "Error: That workcart has an owner.",
   "Toggle.Success.On": "That workcart is now automated.",
   "Toggle.Success.Off": "That workcart is no longer automated.",
   "AddTrigger.Syntax": "Syntax: <color=#fd4>{0} <option1> <option2> ...</color>\n{1}",
