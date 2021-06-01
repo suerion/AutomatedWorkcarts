@@ -75,7 +75,6 @@ To see the triggers visually, grant the `automatedworkcarts.managetriggers` perm
 - `aw.removetrigger <id>` -- Removes the specified trigger.
 - `aw.showtriggers` -- Shows all nearby triggers to the player for 60 seconds.
   - This displays the trigger id, speed, direction, etc.
-  - You must be an admin to see the triggers.
   - Triggers are also automatically shown for 60 seconds when using any of the other trigger commands.
 
 Tip: For the commands that update, move or remove triggers, you can skip the `<id>` argument if you are aiming at a nearby trigger.

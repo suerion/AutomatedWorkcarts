@@ -14,7 +14,7 @@ using static TrainTrackSpline;
 
 namespace Oxide.Plugins
 {
-    [Info("Automated Workcarts", "WhiteThunder", "0.12.0")]
+    [Info("Automated Workcarts", "WhiteThunder", "0.12.1")]
     [Description("Spawns conductor NPCs that drive workcarts between stations.")]
     internal class AutomatedWorkcarts : CovalencePlugin
     {
@@ -1553,6 +1553,13 @@ namespace Oxide.Plugins
 
             private void ShowNearbyTriggers(BasePlayer player, Vector3 playerPosition)
             {
+                var isAdmin = player.IsAdmin;
+                if (!isAdmin)
+                {
+                    player.SetPlayerFlag(BasePlayer.PlayerFlags.IsAdmin, true);
+                    player.SendNetworkUpdateImmediate();
+                }
+
                 foreach (var trigger in _mapTriggers.Values)
                 {
                     if (Vector3.Distance(playerPosition, trigger.Position) <= TriggerDrawDistance)
@@ -1566,6 +1573,12 @@ namespace Oxide.Plugins
                         if (Vector3.Distance(playerPosition, trigger.Position) <= TriggerDrawDistance)
                             ShowTrigger(player, trigger, triggerList.Length);
                     }
+                }
+
+                if (!isAdmin)
+                {
+                    player.SetPlayerFlag(BasePlayer.PlayerFlags.IsAdmin, false);
+                    player.SendNetworkUpdateImmediate();
                 }
             }
 
