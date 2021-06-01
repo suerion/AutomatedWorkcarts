@@ -14,7 +14,7 @@ using static TrainTrackSpline;
 
 namespace Oxide.Plugins
 {
-    [Info("Automated Workcarts", "WhiteThunder", "0.11.1")]
+    [Info("Automated Workcarts", "WhiteThunder", "0.11.2")]
     [Description("Spawns conductor NPCs that drive workcarts between stations.")]
     internal class AutomatedWorkcarts : CovalencePlugin
     {
@@ -269,7 +269,7 @@ namespace Oxide.Plugins
 
             var basePlayer = player.Object as BasePlayer;
 
-            var workcart = GetPlayerCart(basePlayer);
+            var workcart = GetWorkcartWhereAiming(basePlayer);
             if (workcart == null)
             {
                 ReplyToPlayer(player, Lang.ErrorNoWorkcartFound);
@@ -817,21 +817,8 @@ namespace Oxide.Plugins
                 : null;
         }
 
-        private static TrainEngine GetMountedCart(BasePlayer player)
-        {
-            var mountedWorkcart = player.GetMountedVehicle() as TrainEngine;
-            if (mountedWorkcart != null)
-                return mountedWorkcart;
-
-            var parentWorkcart = player.GetParentEntity() as TrainEngine;
-            if (parentWorkcart != null)
-                return parentWorkcart;
-
-            return null;
-        }
-
-        private static TrainEngine GetPlayerCart(BasePlayer player) =>
-            GetLookEntity(player, Rust.Layers.Mask.Vehicle_Detailed) as TrainEngine ?? GetMountedCart(player);
+        private static TrainEngine GetWorkcartWhereAiming(BasePlayer player) =>
+            GetLookEntity(player, Rust.Layers.Mask.Vehicle_Detailed) as TrainEngine;
 
         private static Vector3 GetWorkcartForward(TrainEngine workcart)
         {
