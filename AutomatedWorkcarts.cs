@@ -14,7 +14,7 @@ using static TrainTrackSpline;
 
 namespace Oxide.Plugins
 {
-    [Info("Automated Workcarts", "WhiteThunder", "0.11.0")]
+    [Info("Automated Workcarts", "WhiteThunder", "0.11.1")]
     [Description("Spawns conductor NPCs that drive workcarts between stations.")]
     internal class AutomatedWorkcarts : CovalencePlugin
     {
@@ -302,6 +302,12 @@ namespace Oxide.Plugins
                 || !VerifyPermission(player, PermissionManageTriggers))
                 return;
 
+            if (!_pluginConfig.EnableMapTriggers)
+            {
+                ReplyToPlayer(player, Lang.ErrorMapTriggersDisabled);
+                return;
+            }
+
             Vector3 trackPosition;
             if (!TryGetTrackPosition(player.Object as BasePlayer, out trackPosition))
             {
@@ -334,7 +340,7 @@ namespace Oxide.Plugins
 
             if (!_pluginConfig.IsTunnelTypeEnabled(dungeonCellWrapper.TunnelType))
             {
-                ReplyToPlayer(player, Lang.ErrorTunneLTypeDisabled, dungeonCellWrapper.TunnelType);
+                ReplyToPlayer(player, Lang.ErrorTunnelTypeDisabled, dungeonCellWrapper.TunnelType);
                 return;
             }
 
@@ -2373,7 +2379,8 @@ namespace Oxide.Plugins
             public const string ErrorNoWorkcartFound = "Error.NoWorkcartFound";
             public const string ErrorAutomateBlocked = "Error.AutomateBlocked";
             public const string ErrorUnsupportedTunnel = "Error.UnsupportedTunnel";
-            public const string ErrorTunneLTypeDisabled = "Error.TunnelTypeDisabled";
+            public const string ErrorTunnelTypeDisabled = "Error.TunnelTypeDisabled";
+            public const string ErrorMapTriggersDisabled = "Error.MapTriggersDisabled";
 
             public const string ToggleOnSuccess = "Toggle.Success.On";
             public const string ToggleOffSuccess = "Toggle.Success.Off";
@@ -2419,7 +2426,8 @@ namespace Oxide.Plugins
                 [Lang.ErrorNoWorkcartFound] = "Error: No workcart found.",
                 [Lang.ErrorAutomateBlocked] = "Error: Another plugin blocked automating that workcart.",
                 [Lang.ErrorUnsupportedTunnel] = "Error: Not a supported train tunnel.",
-                [Lang.ErrorTunneLTypeDisabled] = "Error: Tunnel type <color=#fd4>{0}</color> is currently disabled.",
+                [Lang.ErrorTunnelTypeDisabled] = "Error: Tunnel type <color=#fd4>{0}</color> is currently disabled.",
+                [Lang.ErrorMapTriggersDisabled] = "Error: Map triggers are disabled.",
 
                 [Lang.ToggleOnSuccess] = "That workcart is now automated.",
                 [Lang.ToggleOffSuccess] = "That workcart is no longer automated.",

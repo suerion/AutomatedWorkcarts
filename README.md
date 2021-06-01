@@ -167,6 +167,7 @@ The best practice is to have separate, independent tracks for player vs automate
   "Error.AutomateBlocked": "Error: Another plugin blocked automating that workcart.",
   "Error.UnsupportedTunnel": "Error: Not a supported train tunnel.",
   "Error.TunnelTypeDisabled": "Error: Tunnel type <color=#fd4>{0}</color> is currently disabled.",
+  "Error.MapTriggersDisabled": "Error: Map triggers are disabled.",
   "Toggle.Success.On": "That workcart is now automated.",
   "Toggle.Success.Off": "That workcart is no longer automated.",
   "AddTrigger.Syntax": "Syntax: <color=#fd4>{0} <option1> <option2> ...</color>\n{1}",
