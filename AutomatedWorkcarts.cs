@@ -14,7 +14,7 @@ using static TrainTrackSpline;
 
 namespace Oxide.Plugins
 {
-    [Info("Automated Workcarts", "WhiteThunder", "0.14.1")]
+    [Info("Automated Workcarts", "WhiteThunder", "0.14.2")]
     [Description("Spawns conductor NPCs that drive workcarts between stations.")]
     internal class AutomatedWorkcarts : CovalencePlugin
     {
@@ -1892,7 +1892,7 @@ namespace Oxide.Plugins
 
             private void BrakeUpdate()
             {
-                if (IsNearOrBelowSpeed(_targetVelocity))
+                if (IsNearSpeed(_targetVelocity))
                 {
                     SetThrottle(_targetVelocity);
                     if (_targetVelocity == EngineSpeeds.Zero)
@@ -1946,12 +1946,15 @@ namespace Oxide.Plugins
                 }
             }
 
-            private bool IsNearOrBelowSpeed(EngineSpeeds desiredThrottle, float leeway = 0.1f)
+            private bool IsNearSpeed(EngineSpeeds desiredThrottle, float leeway = 0.1f)
             {
                 var currentSpeed = Vector3.Dot(_workcart.transform.forward, _workcart.GetLocalVelocity());
                 var desiredSpeed = _workcart.maxSpeed * GetThrottleFraction(desiredThrottle);
 
-                return desiredSpeed < 0 || (desiredSpeed == 0 && currentSpeed < 0)
+                // If desiring a negative speed, current speed is expected to increase (e.g., -10 to -5).
+                // If desiring positive speed, current speed is expected to decrease (e.g., 10 to 5).
+                // If desiring zero speed, the direction depends on the throttle being applied (e.g., if positive, -10 to -5).
+                return desiredSpeed < 0 || (desiredSpeed == 0 && GetThrottleFraction(_workcart.CurThrottleSetting) > 0)
                     ? currentSpeed + leeway >= desiredSpeed
                     : currentSpeed - leeway <= desiredSpeed;
             }
