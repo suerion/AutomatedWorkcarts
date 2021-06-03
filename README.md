@@ -48,7 +48,7 @@ To see the triggers visually, grant the `automatedworkcarts.managetriggers` perm
 ## Commands
 
 - `aw.toggle` -- Toggles automation for the workcart you are standing on or looking at.
-- `aw.showmarkers <seconds>` -- Temporarily creates map markers for all currently automated workcarts (using delivery drone icons).
+- `aw.showmarkers <seconds>` -- Temporarily creates map markers for all currently automated workcarts (using delivery drone icons). Defaults to 60 seconds.
   - The duration defaults to 60 seconds unless otherwise specified.
   - Only the players that runs this command can see the markers.
 - `aw.addtrigger <option1> <option2> ...` -- Adds a trigger to the track position where the player is aiming, with the specified options. Automated workcarts that pass through the trigger will be affected by the trigger's options.
@@ -78,7 +78,7 @@ To see the triggers visually, grant the `automatedworkcarts.managetriggers` perm
 - `aw.replacetrigger <id> <option1> <option2> ...` -- Replaces all options on the specified trigger with the options specified, without moving the trigger. Options are the same as for `aw.addtrigger`. This is useful for removing options from a trigger since `aw.updatetrigger` does not allow that.
 - `aw.movetrigger <id>` -- Moves the specified trigger to the track position where the player is aiming.
 - `aw.removetrigger <id>` -- Removes the specified trigger.
-- `aw.showtriggers` -- Shows all nearby triggers to the player for 60 seconds.
+- `aw.showtriggers <seconds>` -- Shows all nearby triggers to the player for specified duration. Defaults to 60 seconds.
   - This displays the trigger id, speed, direction, etc.
   - Triggers are also automatically shown for 60 seconds when using any of the other trigger commands.
 
@@ -195,6 +195,7 @@ The best practice is to have separate, independent tracks for player vs automate
   "Toggle.Success.On": "That workcart is now automated.",
   "Toggle.Success.Off": "That workcart is no longer automated.",
   "ShowMarkers.Success": "Showing map markers of all <color=#fd4>{0}</color> automated workcarts for <color=#fd4>{1}</color>. Only you can see them.",
+  "ShowTriggers.Success": "Showing all triggers for <color=#fd4>{0}</color>.",
   "AddTrigger.Syntax": "Syntax: <color=#fd4>{0} <option1> <option2> ...</color>\n{1}",
   "AddTrigger.Success": "Successfully added trigger #<color=#fd4>{0}{1}</color>.",
   "UpdateTrigger.Syntax": "Syntax: <color=#fd4>{0} <id> <option1> <option2> ...</color>\n{1}",

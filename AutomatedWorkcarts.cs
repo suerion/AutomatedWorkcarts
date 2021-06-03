@@ -14,7 +14,7 @@ using static TrainTrackSpline;
 
 namespace Oxide.Plugins
 {
-    [Info("Automated Workcarts", "WhiteThunder", "0.14.2")]
+    [Info("Automated Workcarts", "WhiteThunder", "0.14.3")]
     [Description("Spawns conductor NPCs that drive workcarts between stations.")]
     internal class AutomatedWorkcarts : CovalencePlugin
     {
@@ -554,7 +554,12 @@ namespace Oxide.Plugins
                 || !VerifyAnyTriggers(player))
                 return;
 
-            _triggerManager.ShowAllRepeatedly(player.Object as BasePlayer);
+            int duration;
+            if (args.Length == 0 || !int.TryParse(args[0], out duration))
+                duration = 60;
+
+            _triggerManager.ShowAllRepeatedly(player.Object as BasePlayer, duration);
+            ReplyToPlayer(player, Lang.ShowTriggersSuccess, FormatTime(duration));
         }
 
         #endregion
@@ -1594,15 +1599,19 @@ namespace Oxide.Plugins
                         triggerWrapper.Destroy();
             }
 
-            public void ShowAllRepeatedly(BasePlayer player)
+            public void ShowAllRepeatedly(BasePlayer player, int duration = -1)
             {
                 ShowNearbyTriggers(player, player.transform.position);
 
                 Timer existingTimer;
-                if (_drawTimers.TryGetValue(player.userID, out existingTimer))
-                    existingTimer.Destroy();
+                if (_drawTimers.TryGetValue(player.userID, out existingTimer) && !existingTimer.Destroyed)
+                {
+                    var newDuration = duration >= 0 ? duration : Math.Max(existingTimer.Repetitions, 60);
+                    existingTimer.Reset(delay: -1, repetitions: newDuration);
+                    return;
+                }
 
-                _drawTimers[player.userID] = _pluginInstance.timer.Repeat(TriggerDisplayDuration - 0.1f, 60, () =>
+                _drawTimers[player.userID] = _pluginInstance.timer.Repeat(TriggerDisplayDuration - 0.1f, duration, () =>
                 {
                     ShowNearbyTriggers(player, player.transform.position);
                 });
@@ -2579,6 +2588,7 @@ namespace Oxide.Plugins
             public const string ToggleOnSuccess = "Toggle.Success.On";
             public const string ToggleOffSuccess = "Toggle.Success.Off";
             public const string ShowMarkersSuccess = "ShowMarkers.Success";
+            public const string ShowTriggersSuccess = "ShowTriggers.Success";
 
             public const string AddTriggerSyntax = "AddTrigger.Syntax";
             public const string AddTriggerSuccess = "AddTrigger.Success";
@@ -2633,6 +2643,7 @@ namespace Oxide.Plugins
                 [Lang.ToggleOnSuccess] = "That workcart is now automated.",
                 [Lang.ToggleOffSuccess] = "That workcart is no longer automated.",
                 [Lang.ShowMarkersSuccess] = "Showing map markers of all <color=#fd4>{0}</color> automated workcarts for <color=#fd4>{1}</color>. Only you can see them.",
+                [Lang.ShowTriggersSuccess] = "Showing all triggers for <color=#fd4>{0}</color>.",
 
                 [Lang.AddTriggerSyntax] = "Syntax: <color=#fd4>{0} <option1> <option2> ...</color>\n{1}",
                 [Lang.AddTriggerSuccess] = "Successfully added trigger #<color=#fd4>{0}{1}</color>.",
