@@ -14,7 +14,7 @@ using static TrainTrackSpline;
 
 namespace Oxide.Plugins
 {
-    [Info("Automated Workcarts", "WhiteThunder", "0.14.3")]
+    [Info("Automated Workcarts", "WhiteThunder", "0.14.4")]
     [Description("Spawns conductor NPCs that drive workcarts between stations.")]
     internal class AutomatedWorkcarts : CovalencePlugin
     {
@@ -1979,8 +1979,10 @@ namespace Oxide.Plugins
                 Conductor.enableSaving = false;
                 Conductor.Spawn();
 
-                // Disabling the collider is a simple and performant way to prevent NPCs from targeting the conductor.
+                // Simple and performant way to prevent NPCs from targeting the conductor.
                 Conductor.DisablePlayerCollider();
+                BaseEntity.Query.Server.RemovePlayer(Conductor);
+                Conductor.transform.localScale = Vector3.zero;
 
                 AddOutfit();
 
