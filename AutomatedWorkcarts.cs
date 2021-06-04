@@ -14,7 +14,7 @@ using static TrainTrackSpline;
 
 namespace Oxide.Plugins
 {
-    [Info("Automated Workcarts", "WhiteThunder", "0.15.0")]
+    [Info("Automated Workcarts", "WhiteThunder", "0.16.0")]
     [Description("Automates workcarts with NPC conductors.")]
     internal class AutomatedWorkcarts : CovalencePlugin
     {
@@ -33,7 +33,7 @@ namespace Oxide.Plugins
         private const string PermissionManageTriggers = "automatedworkcarts.managetriggers";
         private const string PermissionViewMarkers = "automatedworkcarts.viewmarkers";
 
-        private const string PlayerPrefab = "assets/prefabs/player/player.prefab";
+        private const string ShopkeeperPrefab = "assets/prefabs/npc/bandit/shopkeepers/bandit_shopkeeper.prefab";
         private const string DeliveryDroneMarkerPrefab = "assets/prefabs/misc/marketplace/deliverydronemarker.prefab";
 
         private WorkcartTriggerManager _triggerManager = new WorkcartTriggerManager();
@@ -1802,7 +1802,7 @@ namespace Oxide.Plugins
                 }
             }
 
-            public BasePlayer Conductor { get; private set; }
+            public NPCShopKeeper Conductor { get; private set; }
             private TrainEngine _workcart;
             private EngineSpeeds _targetVelocity;
             private EngineSpeeds _departureVelocity;
@@ -1975,24 +1975,33 @@ namespace Oxide.Plugins
             {
                 _workcart.DismountAllPlayers();
 
-                Conductor = GameManager.server.CreateEntity(PlayerPrefab, _workcart.transform.position) as BasePlayer;
+                Conductor = GameManager.server.CreateEntity(ShopkeeperPrefab, _workcart.transform.position) as NPCShopKeeper;
                 if (Conductor == null)
                     return;
 
                 Conductor.enableSaving = false;
                 Conductor.Spawn();
 
-                // Simple and performant way to prevent NPCs from targeting the conductor.
+                Conductor.CancelInvoke(Conductor.Greeting);
+                Conductor.CancelInvoke(Conductor.TickMovement);
+
+                // Simple and performant way to prevent NPCs and turrets from targeting the conductor.
                 Conductor.DisablePlayerCollider();
                 BaseEntity.Query.Server.RemovePlayer(Conductor);
                 Conductor.transform.localScale = Vector3.zero;
 
                 AddOutfit();
+                GetDriverSeat()?.AttemptMount(Conductor, doMountChecks: false);
+            }
 
-                _workcart.platformParentTrigger.OnTriggerEnter(Conductor.playerCollider);
-
-                Conductor.displayName = "Conductor";
-                _workcart.AttemptMount(Conductor, false);
+            private BaseMountable GetDriverSeat()
+            {
+                foreach (var mountPoint in _workcart.mountPoints)
+                {
+                    if (mountPoint.isDriver)
+                        return mountPoint.mountable;
+                }
+                return null;
             }
 
             private void StartTrain(EngineSpeeds initialSpeed)
