@@ -14,7 +14,7 @@ using static TrainTrackSpline;
 
 namespace Oxide.Plugins
 {
-    [Info("Automated Workcarts", "WhiteThunder", "0.14.7")]
+    [Info("Automated Workcarts", "WhiteThunder", "0.15.0")]
     [Description("Spawns conductor NPCs that drive workcarts between stations.")]
     internal class AutomatedWorkcarts : CovalencePlugin
     {
@@ -555,6 +555,12 @@ namespace Oxide.Plugins
             _triggerManager.ShowAllRepeatedly(player.Object as BasePlayer, duration);
             ReplyToPlayer(player, Lang.ShowTriggersSuccess, FormatTime(duration));
         }
+
+        #endregion
+
+        #region API
+
+        private bool API_IsWorkcartAutomated(TrainEngine workcart) => IsWorkcartAutomated(workcart);
 
         #endregion
 

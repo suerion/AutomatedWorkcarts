@@ -225,6 +225,12 @@ The best practice is to have separate, independent tracks for player vs automate
 }
 ```
 
+## Developer API
+
+```csharp
+bool API_IsWorkcartAutomated(TrainEngine workcart)
+```
+
 ## Developer Hooks
 
 #### OnWorkcartAutomate
