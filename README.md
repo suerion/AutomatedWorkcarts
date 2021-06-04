@@ -11,7 +11,7 @@ A workcart can be automated one of two ways:
 - By placing a trigger on the workcart spawn position, so that it will receive a conductor when it spawns.
 
 Automating a workcart dismounts the current driver if present, and adds a conductor NPC.
-- The conductor and workcart are invincible, and do not require fuel.
+- The conductor and workcart are invincible, and the workcart does not require fuel.
 - If the workcart was automated using the `aw.toggle` command, the conductor will start driving based on the `DefaultSpeed` and `DefaultTrackSelection` in the plugin configuration.
 - If the workcart was automated using a trigger, it will use the trigger options, falling back to the plugin configuration for anything not specified by the trigger.
 
@@ -26,7 +26,7 @@ The main purpose of triggers, aside from determining which workcarts will be aut
 
 All workcarts parked at their spawn locations will receive a conductor and start moving, automatically stopping briefly at stations to pick up passengers. From the map perspective, each workcart will move in a counter-clockwise circle around an adjacent loop, or in a clockwise circle around the outer edges of the map, depending on its spawn orientation and available nearby loops. This combination will cover most maps, allowing players to go almost anywhere by switching directions at various stops.
 
-To see the triggers visually, grant the `automatedworkcarts.managetriggers` permission and run the `aw.showtriggers` command. For 60 seconds, this will show triggers at nearby tunnels. From here, you can add, update, move, and remove triggers to your liking. See the Commands section for how details on managing triggers.
+To see the triggers visually, grant the `automatedworkcarts.managetriggers` permission and run the `aw.showtriggers` command. For 60 seconds, this will show triggers at nearby tunnels. From here, you can add, update, move, and remove triggers to your liking. See the Commands section for how to manage triggers.
 
 ### Use case #2: Automate aboveground workcarts
 
@@ -36,22 +36,23 @@ To see the triggers visually, grant the `automatedworkcarts.managetriggers` perm
 4. Find a workcart spawn location where you would like workcarts to automatically receive conductors.
 5. Aim at the track and run the command `aw.addtrigger Conductor Fwd Hi`. Any workcart that spawns on this trigger will automatically receive a conductor, and start driving forward at max speed.
 6. Find a portion of track where you want automated workarts to stop briefly.
-7. Aim at the track and run the command `aw.addtrigger Brake Zero 15`. Any workcart that passes through this trigger will brake until stopping, wait for 15 seconds, then start moving at `DepartureSpeed` in the plugin configuration.
+7. Aim at the track and run the command `aw.addtrigger Brake Zero 15 Hi`. Any workcart that passes through this trigger will brake until stopping, wait for 15 seconds, then start moving the same direction as `Hi` speed.
 8. Keep adding/editing triggers and spawning workcarts to refine the routes.
 
 ## Permission
 
 - `automatedworkcarts.toggle` -- Allows usage of the `aw.toggle` command.
 - `automatedworkcarts.viewmarkers` -- Allows usage of the `aw.showmarkers` command.
-- `automatedworkcarts.managetriggers` -- Allows adding and removing triggers.
+- `automatedworkcarts.managetriggers` -- Allows viewing, adding, updating and removing triggers.
 
 ## Commands
 
-- `aw.toggle` -- Toggles automation for the workcart you are standing on or looking at.
+- `aw.toggle` -- Toggles automation for the workcart you are looking at.
 - `aw.showmarkers <seconds>` -- Temporarily creates map markers for all currently automated workcarts (using delivery drone icons). Defaults to 60 seconds.
   - The duration defaults to 60 seconds unless otherwise specified.
-  - Only the players that runs this command can see the markers.
-- `aw.addtrigger <option1> <option2> ...` -- Adds a trigger to the track position where the player is aiming, with the specified options. Automated workcarts that pass through the trigger will be affected by the trigger's options.
+  - Only the players that run this command can see the markers.
+  - Note: This requires enabling global broadcast on all workcarts for the duration, which can impact client and server FPS, so use this feature sparingly.
+- `aw.addtrigger <option1> <option2> ...` -- Adds a trigger to the track position where you are aiming, with the specified options. Automated workcarts that pass through the trigger will be affected by the trigger's options.
   - Speed options: `Hi` | `Med` | `Lo` | `Zero`.
   - Direction options: `Fwd` | `Rev` | `Invert`.
   - Track selection options: `Default` | `Left` | `Right` | `Swap`.
@@ -64,23 +65,22 @@ To see the triggers visually, grant the `automatedworkcarts.managetriggers` perm
     - `aw.addtrigger Fwd Lo` -- Causes the workcart to move forward at `Lo` speed, regardless of its current direction. Example: `Rev_Hi` -> `Fwd_Lo`.
     - `aw.addtrigger Invert` -- Causes the workcart to reverse direction at its current speed. Example: `Fwd_Med` -> `Rev_Med`.
     - `aw.addtrigger Invert Med` -- Causes the workcart to reverse direction at `Med` speed. Example: `Fwd_Hi` -> `Rev_Med`.
-    - `aw.addtrigger Brake Lo` -- Causes the workcart to brake until it reaches the `Lo` speed. Examle: `Fwd_Hi` -> `Rev_Lo` -> `Fwd_Lo`.
+    - `aw.addtrigger Brake Med` -- Causes the workcart to brake until it reaches the `Med` speed. Examle: `Fwd_Hi` -> `Rev_Lo` -> `Fwd_Med`.
     - `aw.addtrigger Left` -- Causes the workcart to turn left at all future intersections.
   - Advanced examples:
     - `aw.addtrigger Conductor Fwd Hi Left` -- Causes the workcart to automatically receive a conductor, and to go forward at full speed, always turning left.
     - `aw.addtrigger Brake Zero 10 Hi` -- Causes the workcart to brake to a stop, wait 10 seconds, then go full speed in the same direction.
     - `aw.addtrigger Zero 20 Med` -- Causes the workcart to turn off its engine for 20 seconds, then go `Med` speed in the same direction.
-- `aw.addtrunneltrigger <option1> <option2>` -- Adds a trigger to the track position where the player is aiming.
+- `aw.addtrunneltrigger <option1> <option2>` -- Adds a trigger to the track position where you are aiming.
   - Must be in a supported train tunnel (one enabled in plugin configuration).
-  - This trigger will be replicated at all train tunnels of the same type.
-  - Moving, updating or removing the trigger will be reflected at all train tunnels of the same type.
+  - This trigger will be replicated at all train tunnels of the same type. Editing or removing one of those triggers will affect them all.
 - `aw.updatetrigger <id> <option1> <option2> ...` -- Updates the options of the specified trigger. Options are the same as for `aw.addtrigger`.
-- `aw.replacetrigger <id> <option1> <option2> ...` -- Replaces all options on the specified trigger with the options specified, without moving the trigger. Options are the same as for `aw.addtrigger`. This is useful for removing options from a trigger since `aw.updatetrigger` does not allow that.
+- `aw.replacetrigger <id> <option1> <option2> ...` -- Replaces all options on the specified trigger with the options specified. Options are the same as for `aw.addtrigger`. This is useful for removing options from a trigger since `aw.updatetrigger` does not allow that.
 - `aw.movetrigger <id>` -- Moves the specified trigger to the track position where the player is aiming.
 - `aw.removetrigger <id>` -- Removes the specified trigger.
 - `aw.showtriggers <seconds>` -- Shows all nearby triggers to the player for specified duration. Defaults to 60 seconds.
   - This displays the trigger id, speed, direction, etc.
-  - Triggers are also automatically shown for 60 seconds when using any of the other trigger commands.
+  - Triggers are also automatically shown for at least 60 seconds when using any of the other trigger commands.
 
 Tip: For the commands that update, move or remove triggers, you can skip the `<id>` argument if you are aiming at a nearby trigger.
 
@@ -96,15 +96,6 @@ The following command aliases are also available:
 
 ```json
 {
-  "DefaultSpeed": "Fwd_Hi",
-  "DefaultTrackSelection": "Left",
-  "DestroyOffendingWorkcarts": false,
-  "EnableMapTriggers": true,
-  "EnableTunnelTriggers": {
-    "TrainStation": false,
-    "BarricadeTunnel": false,
-    "LootTunnel": false
-  },
   "MaxConductors": -1,
   "ConductorOutfit": [
     {
@@ -119,10 +110,21 @@ The following command aliases are also available:
       "ShortName": "hat.boonie",
       "Skin": 0
     }
-  ]
+  ],
+  "DefaultSpeed": "Fwd_Hi",
+  "DefaultTrackSelection": "Left",
+  "DestroyOffendingWorkcarts": false,
+  "EnableMapTriggers": true,
+  "EnableTunnelTriggers": {
+    "TrainStation": false,
+    "BarricadeTunnel": false,
+    "LootTunnel": false
+  }
 }
 ```
 
+- `MaxConductors` -- The maximum number of conductors allowed on the map at once. Set to `-1` for no limit.
+- `ConductorOutfit` -- Item to use for the outfit of each conductor.
 - `DefaultSpeed` -- Default speed to use when a workcart starts being automated.
   - Allowed values: `"Rev_Hi"` | `"Rev_Med"` | `"Rev_Lo"` | `"Zero"` | `"Fwd_Lo"` | `"Fwd_Med"` | `"Fwd_Hi"`.
   - This value is ignored if the workcart is on a trigger that specifies speed.
@@ -136,18 +138,16 @@ The following command aliases are also available:
   - `TrainStation` (`true` or `false`) -- Self-explanatory.
   - `BarricadeTunnel` (`true` or `false`) -- This affects straight tunnels that spawn NPCs, loot, as well as barricades on the tracks.
   - `LootTunnel` (`true` or `false`) -- This affects straight tunnels that spawn NPCs and loot.
-- `MaxConductors` -- The maximum number of conductors allowed on the map at once. Set to `-1` for no limit.
-- `ConductorOutfit` -- Item to use for the outfit of each conductor.
 
 ## FAQ
 
 #### Will this plugin cause lag?
 
-This plugin's logic is optimized for performance and should not cause lag. However, workcarts moving along the tracks, regardless of whether a player or NPC is driving them, does incur some overhead. Therefore, having many automated workcarts may reduce server FPS.
+This plugin's logic is optimized for performance and should not cause lag. However, workcarts moving along the tracks, regardless of whether a player or NPC is driving them, does incur some overhead. Therefore, having many automated workcarts may reduce server FPS. You can limit the number of automated workcarts with the `MaxConductors` configuration option.
 
 #### Is this compatible with the Cargo Train Event plugin?
 
-Generally, yes. However, if all workcarts are automated, the Cargo Train Event will never start since it needs to select an idle workcart.
+Generally, yes. However, if all workcarts are automated, the Cargo Train Event will never start since it needs to select an idle workcart, so it's recommended to limit the number of automated workcarts using the `MaxConductors` configuration option, and/or by automating only specific workcarts based on their spawn location.
 
 #### Is it safe to allow player workcarts and automated workcarts on the same tracks?
 
@@ -155,7 +155,7 @@ The best practice is to have separate, independent tracks for player vs automate
 
 - When an automated workcart is rear-ended, if it's currently stopping or waiting at a stop, it will depart early.
 - When an automated workcart collides with another workcart in front of it, its engine stops for a few seconds to allow the forward workcart to assert its will.
-- When two automated workcarts head-on collide, the slower one (or a random one if they are going the same speed) will explode.
+- When two automated workcarts collide head-on, the slower one (or a random one if they are going the same speed) will explode.
 - When an automated workcart collides with a non-automated workcart other than a rear-end, and the workcart is not going the same direction or fast enough, having the `BulldozeOffendingWorkcarts` configuration option set to `true` will cause the non-automated workcart to be destroyed.
 
 ## Tips for map makers
