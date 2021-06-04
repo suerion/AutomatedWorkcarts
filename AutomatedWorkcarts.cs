@@ -14,7 +14,7 @@ using static TrainTrackSpline;
 
 namespace Oxide.Plugins
 {
-    [Info("Automated Workcarts", "WhiteThunder", "0.14.4")]
+    [Info("Automated Workcarts", "WhiteThunder", "0.14.5")]
     [Description("Spawns conductor NPCs that drive workcarts between stations.")]
     internal class AutomatedWorkcarts : CovalencePlugin
     {
@@ -138,15 +138,6 @@ namespace Oxide.Plugins
                 // Return true (standard) to cancel default behavior (prevent damage).
                 return true;
             }
-
-            return null;
-        }
-
-        private bool? CanLootEntity(BasePlayer player, StorageContainer container)
-        {
-            if (container.ShortPrefabName == "workcart_fuel_storage"
-                && container.GetComponentInParent<TrainController>() != null)
-                return false;
 
             return null;
         }
