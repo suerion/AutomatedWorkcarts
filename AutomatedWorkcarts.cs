@@ -14,7 +14,7 @@ using static TrainTrackSpline;
 
 namespace Oxide.Plugins
 {
-    [Info("Automated Workcarts", "WhiteThunder", "0.14.6")]
+    [Info("Automated Workcarts", "WhiteThunder", "0.14.7")]
     [Description("Spawns conductor NPCs that drive workcarts between stations.")]
     internal class AutomatedWorkcarts : CovalencePlugin
     {
@@ -87,6 +87,7 @@ namespace Oxide.Plugins
                     {
                         if (workcart != null
                             && !IsWorkcartOwned(workcart)
+                            && CanHaveMoreConductors()
                             && !IsWorkcartAutomated(workcart))
                             TryAddTrainController(workcart);
                     });
