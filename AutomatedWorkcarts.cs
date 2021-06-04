@@ -14,7 +14,7 @@ using static TrainTrackSpline;
 
 namespace Oxide.Plugins
 {
-    [Info("Automated Workcarts", "WhiteThunder", "0.14.5")]
+    [Info("Automated Workcarts", "WhiteThunder", "0.14.6")]
     [Description("Spawns conductor NPCs that drive workcarts between stations.")]
     internal class AutomatedWorkcarts : CovalencePlugin
     {
@@ -85,7 +85,9 @@ namespace Oxide.Plugins
                     foundWorkcarts.Add(workcart.net.ID);
                     timer.Once(UnityEngine.Random.Range(0, 1f), () =>
                     {
-                        if (workcart != null && !IsWorkcartOwned(workcart))
+                        if (workcart != null
+                            && !IsWorkcartOwned(workcart)
+                            && !IsWorkcartAutomated(workcart))
                             TryAddTrainController(workcart);
                     });
                 }
@@ -734,6 +736,9 @@ namespace Oxide.Plugins
             || _pluginInstance._workcartManager.NumWorkcarts < _pluginConfig.MaxConductors;
 
         private static bool IsWorkcartOwned(TrainEngine workcart) => workcart.OwnerID != 0;
+
+        private static bool IsWorkcartAutomated(TrainEngine workcart) =>
+            workcart.GetComponent<TrainController>() != null;
 
         private static bool TryAddTrainController(TrainEngine workcart, WorkcartTriggerInfo triggerInfo = null)
         {
