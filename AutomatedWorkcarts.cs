@@ -15,7 +15,7 @@ using static TrainTrackSpline;
 namespace Oxide.Plugins
 {
     [Info("Automated Workcarts", "WhiteThunder", "0.15.0")]
-    [Description("Spawns conductor NPCs that drive workcarts between stations.")]
+    [Description("Automates workcarts with NPC conductors.")]
     internal class AutomatedWorkcarts : CovalencePlugin
     {
         #region Fields
