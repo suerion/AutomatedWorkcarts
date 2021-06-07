@@ -14,7 +14,7 @@ using static TrainTrackSpline;
 
 namespace Oxide.Plugins
 {
-    [Info("Automated Workcarts", "WhiteThunder", "0.22.0")]
+    [Info("Automated Workcarts", "WhiteThunder", "0.22.1")]
     [Description("Automates workcarts with NPC conductors.")]
     internal class AutomatedWorkcarts : CovalencePlugin
     {
@@ -2091,6 +2091,9 @@ namespace Oxide.Plugins
                         _vendingMarker.Spawn();
                     }
                 }
+
+                if (_genericMarker == null && _vendingMarker == null)
+                    return;
 
                 // Periodically update the marker positions since they aren't parented to the workcarts.
                 // We could them to the workcarts, but then they would only appear to players in network radius,
