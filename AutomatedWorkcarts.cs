@@ -14,7 +14,7 @@ using static TrainTrackSpline;
 
 namespace Oxide.Plugins
 {
-    [Info("Automated Workcarts", "WhiteThunder", "0.20.0")]
+    [Info("Automated Workcarts", "WhiteThunder", "0.21.0")]
     [Description("Automates workcarts with NPC conductors.")]
     internal class AutomatedWorkcarts : CovalencePlugin
     {
@@ -555,9 +555,9 @@ namespace Oxide.Plugins
                 : TryAddTrainController(workcart);
         }
 
-        private void API_StopAutomatingWorkcart(TrainEngine workcart)
+        private void API_StopAutomatingWorkcart(TrainEngine workcart, bool immediate = false)
         {
-            RemoveTrainController(workcart);
+            RemoveTrainController(workcart, immediate);
         }
 
         private bool API_IsWorkcartAutomated(TrainEngine workcart)
@@ -736,7 +736,7 @@ namespace Oxide.Plugins
 
         private static bool AutomationWasBlocked(TrainEngine workcart)
         {
-            object hookResult = Interface.CallHook("OnWorkcartAutomate", workcart);
+            object hookResult = Interface.CallHook("OnWorkcartAutomationStart", workcart);
             if (hookResult is bool && (bool)hookResult == false)
                 return true;
 
@@ -766,19 +766,24 @@ namespace Oxide.Plugins
 
             workcart.SetHealth(workcart.MaxHealth());
             _pluginInstance._workcartManager.Register(workcart);
-            Interface.CallHook("OnWorkcartAutomated", workcart);
+            Interface.CallHook("OnWorkcartAutomationStarted", workcart);
 
             return true;
         }
 
-        private static void RemoveTrainController(TrainEngine workcart)
+        private static void RemoveTrainController(TrainEngine workcart, bool immediate = false)
         {
             var controller = workcart.GetComponent<TrainController>();
             if (controller == null)
                 return;
 
-            UnityEngine.Object.Destroy(controller);
+            if (immediate)
+                UnityEngine.Object.DestroyImmediate(controller);
+            else
+                UnityEngine.Object.Destroy(controller);
+
             _pluginInstance._workcartManager.Unregister(workcart);
+            Interface.CallHook("OnWorkcartAutomationStopped", workcart);
         }
 
         private static string GetShortName(string prefabName)
@@ -1815,11 +1820,7 @@ namespace Oxide.Plugins
                     if (workcart == null)
                         continue;
 
-                    var component = workcart.GetComponent<TrainController>();
-                    if (component == null)
-                        continue;
-
-                    DestroyImmediate(component);
+                    RemoveTrainController(workcart, immediate: true);
                 }
             }
 

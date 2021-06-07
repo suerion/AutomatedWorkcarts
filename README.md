@@ -257,10 +257,10 @@ Automates the specified workcart. Returns `true` if successful, or if already au
 #### API_StopAutomatingWorkcart
 
 ```csharp
-void API_StopAutomatingWorkcart(TrainEngine workcart)
+void API_StopAutomatingWorkcart(TrainEngine workcart, bool immediate = false)
 ```
 
-Stops automating the specified workcart.
+Stops automating the specified workcart. Destroys in the same frame if `immediate` is `true`.
 
 #### API_IsWorkcartAutomated
 
@@ -280,21 +280,30 @@ Returns an array of all workcarts that are currently automated.
 
 ## Developer Hooks
 
-#### OnWorkcartAutomate
+#### OnWorkcartAutomationStart
 
 ```csharp
-bool? OnWorkcartAutomate(TrainEngine workcart)
+bool? OnWorkcartAutomationStart(TrainEngine workcart)
 ```
 
-- Called when a workcart is about to be automated
-- Returning `false` will prevent the workcart from being automated
+- Called when a workcart is about to become automated
+- Returning `false` will prevent the workcart from becoming automated
 - Returning `null` will result in the default behavior
 
-#### OnWorkcartAutomated
+#### OnWorkcartAutomationStarted
 
 ```csharp
-void OnWorkcartAutomated(TrainEngine workcart)
+void OnWorkcartAutomationStarted(TrainEngine workcart)
 ```
 
-- Called after a workcart has been automated
+- Called after a workcart has become automated
+- No return behavior
+
+#### OnWorkcartAutomationStopped
+
+```csharp
+void OnWorkcartAutomationStopped(TrainEngine workcart)
+```
+
+- Called after a workcart has stopped being automated
 - No return behavior
