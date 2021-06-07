@@ -3,6 +3,7 @@
 - Automates workcarts with NPC conductors
 - Uses configurable triggers to instruct conductors how to navigate
 - Provides default triggers for underground tunnels
+- Optional map markers for automated workcarts
 
 ## How it works
 
@@ -42,16 +43,11 @@ To see the triggers visually, grant the `automatedworkcarts.managetriggers` perm
 ## Permission
 
 - `automatedworkcarts.toggle` -- Allows usage of the `aw.toggle` command.
-- `automatedworkcarts.viewmarkers` -- Allows usage of the `aw.showmarkers` command.
 - `automatedworkcarts.managetriggers` -- Allows viewing, adding, updating and removing triggers.
 
 ## Commands
 
 - `aw.toggle` -- Toggles automation for the workcart you are looking at.
-- `aw.showmarkers <seconds>` -- Temporarily creates map markers for all currently automated workcarts (using delivery drone icons). Defaults to 60 seconds.
-  - The duration defaults to 60 seconds unless otherwise specified.
-  - Only the players that run this command can see the markers.
-  - Note: This requires enabling global broadcast on all workcarts for the duration, which can impact client and server FPS, so use this feature sparingly.
 - `aw.addtrigger <option1> <option2> ...` -- Adds a trigger to the track position where you are aiming, with the specified options. Automated workcarts that pass through the trigger will be affected by the trigger's options.
   - Speed options: `Hi` | `Med` | `Lo` | `Zero`.
   - Direction options: `Fwd` | `Rev` | `Invert`.
@@ -94,8 +90,19 @@ The following command aliases are also available:
 
 ## Configuration
 
+Default configuration:
+
 ```json
 {
+  "DefaultSpeed": "Fwd_Hi",
+  "DefaultTrackSelection": "Left",
+  "BulldozeOffendingWorkcarts": false,
+  "EnableMapTriggers": true,
+  "EnableTunnelTriggers": {
+    "TrainStation": false,
+    "BarricadeTunnel": false,
+    "LootTunnel": false
+  },
   "MaxConductors": -1,
   "ConductorOutfit": [
     {
@@ -111,20 +118,19 @@ The following command aliases are also available:
       "Skin": 0
     }
   ],
-  "DefaultSpeed": "Fwd_Hi",
-  "DefaultTrackSelection": "Left",
-  "DestroyOffendingWorkcarts": false,
-  "EnableMapTriggers": true,
-  "EnableTunnelTriggers": {
-    "TrainStation": false,
-    "BarricadeTunnel": false,
-    "LootTunnel": false
+  "ColoredMapMarker": {
+    "Enabled": false,
+    "Color": "#0099ff",
+    "Alpha": 1.0,
+    "Radius": 0.05
+  },
+  "VendingMapMarker": {
+    "Enabled": false,
+    "Name": "Automated Workcart"
   }
 }
 ```
 
-- `MaxConductors` -- The maximum number of conductors allowed on the map at once. Set to `-1` for no limit.
-- `ConductorOutfit` -- Item to use for the outfit of each conductor.
 - `DefaultSpeed` -- Default speed to use when a workcart starts being automated.
   - Allowed values: `"Rev_Hi"` | `"Rev_Med"` | `"Rev_Lo"` | `"Zero"` | `"Fwd_Lo"` | `"Fwd_Med"` | `"Fwd_Hi"`.
   - This value is ignored if the workcart is on a trigger that specifies speed.
@@ -138,6 +144,16 @@ The following command aliases are also available:
   - `TrainStation` (`true` or `false`) -- Self-explanatory.
   - `BarricadeTunnel` (`true` or `false`) -- This affects straight tunnels that spawn NPCs, loot, as well as barricades on the tracks.
   - `LootTunnel` (`true` or `false`) -- This affects straight tunnels that spawn NPCs and loot.
+- `MaxConductors` -- The maximum number of conductors allowed on the map at once. Set to `-1` for no limit.
+- `ConductorOutfit` -- Items to use for the outfit of each conductor.
+- `ColoredMapMarker`
+  - `Enabled` (`true` or `false`) -- Whether to enable colored map markers.
+  - `Color` -- The marker color, using the hexadecimal format popularized by HTML.
+  - `Alpha` (`0.0` - `1.0`) -- The marker transparency (`0.0` is invisible, `1.0` is fully opaque).
+  - `Radius` -- The marker radius.
+- `VendingMapMarker`
+  - `Enabled` (`true` or `false`) -- Whether to enable vending machine map markers.
+  - `Name` -- The name to display when hoving the mouse over the marker.
 
 ## FAQ
 
@@ -194,7 +210,6 @@ The best practice is to have separate, independent tracks for player vs automate
   "Error.NoAutomatedWorkcarts": "Error: There are no automated workcarts.",
   "Toggle.Success.On": "That workcart is now automated.",
   "Toggle.Success.Off": "That workcart is no longer automated.",
-  "ShowMarkers.Success": "Showing map markers of all <color=#fd4>{0}</color> automated workcarts for <color=#fd4>{1}</color>. Only you can see them.",
   "ShowTriggers.Success": "Showing all triggers for <color=#fd4>{0}</color>.",
   "AddTrigger.Syntax": "Syntax: <color=#fd4>{0} <option1> <option2> ...</color>\n{1}",
   "AddTrigger.Success": "Successfully added trigger #<color=#fd4>{0}{1}</color>.",

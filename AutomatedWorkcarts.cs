@@ -14,7 +14,7 @@ using static TrainTrackSpline;
 
 namespace Oxide.Plugins
 {
-    [Info("Automated Workcarts", "WhiteThunder", "0.16.0")]
+    [Info("Automated Workcarts", "WhiteThunder", "0.17.0")]
     [Description("Automates workcarts with NPC conductors.")]
     internal class AutomatedWorkcarts : CovalencePlugin
     {
@@ -34,7 +34,8 @@ namespace Oxide.Plugins
         private const string PermissionViewMarkers = "automatedworkcarts.viewmarkers";
 
         private const string ShopkeeperPrefab = "assets/prefabs/npc/bandit/shopkeepers/bandit_shopkeeper.prefab";
-        private const string DeliveryDroneMarkerPrefab = "assets/prefabs/misc/marketplace/deliverydronemarker.prefab";
+        private const string GenericMapMarkerPrefab = "assets/prefabs/tools/map/genericradiusmarker.prefab";
+        private const string VendingMapMarkerPrefab = "assets/prefabs/deployable/vendingmachine/vending_mapmarker.prefab";
 
         private WorkcartTriggerManager _triggerManager = new WorkcartTriggerManager();
         private AutomatedWorkcartManager _workcartManager = new AutomatedWorkcartManager();
@@ -267,28 +268,6 @@ namespace Oxide.Plugins
         #endregion
 
         #region Commands
-
-        [Command("aw.showmarkers")]
-        private void CommandShowMarkers(IPlayer player, string cmd, string[] args)
-        {
-            if (player.IsServer
-                || !VerifyPermission(player, PermissionViewMarkers))
-                return;
-
-            if (_workcartManager.NumWorkcarts == 0)
-            {
-                ReplyToPlayer(player, Lang.ErrorNoAutomatedWorkcarts);
-                return;
-            }
-
-            float duration;
-            if (args.Length == 0 || !float.TryParse(args[0], out duration))
-                duration = 60;
-
-            var basePlayer = player.Object as BasePlayer;
-            _workcartManager.ShowMarkersToPlayer(basePlayer.userID, duration);
-            ReplyToPlayer(player, Lang.ShowMarkersSuccess, _workcartManager.NumWorkcarts, FormatTime(duration));
-        }
 
         [Command("aw.toggle")]
         private void CommandAutomateWorkcart(IPlayer player, string cmd, string[] args)
@@ -946,22 +925,6 @@ namespace Oxide.Plugins
         private static string FormatTime(double seconds) =>
             TimeSpan.FromSeconds(seconds).ToString("g");
 
-        private static void EnableGlobalBroadcastFixed(BaseEntity entity, bool wants)
-        {
-            entity.globalBroadcast = wants;
-
-            if (wants)
-            {
-                entity.UpdateNetworkGroup();
-            }
-            else if (entity.net?.group?.ID == 0)
-            {
-                // Fix vanilla bug that prevents leaving the global network group.
-                var group = entity.net.sv.visibility.GetGroup(entity.transform.position);
-                entity.net.SwitchGroup(group);
-            }
-        }
-
         #endregion
 
         #region Dungeon Cells
@@ -1247,7 +1210,7 @@ namespace Oxide.Plugins
 
                 _tunnelType = AutomatedWorkcarts.TunnelType.Unsupported;
 
-                if (!string.IsNullOrEmpty(TunnelType))
+                if (!string.IsNullOrWhiteSpace(TunnelType))
                 {
                     TunnelType tunnelType;
                     if (Enum.TryParse<TunnelType>(TunnelType, out tunnelType))
@@ -1761,21 +1724,6 @@ namespace Oxide.Plugins
                 _automatedWorkcarts.Remove(workcart);
                 _pluginData.RemoveWorkcartId(workcart.net.ID);
             }
-
-            public void ShowMarkersToPlayer(ulong userId, float duration)
-            {
-                foreach (var workcart in _automatedWorkcarts)
-                {
-                    if (workcart == null)
-                        continue;
-
-                    var controller = workcart.GetComponent<TrainController>();
-                    if (controller == null)
-                        continue;
-
-                    controller.AddMakerForPlayer(userId, duration);
-                }
-            }
         }
 
         #endregion
@@ -1804,11 +1752,13 @@ namespace Oxide.Plugins
 
             public NPCShopKeeper Conductor { get; private set; }
             private TrainEngine _workcart;
+            private Transform _transform;
+            private MapMarkerGenericRadius _genericMarker;
+            private VendingMachineMapMarker _vendingMarker;
+
             private EngineSpeeds _targetVelocity;
             private EngineSpeeds _departureVelocity;
             private float _stopDuration;
-
-            private Dictionary<ulong, Action> _mapMarkerCleanupFunctions = new Dictionary<ulong, Action>();
 
             private void Awake()
             {
@@ -1816,7 +1766,10 @@ namespace Oxide.Plugins
                 if (_workcart == null)
                     return;
 
+                _transform = _workcart.transform;
+
                 AddConductor();
+                MaybeAddMapMarkers();
                 EnableUnlimitedFuel();
                 StartTrain(_pluginConfig.GetDefaultSpeed());
             }
@@ -1960,7 +1913,7 @@ namespace Oxide.Plugins
 
             private bool IsNearSpeed(EngineSpeeds desiredThrottle, float leeway = 0.1f)
             {
-                var currentSpeed = Vector3.Dot(_workcart.transform.forward, _workcart.GetLocalVelocity());
+                var currentSpeed = Vector3.Dot(_transform.forward, _workcart.GetLocalVelocity());
                 var desiredSpeed = _workcart.maxSpeed * GetThrottleFraction(desiredThrottle);
 
                 // If desiring a negative speed, current speed is expected to increase (e.g., -10 to -5).
@@ -1975,7 +1928,7 @@ namespace Oxide.Plugins
             {
                 _workcart.DismountAllPlayers();
 
-                Conductor = GameManager.server.CreateEntity(ShopkeeperPrefab, _workcart.transform.position) as NPCShopKeeper;
+                Conductor = GameManager.server.CreateEntity(ShopkeeperPrefab, _transform.position) as NPCShopKeeper;
                 if (Conductor == null)
                     return;
 
@@ -2002,6 +1955,59 @@ namespace Oxide.Plugins
                         return mountPoint.mountable;
                 }
                 return null;
+            }
+
+            private void MaybeAddMapMarkers()
+            {
+                if (_pluginConfig.GenericMapMarker.Enabled)
+                {
+                    _genericMarker = GameManager.server.CreateEntity(GenericMapMarkerPrefab, _transform.position) as MapMarkerGenericRadius;
+                    if (_genericMarker != null)
+                    {
+                        _genericMarker.EnableSaving(false);
+                        _genericMarker.EnableGlobalBroadcast(true);
+                        _genericMarker.syncPosition = false;
+                        _genericMarker.Spawn();
+
+                        _genericMarker.color1 = _pluginConfig.GenericMapMarker.GetColor();
+                        _genericMarker.color2 = _genericMarker.color1;
+                        _genericMarker.alpha = _pluginConfig.GenericMapMarker.Alpha;
+                        _genericMarker.radius = _pluginConfig.GenericMapMarker.Radius;
+                        _genericMarker.SendUpdate();
+                    }
+                }
+
+                if (_pluginConfig.VendingMapMarker.Enabled)
+                {
+                    _vendingMarker = GameManager.server.CreateEntity(VendingMapMarkerPrefab, _transform.position) as VendingMachineMapMarker;
+                    if (_vendingMarker != null)
+                    {
+                        _vendingMarker.markerShopName = _pluginConfig.VendingMapMarker.Name;
+
+                        _vendingMarker.EnableSaving(false);
+                        _vendingMarker.EnableGlobalBroadcast(true);
+                        _vendingMarker.syncPosition = false;
+                        _vendingMarker.Spawn();
+                    }
+                }
+
+                // Periodically update the marker positions since they aren't parented to the workcarts.
+                // We could them to the workcarts, but then they would only appear to players in network radius,
+                // and enabling global broadcast for lots of workcarts would significantly reduce client FPS.
+                InvokeRandomized(() =>
+                {
+                    if (_genericMarker != null)
+                    {
+                        _genericMarker.transform.position = _transform.position;
+                        _genericMarker.SendNetworkUpdate_Position();
+                    }
+
+                    if (_vendingMarker != null)
+                    {
+                        _vendingMarker.transform.position = _transform.position;
+                        _vendingMarker.SendNetworkUpdate_Position();
+                    }
+                }, 0, 1, 0.25f);
             }
 
             private void StartTrain(EngineSpeeds initialSpeed)
@@ -2041,58 +2047,13 @@ namespace Oxide.Plugins
                 if (Conductor != null)
                     Conductor.Kill();
 
+                if (_genericMarker != null)
+                    _genericMarker.Kill();
+
+                if (_vendingMarker != null)
+                    _vendingMarker.Kill();
+
                 DisableUnlimitedFuel();
-
-                foreach (var cleanupFunction in _mapMarkerCleanupFunctions.Values.ToArray())
-                    cleanupFunction();
-
-                if (_workcart.globalBroadcast)
-                    EnableGlobalBroadcastFixed(_workcart, false);
-            }
-
-            public bool HasMarkers() => !_mapMarkerCleanupFunctions.IsEmpty();
-
-            private MapMarkerDeliveryDrone AddDroneMapMarker(ulong userId)
-            {
-                var mapMarker = GameManager.server.CreateEntity(DeliveryDroneMarkerPrefab) as MapMarkerDeliveryDrone;
-                if (mapMarker == null)
-                    return null;
-
-                mapMarker.EnableSaving(false);
-                mapMarker.OwnerID = userId;
-                mapMarker.SetParent(_workcart);
-                mapMarker.Spawn();
-
-                return mapMarker;
-            }
-
-            public void AddMakerForPlayer(ulong userId, float duration)
-            {
-                Action cleanupFunction;
-                if (_mapMarkerCleanupFunctions.TryGetValue(userId, out cleanupFunction))
-                {
-                    CancelInvoke(cleanupFunction);
-                    Invoke(cleanupFunction, duration);
-                    return;
-                }
-
-                var marker = AddDroneMapMarker(userId);
-                cleanupFunction = () =>
-                {
-                    if (!marker.IsDestroyed)
-                        marker.Kill();
-
-                    _mapMarkerCleanupFunctions.Remove(userId);
-
-                    if (_workcart.globalBroadcast && _mapMarkerCleanupFunctions.IsEmpty())
-                        EnableGlobalBroadcastFixed(_workcart, false);
-                };
-
-                _mapMarkerCleanupFunctions.Add(userId, cleanupFunction);
-                Invoke(cleanupFunction, duration);
-
-                if (!_workcart.globalBroadcast)
-                    _workcart.EnableGlobalBroadcast(true);
             }
         }
 
@@ -2354,6 +2315,56 @@ namespace Oxide.Plugins
             }
         }
 
+        private class GenericMarkerOptions
+        {
+            [JsonProperty("Enabled")]
+            public bool Enabled = false;
+
+            [JsonProperty("Color")]
+            public string Color = "#00ff00";
+
+            [JsonProperty("Alpha")]
+            public float Alpha = 1;
+
+            [JsonProperty("Radius")]
+            public float Radius = 0.05f;
+
+            private Color? _color;
+            public Color GetColor()
+            {
+                if (_color == null)
+                    _color = ParseColor(Color, UnityEngine.Color.black);
+
+                return (Color)_color;
+            }
+
+            private static Color ParseColor(string colorString, Color defaultColor)
+            {
+                Color color;
+                return ColorUtility.TryParseHtmlString(colorString, out color)
+                    ? color
+                    : defaultColor;
+            }
+        }
+
+        private class VendingMarkerOptions
+        {
+            [JsonProperty("Enabled")]
+            public bool Enabled = false;
+
+            [JsonProperty("Name")]
+            public string Name = "Automated Workcart";
+        }
+
+        private class CustomMarkerOptions
+        {
+            [JsonProperty("Enabled")]
+            public bool Enabled = false;
+
+            [JsonProperty("Prefab")]
+            public string Prefab = "assets/prefabs/tools/map/ch47marker.prefab";
+        }
+
         private class Configuration : SerializableConfiguration
         {
             [JsonProperty("DefaultSpeed")]
@@ -2386,6 +2397,12 @@ namespace Oxide.Plugins
                 new ItemInfo { ShortName = "sunglasses03chrome" },
                 new ItemInfo { ShortName = "hat.boonie" },
             };
+
+            [JsonProperty("ColoredMapMarker")]
+            public GenericMarkerOptions GenericMapMarker = new GenericMarkerOptions();
+
+            [JsonProperty("VendingMapMarker")]
+            public VendingMarkerOptions VendingMapMarker = new VendingMarkerOptions();
 
             public bool IsTunnelTypeEnabled(TunnelType tunnelType)
             {
@@ -2601,7 +2618,6 @@ namespace Oxide.Plugins
 
             public const string ToggleOnSuccess = "Toggle.Success.On";
             public const string ToggleOffSuccess = "Toggle.Success.Off";
-            public const string ShowMarkersSuccess = "ShowMarkers.Success";
             public const string ShowTriggersSuccess = "ShowTriggers.Success";
 
             public const string AddTriggerSyntax = "AddTrigger.Syntax";
@@ -2656,7 +2672,6 @@ namespace Oxide.Plugins
 
                 [Lang.ToggleOnSuccess] = "That workcart is now automated.",
                 [Lang.ToggleOffSuccess] = "That workcart is no longer automated.",
-                [Lang.ShowMarkersSuccess] = "Showing map markers of all <color=#fd4>{0}</color> automated workcarts for <color=#fd4>{1}</color>. Only you can see them.",
                 [Lang.ShowTriggersSuccess] = "Showing all triggers for <color=#fd4>{0}</color>.",
 
                 [Lang.AddTriggerSyntax] = "Syntax: <color=#fd4>{0} <option1> <option2> ...</color>\n{1}",
