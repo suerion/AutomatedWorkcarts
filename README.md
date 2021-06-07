@@ -246,6 +246,22 @@ The best practice is to have separate, independent tracks for player vs automate
 
 ## Developer API
 
+#### API_AutomateWorkcart
+
+```csharp
+bool API_AutomateWorkcart(TrainEngine workcart)
+```
+
+Automates the specified workcart. Returns `true` if successful, or if already automated. Returns `false` if it was blocked by another plugin.
+
+#### API_StopAutomatingWorkcart
+
+```csharp
+void API_StopAutomatingWorkcart(TrainEngine workcart)
+```
+
+Stops automating the specified workcart.
+
 #### API_IsWorkcartAutomated
 
 ```csharp

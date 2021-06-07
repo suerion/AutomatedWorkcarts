@@ -14,7 +14,7 @@ using static TrainTrackSpline;
 
 namespace Oxide.Plugins
 {
-    [Info("Automated Workcarts", "WhiteThunder", "0.19.1")]
+    [Info("Automated Workcarts", "WhiteThunder", "0.20.0")]
     [Description("Automates workcarts with NPC conductors.")]
     internal class AutomatedWorkcarts : CovalencePlugin
     {
@@ -170,7 +170,6 @@ namespace Oxide.Plugins
                     && CanHaveMoreConductors())
                 {
                     TryAddTrainController(workcart, trigger.TriggerInfo);
-                    _pluginData.AddWorkcartId(workcart.net.ID);
                 }
 
                 return;
@@ -315,17 +314,13 @@ namespace Oxide.Plugins
                 }
 
                 if (TryAddTrainController(workcart))
-                {
-                    _pluginData.AddWorkcartId(workcart.net.ID);
                     player.Reply(GetMessage(player, Lang.ToggleOnSuccess, _workcartManager.NumWorkcarts) + " " + GetConductorCountMessage(player));
-                }
                 else
                     ReplyToPlayer(player, Lang.ErrorAutomateBlocked);
             }
             else
             {
-                UnityEngine.Object.Destroy(trainController);
-                _workcartManager.Unregister(workcart);
+                RemoveTrainController(workcart);
                 player.Reply(GetMessage(player, Lang.ToggleOffSuccess) + " " + GetConductorCountMessage(player));
             }
         }
@@ -553,9 +548,27 @@ namespace Oxide.Plugins
 
         #region API
 
-        private bool API_IsWorkcartAutomated(TrainEngine workcart) => IsWorkcartAutomated(workcart);
+        private bool API_AutomateWorkcart(TrainEngine workcart)
+        {
+            return IsWorkcartAutomated(workcart)
+                ? true
+                : TryAddTrainController(workcart);
+        }
 
-        private TrainEngine[] API_GetAutomatedWorkcarts() => _workcartManager.GetWorkcarts();
+        private void API_StopAutomatingWorkcart(TrainEngine workcart)
+        {
+            RemoveTrainController(workcart);
+        }
+
+        private bool API_IsWorkcartAutomated(TrainEngine workcart)
+        {
+            return IsWorkcartAutomated(workcart);
+        }
+
+        private TrainEngine[] API_GetAutomatedWorkcarts()
+        {
+            return _workcartManager.GetWorkcarts();
+        }
 
         #endregion
 
@@ -756,6 +769,16 @@ namespace Oxide.Plugins
             Interface.CallHook("OnWorkcartAutomated", workcart);
 
             return true;
+        }
+
+        private static void RemoveTrainController(TrainEngine workcart)
+        {
+            var controller = workcart.GetComponent<TrainController>();
+            if (controller == null)
+                return;
+
+            UnityEngine.Object.Destroy(controller);
+            _pluginInstance._workcartManager.Unregister(workcart);
         }
 
         private static string GetShortName(string prefabName)
