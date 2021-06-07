@@ -14,7 +14,7 @@ using static TrainTrackSpline;
 
 namespace Oxide.Plugins
 {
-    [Info("Automated Workcarts", "WhiteThunder", "0.17.0")]
+    [Info("Automated Workcarts", "WhiteThunder", "0.18.0")]
     [Description("Automates workcarts with NPC conductors.")]
     internal class AutomatedWorkcarts : CovalencePlugin
     {
@@ -540,6 +540,8 @@ namespace Oxide.Plugins
         #region API
 
         private bool API_IsWorkcartAutomated(TrainEngine workcart) => IsWorkcartAutomated(workcart);
+
+        private TrainEngine[] API_GetAutomatedWorkcarts() => _workcartManager.GetWorkcarts();
 
         #endregion
 
@@ -1712,6 +1714,7 @@ namespace Oxide.Plugins
             private List<TrainEngine> _automatedWorkcarts = new List<TrainEngine>();
 
             public int NumWorkcarts => _automatedWorkcarts.Count;
+            public TrainEngine[] GetWorkcarts() => _automatedWorkcarts.ToArray();
 
             public void Register(TrainEngine workcart)
             {

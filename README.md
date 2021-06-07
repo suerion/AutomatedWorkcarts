@@ -242,9 +242,21 @@ The best practice is to have separate, independent tracks for player vs automate
 
 ## Developer API
 
+#### API_IsWorkcartAutomated
+
 ```csharp
 bool API_IsWorkcartAutomated(TrainEngine workcart)
 ```
+
+Returns `true` if the given workcart is automated, else `false`.
+
+#### API_GetAutomatedWorkcarts
+
+```csharp
+TrainEngine[] API_GetAutomatedWorkcarts()
+```
+
+Returns an array of all workcarts that are currently automated.
 
 ## Developer Hooks
 
