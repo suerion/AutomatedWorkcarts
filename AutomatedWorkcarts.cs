@@ -14,7 +14,7 @@ using static TrainTrackSpline;
 
 namespace Oxide.Plugins
 {
-    [Info("Automated Workcarts", "WhiteThunder", "0.21.0")]
+    [Info("Automated Workcarts", "WhiteThunder", "0.22.0")]
     [Description("Automates workcarts with NPC conductors.")]
     internal class AutomatedWorkcarts : CovalencePlugin
     {
@@ -323,6 +323,17 @@ namespace Oxide.Plugins
                 RemoveTrainController(workcart);
                 player.Reply(GetMessage(player, Lang.ToggleOffSuccess) + " " + GetConductorCountMessage(player));
             }
+        }
+
+        [Command("aw.resetall")]
+        private void CommandResetWorkcarts(IPlayer player, string cmd, string[] args)
+        {
+            if (!player.IsServer
+                && !VerifyPermission(player, PermissionToggle))
+                return;
+
+            var numReset = _workcartManager.ResetAll();
+            ReplyToPlayer(player, Lang.ResetAllSuccess, numReset);
         }
 
         [Command("aw.addtrigger", "awt.add")]
@@ -1788,6 +1799,16 @@ namespace Oxide.Plugins
                 _pluginData.RemoveWorkcartId(workcart.net.ID);
             }
 
+            public int ResetAll()
+            {
+                var numWorkcarts = NumWorkcarts;
+
+                foreach (var workcart in _automatedWorkcarts.ToArray())
+                    RemoveTrainController(workcart);
+
+                return numWorkcarts;
+            }
+
             public void ResendAllGenericMarkers()
             {
                 foreach (var workcart in _automatedWorkcarts)
@@ -2711,6 +2732,7 @@ namespace Oxide.Plugins
 
             public const string ToggleOnSuccess = "Toggle.Success.On";
             public const string ToggleOffSuccess = "Toggle.Success.Off";
+            public const string ResetAllSuccess = "ResetAll.Success";
             public const string ShowTriggersSuccess = "ShowTriggers.Success";
 
             public const string AddTriggerSyntax = "AddTrigger.Syntax";
@@ -2765,6 +2787,7 @@ namespace Oxide.Plugins
 
                 [Lang.ToggleOnSuccess] = "That workcart is now automated.",
                 [Lang.ToggleOffSuccess] = "That workcart is no longer automated.",
+                [Lang.ResetAllSuccess] = "All {0} conductors have been removed.",
                 [Lang.ShowTriggersSuccess] = "Showing all triggers for <color=#fd4>{0}</color>.",
 
                 [Lang.AddTriggerSyntax] = "Syntax: <color=#fd4>{0} <option1> <option2> ...</color>\n{1}",

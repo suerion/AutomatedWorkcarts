@@ -42,12 +42,13 @@ To see the triggers visually, grant the `automatedworkcarts.managetriggers` perm
 
 ## Permission
 
-- `automatedworkcarts.toggle` -- Allows usage of the `aw.toggle` command.
+- `automatedworkcarts.toggle` -- Allows usage of the `aw.toggle` and `aw.resetall` commands.
 - `automatedworkcarts.managetriggers` -- Allows viewing, adding, updating and removing triggers.
 
 ## Commands
 
 - `aw.toggle` -- Toggles automation for the workcart you are looking at.
+- `aw.resetall` -- Resets all automated workcarts so they no longer have a conductor.
 - `aw.addtrigger <option1> <option2> ...` -- Adds a trigger to the track position where you are aiming, with the specified options. Automated workcarts that pass through the trigger will be affected by the trigger's options.
   - Speed options: `Hi` | `Med` | `Lo` | `Zero`.
   - Direction options: `Fwd` | `Rev` | `Invert`.
@@ -214,6 +215,7 @@ The best practice is to have separate, independent tracks for player vs automate
   "Error.NoAutomatedWorkcarts": "Error: There are no automated workcarts.",
   "Toggle.Success.On": "That workcart is now automated.",
   "Toggle.Success.Off": "That workcart is no longer automated.",
+  "ResetAll.Success": "All {0} conductors have been removed.",
   "ShowTriggers.Success": "Showing all triggers for <color=#fd4>{0}</color>.",
   "AddTrigger.Syntax": "Syntax: <color=#fd4>{0} <option1> <option2> ...</color>\n{1}",
   "AddTrigger.Success": "Successfully added trigger #<color=#fd4>{0}{1}</color>.",
