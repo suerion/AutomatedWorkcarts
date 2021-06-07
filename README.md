@@ -18,9 +18,27 @@ Automating a workcart dismounts the current driver if present, and adds a conduc
 
 The main purpose of triggers, aside from determining which workcarts will be automated, is to instruct conductors how to navigate the tracks. Each trigger has several properties, including direction (e., `Fwd`, `Rev`, `Invert`), speed (e.g, `Hi`, `Med`, `Lo`, `Zero`), track selection (e.g., `Default`, `Left`, `Right`), stop duration (in seconds), and departure speed/direction. When a workcart passes through a trigger while a conductor is present, the workcart's instructions will change based on the trigger options. For example, if a workcart is currently following the instructions `Fwd` + `Hi` + `Left`, and then passes through a trigger that specifies only track selection `Right`, the workcart instructions will change to `Fwd` + `Hi` + `Right`, causing the workcart to turn right at every intersection it comes to, until it passes through a trigger that instructs otherwise.
 
+### Trigger types
+
+#### Map specific triggers
+
+- Can be placed anywhere on train tracks, even in underground tunnels.
+- Only apply to the map they were placed on.
+- Enabled via the `EnableMapTriggers` configuration option.
+- Added with the `aw.addtrigger` or `awt.add` command.
+- Saved in data file: `oxide/data/AutomatedWorkcarts/MAP_NAME.json`.
+
+#### Tunnel triggers
+
+- Can be placed only in the vanilla train tunnels (usually underground).
+- Automatically replicate at all tunnels of the same type.
+- Enabled via the `EnableTunnelTriggers` -> `*` options.
+- Added with the `aw.addtunneltrigger` or `awt.addt` command.
+- Saved in data file `oxide/data/AutomatedWorkcarts/TunnelTriggers.json`.
+
 ## Getting started
 
-### Use case #1: Automate all underground workcarts
+### How to: Automate all underground workcarts
 
 1. Set `EnableTunnelTriggers` -> `TrainStation` to `true` in the plugin configuration.
 2. Reload the plugin.
@@ -29,7 +47,7 @@ All workcarts parked at their spawn locations will receive a conductor and start
 
 To see the triggers visually, grant the `automatedworkcarts.managetriggers` permission and run the `aw.showtriggers` command. For 60 seconds, this will show triggers at nearby tunnels. From here, you can add, update, move, and remove triggers to your liking. See the Commands section for how to manage triggers.
 
-### Use case #2: Automate aboveground workcarts
+### How to: Automate aboveground workcarts
 
 1. Carefully examine the tracks on your map to determine the route(s) you would like workcarts to take.
 2. Make sure `EnableMapTriggers` is set to `true` in the plugin configuration. This option is enabled by default if installing the plugin from scratch.
@@ -48,14 +66,14 @@ To see the triggers visually, grant the `automatedworkcarts.managetriggers` perm
 ## Commands
 
 - `aw.toggle` -- Toggles automation for the workcart you are looking at.
-- `aw.resetall` -- Resets all automated workcarts so they no longer have a conductor.
+- `aw.resetall` -- Resets all automated workcarts to normal. This removes all conductors.
 - `aw.addtrigger <option1> <option2> ...` -- Adds a trigger to the track position where you are aiming, with the specified options. Automated workcarts that pass through the trigger will be affected by the trigger's options.
   - Speed options: `Hi` | `Med` | `Lo` | `Zero`.
   - Direction options: `Fwd` | `Rev` | `Invert`.
   - Track selection options: `Default` | `Left` | `Right` | `Swap`.
   - Other options:
     - `Conductor` -- Adds a conductor to the workcart if not already present. Recommended to place on some or all workcart spawn locations, depending on how many workcarts you want to automate.
-      - Note: Owned workcarts cannot receive conductors.
+      - Note: Owned workcarts cannot receive conductors. Vanilla workcarts don't have owners, but most plugins that spawn vehicles for players will assign ownership.
     - `Brake` -- Instructs the workcart to brake until it reaches the designated speed. For example, if the workcart is going `Fwd_Hi` and enters a `Brake Med` trigger, it will temporarily go `Rev_Lo` until it slows down enough, then it will go `Fwd Med`.
   - Simple examples:
     - `aw.addtrigger Lo` -- Causes the workcart to move at `Lo` speed in its current direction. Exmaple: `Fwd_Hi` -> `Fwd_Lo`.
@@ -164,11 +182,11 @@ Default configuration:
 
 #### Will this plugin cause lag?
 
-This plugin's logic is optimized for performance and should not cause lag. However, workcarts moving along the tracks, regardless of whether a player or NPC is driving them, does incur some overhead. Therefore, having many automated workcarts may reduce server FPS. You can limit the number of automated workcarts with the `MaxConductors` configuration option.
+This plugin's logic is optimized for performance and should not cause lag. However, workcarts moving along the tracks does incur some overhead, regardless of whether a player or NPC is driving them. Therefore, having many automated workcarts may reduce server FPS. One way to address this is to limit the number of automated workcarts with the `MaxConductors` configuration option.
 
 #### Is this compatible with the Cargo Train Event plugin?
 
-Generally, yes. However, if all workcarts are automated, the Cargo Train Event will never start since it needs to select an idle workcart, so it's recommended to limit the number of automated workcarts using the `MaxConductors` configuration option, and/or by automating only specific workcarts based on their spawn location.
+Generally, yes. However, if all workcarts are automated, the Cargo Train Event will never start since it needs to select an idle workcart, so it's recommended to limit the number of automated workcarts using the `MaxConductors` configuration option, and/or to automate only specific workcarts based on their spawn location using triggers.
 
 #### Is it safe to allow player workcarts and automated workcarts on the same tracks?
 
@@ -191,7 +209,7 @@ The best practice is to have separate, independent tracks for player vs automate
   - Creating alternate tracks elsewhere provides opportunities for player-driven workcarts to avoid automated workcarts for various reasons.
   - Be intentional about which track you set as the "default", since that is likely the one that players will use.
 - Create completely independent tracks.
-  - For example, an outer cricle and an inner circle.
+  - For example, an outer circle and an inner circle.
   - This allows users of this plugin to selectively automate only specific areas, while allowing other areas to have player-driven workcarts, therefore avoiding interactions between the two.
 - For underground tunnels, ensure each "loop" has at least two train stations (or other stops). This works best with the plugin's default triggers since it allows players to travel anywhere with automated workcarts by switching directions at various stops.
 - If distributing your map, use this plugin to make default triggers for your customers, and distribute the json file with your map.
