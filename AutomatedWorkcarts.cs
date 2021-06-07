@@ -14,7 +14,7 @@ using static TrainTrackSpline;
 
 namespace Oxide.Plugins
 {
-    [Info("Automated Workcarts", "WhiteThunder", "0.19.0")]
+    [Info("Automated Workcarts", "WhiteThunder", "0.19.1")]
     [Description("Automates workcarts with NPC conductors.")]
     internal class AutomatedWorkcarts : CovalencePlugin
     {
@@ -53,6 +53,9 @@ namespace Oxide.Plugins
             permission.RegisterPermission(PermissionToggle, this);
             permission.RegisterPermission(PermissionManageTriggers, this);
             permission.RegisterPermission(PermissionViewMarkers, this);
+
+            if (!_pluginConfig.GenericMapMarker.Enabled)
+                Unsubscribe(nameof(OnPlayerConnected));
         }
 
         private void Unload()
@@ -106,6 +109,17 @@ namespace Oxide.Plugins
         private void OnNewSave()
         {
             _pluginData = StoredPluginData.Clear();
+        }
+
+        private void OnPlayerConnected(BasePlayer player)
+        {
+            if (player.IsReceivingSnapshot)
+            {
+                timer.Once(1f, () => OnPlayerConnected(player));
+                return;
+            }
+
+            _workcartManager.ResendAllGenericMarkers();
         }
 
         private void OnEntityKill(TrainEngine workcart)
@@ -1745,6 +1759,21 @@ namespace Oxide.Plugins
                 _automatedWorkcarts.Remove(workcart);
                 _pluginData.RemoveWorkcartId(workcart.net.ID);
             }
+
+            public void ResendAllGenericMarkers()
+            {
+                foreach (var workcart in _automatedWorkcarts)
+                {
+                    if (workcart == null)
+                        continue;
+
+                    var controller = workcart.GetComponent<TrainController>();
+                    if (controller == null)
+                        continue;
+
+                    controller.ResendGenericMarker();
+                }
+            }
         }
 
         #endregion
@@ -1839,6 +1868,12 @@ namespace Oxide.Plugins
                     BeginWaitingAtStop(triggerInfo.GetStopDuration());
             }
 
+            public void ResendGenericMarker()
+            {
+                if (_genericMarker != null)
+                    _genericMarker.SendUpdate();
+            }
+
             private void BeginWaitingAtStop(float stopDuration) => Invoke(DepartFromStop, stopDuration);
 
             public void DepartEarlyIfStoppedOrStopping()
@@ -1851,9 +1886,9 @@ namespace Oxide.Plugins
                 }
             }
 
-            public void DepartFromStop() => SetThrottle(_departureVelocity);
+            private void DepartFromStop() => SetThrottle(_departureVelocity);
             private bool IsWaitingAtStop => IsInvoking(DepartFromStop);
-            public void CancelWaitingAtStop() => CancelInvoke(DepartFromStop);
+            private void CancelWaitingAtStop() => CancelInvoke(DepartFromStop);
 
             public void SetThrottle(EngineSpeeds engineSpeed)
             {
