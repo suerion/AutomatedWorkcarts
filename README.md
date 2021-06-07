@@ -101,7 +101,9 @@ Default configuration:
   "EnableTunnelTriggers": {
     "TrainStation": false,
     "BarricadeTunnel": false,
-    "LootTunnel": false
+    "LootTunnel": false,
+    "Intersection": false,
+    "LargeIntersection": false,
   },
   "MaxConductors": -1,
   "ConductorOutfit": [
@@ -144,6 +146,8 @@ Default configuration:
   - `TrainStation` (`true` or `false`) -- Self-explanatory.
   - `BarricadeTunnel` (`true` or `false`) -- This affects straight tunnels that spawn NPCs, loot, as well as barricades on the tracks.
   - `LootTunnel` (`true` or `false`) -- This affects straight tunnels that spawn NPCs and loot.
+  - `Intersection` (`true` or `false`) -- This affects 3-way intersections.
+  - `LargeIntersection` (`true` or `false`) -- This affects 4-way intersections.
 - `MaxConductors` -- The maximum number of conductors allowed on the map at once. Set to `-1` for no limit.
 - `ConductorOutfit` -- Items to use for the outfit of each conductor.
 - `ColoredMapMarker`

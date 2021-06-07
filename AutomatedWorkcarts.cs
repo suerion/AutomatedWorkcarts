@@ -14,7 +14,7 @@ using static TrainTrackSpline;
 
 namespace Oxide.Plugins
 {
-    [Info("Automated Workcarts", "WhiteThunder", "0.18.0")]
+    [Info("Automated Workcarts", "WhiteThunder", "0.19.0")]
     [Description("Automates workcarts with NPC conductors.")]
     internal class AutomatedWorkcarts : CovalencePlugin
     {
@@ -997,15 +997,22 @@ namespace Oxide.Plugins
             ["station-we-2"] = Quaternion.Euler(0, 90, 0),
             ["station-we-3"] = Quaternion.Euler(0, -90, 0),
 
-            ["straight-sn-0"] = Quaternion.Euler(0, 0, 0),
-            ["straight-sn-1"] = Quaternion.Euler(0, 0, 0),
+            ["straight-sn-0"] = Quaternion.identity,
+            ["straight-sn-1"] = Quaternion.identity,
             ["straight-we-0"] = Quaternion.Euler(0, -90, 0),
             ["straight-we-1"] = Quaternion.Euler(0, 90, 0),
 
-            ["straight-sn-4"] = Quaternion.Euler(0, 0, 0),
+            ["straight-sn-4"] = Quaternion.identity,
             ["straight-sn-5"] = Quaternion.Euler(0, 180, 0),
             ["straight-we-4"] = Quaternion.Euler(0, -90, 0),
             ["straight-we-5"] = Quaternion.Euler(0, 90, 0),
+
+            ["intersection-n"] = Quaternion.identity,
+            ["intersection-e"] = Quaternion.Euler(0, 90, 0),
+            ["intersection-s"] = Quaternion.Euler(0, 180, 0),
+            ["intersection-w"] = Quaternion.Euler(0, -90, 0),
+
+            ["intersection"] = Quaternion.identity,
         };
 
         private static readonly Dictionary<string, TunnelType> DungeonCellTypes = new Dictionary<string, TunnelType>()
@@ -1019,15 +1026,22 @@ namespace Oxide.Plugins
             ["station-we-2"] = TunnelType.TrainStation,
             ["station-we-3"] = TunnelType.TrainStation,
 
+            ["straight-sn-0"] = TunnelType.LootTunnel,
+            ["straight-sn-1"] = TunnelType.LootTunnel,
+            ["straight-we-0"] = TunnelType.LootTunnel,
+            ["straight-we-1"] = TunnelType.LootTunnel,
+
             ["straight-sn-4"] = TunnelType.BarricadeTunnel,
             ["straight-sn-5"] = TunnelType.BarricadeTunnel,
             ["straight-we-4"] = TunnelType.BarricadeTunnel,
             ["straight-we-5"] = TunnelType.BarricadeTunnel,
 
-            ["straight-sn-0"] = TunnelType.LootTunnel,
-            ["straight-sn-1"] = TunnelType.LootTunnel,
-            ["straight-we-0"] = TunnelType.LootTunnel,
-            ["straight-we-1"] = TunnelType.LootTunnel,
+            ["intersection-n"] = TunnelType.Intersection,
+            ["intersection-e"] = TunnelType.Intersection,
+            ["intersection-s"] = TunnelType.Intersection,
+            ["intersection-w"] = TunnelType.Intersection,
+
+            ["intersection"] = TunnelType.LargeIntersection,
         };
 
         private static readonly Dictionary<TunnelType, Vector3> DungeonCellDimensions = new Dictionary<TunnelType, Vector3>()
@@ -1035,6 +1049,8 @@ namespace Oxide.Plugins
             [TunnelType.TrainStation] = new Vector3(16.5f, 8.5f, 216),
             [TunnelType.BarricadeTunnel] = new Vector3(16.5f, 8.5f, 216),
             [TunnelType.LootTunnel] = new Vector3(16.5f, 8.5f, 216),
+            [TunnelType.Intersection] = new Vector3(216, 8.5f, 216),
+            [TunnelType.LargeIntersection] = new Vector3(216, 8.5f, 216),
         };
 
         // Don't rename these since the names are persisted in data files.
@@ -1043,6 +1059,8 @@ namespace Oxide.Plugins
             TrainStation,
             BarricadeTunnel,
             LootTunnel,
+            Intersection,
+            LargeIntersection,
             Unsupported
         }
 
@@ -2282,6 +2300,17 @@ namespace Oxide.Plugins
                             StopDuration = quickStopDuration,
                             DepartureSpeed = WorkcartSpeed.Hi.ToString(),
                         },
+
+                        new WorkcartTriggerInfo
+                        {
+                            Id = 11,
+                            Position = new Vector3(35, triggerHeight, -3.0f),
+                            TunnelType = TunnelType.Intersection.ToString(),
+                            Brake = true,
+                            Speed = WorkcartSpeed.Zero.ToString(),
+                            StopDuration = quickStopDuration,
+                            DepartureSpeed = WorkcartSpeed.Hi.ToString(),
+                        }
                     }
                 };
             }
@@ -2388,6 +2417,8 @@ namespace Oxide.Plugins
                 [TunnelType.TrainStation.ToString()] = false,
                 [TunnelType.BarricadeTunnel.ToString()] = false,
                 [TunnelType.LootTunnel.ToString()] = false,
+                [TunnelType.Intersection.ToString()] = false,
+                [TunnelType.LargeIntersection.ToString()] = false,
             };
 
             [JsonProperty("MaxConductors")]
