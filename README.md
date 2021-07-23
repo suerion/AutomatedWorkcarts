@@ -182,6 +182,10 @@ Default configuration:
 
 ## FAQ
 
+#### How can I get workcarts to spawn on custom maps?
+
+Use a free plugin called Workcart Spawner from another website (not allowed to post a link here).
+
 #### Will this plugin cause lag?
 
 This plugin's logic is optimized for performance and should not cause lag. However, workcarts moving along the tracks does incur some overhead, regardless of whether a player or NPC is driving them. Therefore, having many automated workcarts may reduce server FPS. One way to address this is to limit the number of automated workcarts with the `MaxConductors` configuration option.
