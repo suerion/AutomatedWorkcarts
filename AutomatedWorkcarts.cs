@@ -1097,7 +1097,7 @@ namespace Oxide.Plugins
 
         private static readonly Dictionary<TunnelType, Vector3> DungeonCellDimensions = new Dictionary<TunnelType, Vector3>()
         {
-            [TunnelType.TrainStation] = new Vector3(16.5f, 8.5f, 216),
+            [TunnelType.TrainStation] = new Vector3(108, 8.5f, 216),
             [TunnelType.BarricadeTunnel] = new Vector3(16.5f, 8.5f, 216),
             [TunnelType.LootTunnel] = new Vector3(16.5f, 8.5f, 216),
             [TunnelType.Intersection] = new Vector3(216, 8.5f, 216),
