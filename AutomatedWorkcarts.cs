@@ -870,7 +870,7 @@ namespace Oxide.Plugins
         private static DungeonCellWrapper FindNearestDungeonCell(Vector3 position)
         {
             DungeonGridCell closestDungeon = null;
-            var shortestDistance = float.MaxValue;
+            var shortestSqrDistance = float.MaxValue;
 
             foreach (var dungeon in TerrainMeta.Path.DungeonGridCells)
             {
@@ -881,10 +881,10 @@ namespace Oxide.Plugins
                 if (!dungeonCellWrapper.IsInBounds(position))
                     continue;
 
-                var distance = Vector3.Distance(dungeon.transform.position, position);
-                if (distance < shortestDistance)
+                var sqrDistance = (dungeon.transform.position - position).sqrMagnitude;
+                if (sqrDistance < shortestSqrDistance)
                 {
-                    shortestDistance = distance;
+                    shortestSqrDistance = sqrDistance;
                     closestDungeon = dungeon;
                 }
             }
@@ -1496,6 +1496,7 @@ namespace Oxide.Plugins
             private const float TriggerDisplayDuration = 1f;
             private const float TriggerDisplayRadius = 1f;
             private const float TriggerDrawDistance = 150;
+            private static readonly float TriggerDrawDistanceSquared = TriggerDrawDistance * TriggerDrawDistance;
 
             private Dictionary<WorkcartTriggerInfo, MapTriggerWrapper> _mapTriggers = new Dictionary<WorkcartTriggerInfo, MapTriggerWrapper>();
             private Dictionary<WorkcartTriggerInfo, TunnelTriggerWrapper[]> _tunnelTriggers = new Dictionary<WorkcartTriggerInfo, TunnelTriggerWrapper[]>();
@@ -1666,7 +1667,7 @@ namespace Oxide.Plugins
 
                 foreach (var trigger in _mapTriggers.Values)
                 {
-                    if (Vector3.Distance(playerPosition, trigger.Position) <= TriggerDrawDistance)
+                    if ((playerPosition - trigger.Position).sqrMagnitude <= TriggerDrawDistanceSquared)
                         ShowTrigger(player, trigger);
                 }
 
@@ -1674,7 +1675,7 @@ namespace Oxide.Plugins
                 {
                     foreach (var trigger in triggerList)
                     {
-                        if (Vector3.Distance(playerPosition, trigger.Position) <= TriggerDrawDistance)
+                        if ((playerPosition - trigger.Position).sqrMagnitude <= TriggerDrawDistanceSquared)
                             ShowTrigger(player, trigger, triggerList.Length);
                     }
                 }
@@ -1737,15 +1738,15 @@ namespace Oxide.Plugins
             public BaseTriggerWrapper FindNearestTrigger(Vector3 position, float maxDistance = 10)
             {
                 BaseTriggerWrapper closestTriggerWrapper = null;
-                float shortestDistance = float.MaxValue;
+                float shortestSqrDistance = float.MaxValue;
 
                 foreach (var trigger in _mapTriggers.Values)
                 {
-                    var distance = Vector3.Distance(position, trigger.Position);
-                    if (distance >= shortestDistance || distance >= maxDistance)
+                    var sqrDistance = (position - trigger.Position).sqrMagnitude;
+                    if (sqrDistance >= shortestSqrDistance || sqrDistance >= maxDistance)
                         continue;
 
-                    shortestDistance = distance;
+                    shortestSqrDistance = sqrDistance;
                     closestTriggerWrapper = trigger;
                 }
 
@@ -1753,11 +1754,11 @@ namespace Oxide.Plugins
                 {
                     foreach (var trigger in triggerList)
                     {
-                        var distance = Vector3.Distance(position, trigger.Position);
-                        if (distance >= shortestDistance || distance >= maxDistance)
+                        var sqrDistance = (position - trigger.Position).sqrMagnitude;
+                        if (sqrDistance >= shortestSqrDistance || sqrDistance >= maxDistance)
                             continue;
 
-                        shortestDistance = distance;
+                        shortestSqrDistance = sqrDistance;
                         closestTriggerWrapper = trigger;
                     }
                 }
