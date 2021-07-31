@@ -31,7 +31,6 @@ namespace Oxide.Plugins
 
         private const string PermissionToggle = "automatedworkcarts.toggle";
         private const string PermissionManageTriggers = "automatedworkcarts.managetriggers";
-        private const string PermissionViewMarkers = "automatedworkcarts.viewmarkers";
 
         private const string ShopkeeperPrefab = "assets/prefabs/npc/bandit/shopkeepers/bandit_shopkeeper.prefab";
         private const string GenericMapMarkerPrefab = "assets/prefabs/tools/map/genericradiusmarker.prefab";
@@ -52,7 +51,6 @@ namespace Oxide.Plugins
 
             permission.RegisterPermission(PermissionToggle, this);
             permission.RegisterPermission(PermissionManageTriggers, this);
-            permission.RegisterPermission(PermissionViewMarkers, this);
 
             if (!_pluginConfig.GenericMapMarker.Enabled)
                 Unsubscribe(nameof(OnPlayerConnected));
