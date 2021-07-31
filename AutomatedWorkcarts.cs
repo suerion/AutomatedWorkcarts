@@ -2296,7 +2296,7 @@ namespace Oxide.Plugins
                         new WorkcartTriggerInfo
                         {
                             Id = 2,
-                            Position = new Vector3(0, triggerHeight, -84),
+                            Position = new Vector3(45, triggerHeight, 18),
                             TunnelType = TunnelType.TrainStation.ToString(),
                             AddConductor = true,
                             Direction = WorkcartDirection.Fwd.ToString(),
@@ -2316,7 +2316,7 @@ namespace Oxide.Plugins
                         new WorkcartTriggerInfo
                         {
                             Id = 4,
-                            Position = new Vector3(0, triggerHeight, 84),
+                            Position = new Vector3(-45, triggerHeight, -18),
                             TunnelType = TunnelType.TrainStation.ToString(),
                             AddConductor = true,
                             Direction = WorkcartDirection.Fwd.ToString(),
