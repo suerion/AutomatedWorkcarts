@@ -71,6 +71,7 @@ namespace Oxide.Plugins
 
         private void OnServerInitialized()
         {
+            _tunnelData.MigrateTriggers();
             _mapData = StoredMapData.Load();
             _triggerManager.CreateAll();
 
@@ -2242,6 +2243,10 @@ namespace Oxide.Plugins
 
         private class StoredTunnelData
         {
+            private const float DefaultStationStopDuration = 15;
+            private const float DefaultQuickStopDuration = 5;
+            private const float DefaultTriggerHeight = 0.29f;
+
             [JsonProperty("TunnelTriggers")]
             public List<WorkcartTriggerInfo> TunnelTriggers = new List<WorkcartTriggerInfo>();
 
@@ -2273,12 +2278,39 @@ namespace Oxide.Plugins
                 Save();
             }
 
+            public void MigrateTriggers()
+            {
+                var migratedTriggers = 0;
+
+                foreach (var triggerInfo in _tunnelData.TunnelTriggers)
+                {
+                    var tunnelType = triggerInfo.GetTunnelType();
+                    if (tunnelType == TunnelType.TrainStation)
+                    {
+                        if (triggerInfo.Position == new Vector3(0, DefaultTriggerHeight, -84))
+                        {
+                            triggerInfo.Position = new Vector3(45, DefaultTriggerHeight, 18);
+                            migratedTriggers++;
+                            continue;
+                        }
+                        if (triggerInfo.Position == new Vector3(0, DefaultTriggerHeight, 84))
+                        {
+                            triggerInfo.Position = new Vector3(-45, DefaultTriggerHeight, -18);
+                            migratedTriggers++;
+                            continue;
+                        }
+                    }
+                }
+
+                if (migratedTriggers > 0)
+                {
+                    _pluginInstance.LogWarning($"Automatically relocated {migratedTriggers} tunnel triggers to bypass tunnels.");
+                    Save();
+                }
+            }
+
             public static StoredTunnelData GetDefaultData()
             {
-                var stationStopDuration = 15f;
-                var quickStopDuration = 5f;
-                var triggerHeight = 0.29f;
-
                 return new StoredTunnelData()
                 {
                     TunnelTriggers =
@@ -2286,17 +2318,17 @@ namespace Oxide.Plugins
                         new WorkcartTriggerInfo
                         {
                             Id = 1,
-                            Position = new Vector3(4.5f, triggerHeight, 53),
+                            Position = new Vector3(4.5f, DefaultTriggerHeight, 53),
                             TunnelType = TunnelType.TrainStation.ToString(),
                             Brake = true,
                             Speed = WorkcartSpeed.Zero.ToString(),
-                            StopDuration = stationStopDuration,
+                            StopDuration = DefaultStationStopDuration,
                             DepartureSpeed = WorkcartSpeed.Hi.ToString(),
                         },
                         new WorkcartTriggerInfo
                         {
                             Id = 2,
-                            Position = new Vector3(45, triggerHeight, 18),
+                            Position = new Vector3(45, DefaultTriggerHeight, 18),
                             TunnelType = TunnelType.TrainStation.ToString(),
                             AddConductor = true,
                             Direction = WorkcartDirection.Fwd.ToString(),
@@ -2306,17 +2338,17 @@ namespace Oxide.Plugins
                         new WorkcartTriggerInfo
                         {
                             Id = 3,
-                            Position = new Vector3(-4.5f, triggerHeight, -13),
+                            Position = new Vector3(-4.5f, DefaultTriggerHeight, -13),
                             TunnelType = TunnelType.TrainStation.ToString(),
                             Brake = true,
                             Speed = WorkcartSpeed.Zero.ToString(),
-                            StopDuration = stationStopDuration,
+                            StopDuration = DefaultStationStopDuration,
                             DepartureSpeed = WorkcartSpeed.Hi.ToString(),
                         },
                         new WorkcartTriggerInfo
                         {
                             Id = 4,
-                            Position = new Vector3(-45, triggerHeight, -18),
+                            Position = new Vector3(-45, DefaultTriggerHeight, -18),
                             TunnelType = TunnelType.TrainStation.ToString(),
                             AddConductor = true,
                             Direction = WorkcartDirection.Fwd.ToString(),
@@ -2327,7 +2359,7 @@ namespace Oxide.Plugins
                         new WorkcartTriggerInfo
                         {
                             Id = 5,
-                            Position = new Vector3(-4.45f, triggerHeight, -31),
+                            Position = new Vector3(-4.45f, DefaultTriggerHeight, -31),
                             TunnelType = TunnelType.BarricadeTunnel.ToString(),
                             Brake = true,
                             Speed = WorkcartSpeed.Med.ToString(),
@@ -2335,7 +2367,7 @@ namespace Oxide.Plugins
                         new WorkcartTriggerInfo
                         {
                             Id = 6,
-                            Position = new Vector3(-4.5f, triggerHeight, -1f),
+                            Position = new Vector3(-4.5f, DefaultTriggerHeight, -1f),
                             TunnelType = TunnelType.BarricadeTunnel.ToString(),
                             Brake = true,
                             Speed = WorkcartSpeed.Zero.ToString(),
@@ -2345,7 +2377,7 @@ namespace Oxide.Plugins
                         new WorkcartTriggerInfo
                         {
                             Id = 7,
-                            Position = new Vector3(4.45f, triggerHeight, 39),
+                            Position = new Vector3(4.45f, DefaultTriggerHeight, 39),
                             TunnelType = TunnelType.BarricadeTunnel.ToString(),
                             Brake = true,
                             Speed = WorkcartSpeed.Med.ToString(),
@@ -2353,7 +2385,7 @@ namespace Oxide.Plugins
                         new WorkcartTriggerInfo
                         {
                             Id = 8,
-                            Position = new Vector3(4.5f, triggerHeight, 9f),
+                            Position = new Vector3(4.5f, DefaultTriggerHeight, 9f),
                             TunnelType = TunnelType.BarricadeTunnel.ToString(),
                             Brake = true,
                             Speed = WorkcartSpeed.Zero.ToString(),
@@ -2364,32 +2396,32 @@ namespace Oxide.Plugins
                         new WorkcartTriggerInfo
                         {
                             Id = 9,
-                            Position = new Vector3(3, triggerHeight, 35f),
+                            Position = new Vector3(3, DefaultTriggerHeight, 35f),
                             TunnelType = TunnelType.LootTunnel.ToString(),
                             Brake = true,
                             Speed = WorkcartSpeed.Zero.ToString(),
-                            StopDuration = quickStopDuration,
+                            StopDuration = DefaultQuickStopDuration,
                             DepartureSpeed = WorkcartSpeed.Hi.ToString(),
                         },
                         new WorkcartTriggerInfo
                         {
                             Id = 10,
-                            Position = new Vector3(-3, triggerHeight, -35f),
+                            Position = new Vector3(-3, DefaultTriggerHeight, -35f),
                             TunnelType = TunnelType.LootTunnel.ToString(),
                             Brake = true,
                             Speed = WorkcartSpeed.Zero.ToString(),
-                            StopDuration = quickStopDuration,
+                            StopDuration = DefaultQuickStopDuration,
                             DepartureSpeed = WorkcartSpeed.Hi.ToString(),
                         },
 
                         new WorkcartTriggerInfo
                         {
                             Id = 11,
-                            Position = new Vector3(35, triggerHeight, -3.0f),
+                            Position = new Vector3(35, DefaultTriggerHeight, -3.0f),
                             TunnelType = TunnelType.Intersection.ToString(),
                             Brake = true,
                             Speed = WorkcartSpeed.Zero.ToString(),
-                            StopDuration = quickStopDuration,
+                            StopDuration = DefaultQuickStopDuration,
                             DepartureSpeed = WorkcartSpeed.Hi.ToString(),
                         }
                     }
