@@ -868,10 +868,10 @@ namespace Oxide.Plugins
 
         private static DungeonCellWrapper FindNearestDungeonCell(Vector3 position)
         {
-            DungeonCell closestDungeon = null;
+            DungeonGridCell closestDungeon = null;
             var shortestDistance = float.MaxValue;
 
-            foreach (var dungeon in TerrainMeta.Path.DungeonCells)
+            foreach (var dungeon in TerrainMeta.Path.DungeonGridCells)
             {
                 var dungeonCellWrapper = new DungeonCellWrapper(dungeon);
                 if (dungeonCellWrapper.TunnelType == TunnelType.Unsupported)
@@ -895,7 +895,7 @@ namespace Oxide.Plugins
         {
             var dungeonCellList = new List<DungeonCellWrapper>();
 
-            foreach (var dungeonCell in TerrainMeta.Path.DungeonCells)
+            foreach (var dungeonCell in TerrainMeta.Path.DungeonGridCells)
             {
                 if (DungeonCellWrapper.GetTunnelType(dungeonCell) == tunnelType)
                     dungeonCellList.Add(new DungeonCellWrapper(dungeonCell));
@@ -984,7 +984,7 @@ namespace Oxide.Plugins
 
         private class DungeonCellWrapper
         {
-            public static TunnelType GetTunnelType(DungeonCell dungeonCell) =>
+            public static TunnelType GetTunnelType(DungeonGridCell dungeonCell) =>
                 GetTunnelType(GetShortName(dungeonCell.name));
 
             private static TunnelType GetTunnelType(string shortName)
@@ -1010,7 +1010,7 @@ namespace Oxide.Plugins
 
             private OBB _boundingBox;
 
-            public DungeonCellWrapper(DungeonCell dungeonCell)
+            public DungeonCellWrapper(DungeonGridCell dungeonCell)
             {
                 ShortName = GetShortName(dungeonCell.name);
                 TunnelType = GetTunnelType(ShortName);
