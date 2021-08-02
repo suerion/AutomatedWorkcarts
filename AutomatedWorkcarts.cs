@@ -1050,7 +1050,7 @@ namespace Oxide.Plugins
             ["station-we-3"] = Quaternion.Euler(0, -90, 0),
 
             ["straight-sn-0"] = Quaternion.identity,
-            ["straight-sn-1"] = Quaternion.identity,
+            ["straight-sn-1"] = Quaternion.Euler(0, 180, 0),
             ["straight-we-0"] = Quaternion.Euler(0, -90, 0),
             ["straight-we-1"] = Quaternion.Euler(0, 90, 0),
 
