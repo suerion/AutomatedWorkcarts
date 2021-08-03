@@ -1891,10 +1891,11 @@ namespace Oxide.Plugins
 
             public void HandleWorkcartTrigger(WorkcartTriggerInfo triggerInfo)
             {
+                var currentIntendedVelocity = CurrentIntendedVelocity;
+
+                // Cancel these after determing next current intended velocity, since it has logic for these.
                 CancelWaitingAtStop();
                 CancelChilling();
-
-                var currentIntendedVelocity = CurrentIntendedVelocity;
 
                 var triggerSpeed = triggerInfo.GetSpeed();
                 var triggerDirection = triggerInfo.GetDirection();
