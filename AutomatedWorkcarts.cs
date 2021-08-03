@@ -210,13 +210,22 @@ namespace Oxide.Plugins
                 else if (Math.Abs(EngineSpeedToNumber(forwardWorkcart.CurThrottleSetting)) < Math.Abs(EngineSpeedToNumber(backwardWorkcart.CurThrottleSetting)))
                 {
                     // Destroy the forward workcart if it's not automated and going too slow.
-                    _pluginInstance.LogWarning($"Destroying non-automated workcart due to insufficient speed.");
+                    LogWarning($"Destroying non-automated workcart due to insufficient speed.");
                     ScheduleDestroyWorkcart(forwardWorkcart);
                     return;
                 }
 
                 if (backController != null)
+                {
+                    if ((backwardWorkcart.transform.position - forwardWorkcart.transform.position).sqrMagnitude < 9)
+                    {
+                        LogWarning($"Destroying automated workcart due to it somehow getting inside another workcart.");
+                        backController.ScheduleDestruction();
+                        return;
+                    }
+
                     backController.StartChilling();
+                }
             }
             else
             {
@@ -242,7 +251,7 @@ namespace Oxide.Plugins
                 {
                     if (_pluginConfig.BulldozeOffendingWorkcarts)
                     {
-                        _pluginInstance.LogWarning($"Destroying non-automated workcart due to head-on collision with an automated workcart.");
+                        LogWarning($"Destroying non-automated workcart due to head-on collision with an automated workcart.");
                         ScheduleDestroyWorkcart(workcart);
                     }
                     else
@@ -255,7 +264,7 @@ namespace Oxide.Plugins
                 {
                     if (_pluginConfig.BulldozeOffendingWorkcarts)
                     {
-                        _pluginInstance.LogWarning($"Destroying non-automated workcart due to head-on collision with an automated workcart.");
+                        LogWarning($"Destroying non-automated workcart due to head-on collision with an automated workcart.");
                         ScheduleDestroyWorkcart(otherWorkcart);
                     }
                     else
@@ -269,7 +278,7 @@ namespace Oxide.Plugins
                     return;
 
                 // If both are automated, destroy the slower one (if same speed, will be random).
-                _pluginInstance.LogWarning($"Destroying automated workcart due to head-on collision with another.");
+                LogWarning($"Destroying automated workcart due to head-on collision with another.");
                 if (GetFasterWorkcart(workcart, otherWorkcart) == workcart)
                     otherController.ScheduleDestruction();
                 else
