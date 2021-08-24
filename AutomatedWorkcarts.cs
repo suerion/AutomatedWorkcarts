@@ -1424,7 +1424,7 @@ namespace Oxide.Plugins
             public WorkcartTriggerInfo TriggerInfo { get; protected set; }
             public TrainTrackSpline Spline { get; private set; }
             public float DistanceOnSpline { get; private set; }
-            public virtual Vector3 Position => TriggerInfo.Position;
+            public virtual Vector3 WorldPosition => TriggerInfo.Position;
 
             protected GameObject _gameObject;
 
@@ -1450,11 +1450,11 @@ namespace Oxide.Plugins
 
             public void UpdatePosition()
             {
-                _gameObject.transform.position = Position;
+                _gameObject.transform.position = WorldPosition;
 
                 TrainTrackSpline spline;
                 float distanceOnSpline;
-                if (TrainTrackSpline.TryFindTrackNearby(Position, 2, out spline, out distanceOnSpline))
+                if (TrainTrackSpline.TryFindTrackNearby(WorldPosition, 2, out spline, out distanceOnSpline))
                 {
                     Spline = spline;
                     DistanceOnSpline = distanceOnSpline;
@@ -1503,7 +1503,7 @@ namespace Oxide.Plugins
 
             private DungeonCellWrapper _dungeonCellWrapper;
 
-            public override Vector3 Position => _dungeonCellWrapper.TransformPoint(TriggerInfo.Position);
+            public override Vector3 WorldPosition => _dungeonCellWrapper.TransformPoint(TriggerInfo.Position);
 
             public TunnelTriggerWrapper(WorkcartTriggerInfo triggerInfo, DungeonCellWrapper dungeonCellWrapper) : base(triggerInfo)
             {
@@ -1768,7 +1768,7 @@ namespace Oxide.Plugins
 
                 foreach (var trigger in _mapTriggers.Values)
                 {
-                    if ((playerPosition - trigger.Position).sqrMagnitude <= TriggerDrawDistanceSquared)
+                    if ((playerPosition - trigger.WorldPosition).sqrMagnitude <= TriggerDrawDistanceSquared)
                         ShowTrigger(player, trigger);
                 }
 
@@ -1776,7 +1776,7 @@ namespace Oxide.Plugins
                 {
                     foreach (var trigger in triggerList)
                     {
-                        if ((playerPosition - trigger.Position).sqrMagnitude <= TriggerDrawDistanceSquared)
+                        if ((playerPosition - trigger.WorldPosition).sqrMagnitude <= TriggerDrawDistanceSquared)
                             ShowTrigger(player, trigger, triggerList.Length);
                     }
                 }
@@ -1793,7 +1793,7 @@ namespace Oxide.Plugins
                 var triggerInfo = trigger.TriggerInfo;
                 var color = triggerInfo.GetColor();
 
-                var spherePosition = trigger.Position;
+                var spherePosition = trigger.WorldPosition;
                 player.SendConsoleCommand("ddraw.sphere", TriggerDisplayDuration, color, spherePosition, TriggerDisplayRadius);
 
                 var triggerPrefix = _pluginInstance.GetTriggerPrefix(player, triggerInfo);
@@ -1832,7 +1832,7 @@ namespace Oxide.Plugins
                 if (speed == WorkcartSpeed.Zero)
                     infoLines.Add(_pluginInstance.GetMessage(player, Lang.InfoTriggerDepartureSpeed, departureSpeed));
 
-                var textPosition = trigger.Position + new Vector3(0, 1.5f + infoLines.Count * 0.1f, 0);
+                var textPosition = trigger.WorldPosition + new Vector3(0, 1.5f + infoLines.Count * 0.1f, 0);
                 player.SendConsoleCommand("ddraw.text", TriggerDisplayDuration, color, textPosition, string.Join("\n", infoLines));
             }
 
@@ -1843,7 +1843,7 @@ namespace Oxide.Plugins
 
                 foreach (var trigger in _mapTriggers.Values)
                 {
-                    var sqrDistance = (position - trigger.Position).sqrMagnitude;
+                    var sqrDistance = (position - trigger.WorldPosition).sqrMagnitude;
                     if (sqrDistance >= shortestSqrDistance || sqrDistance >= maxDistance)
                         continue;
 
@@ -1855,7 +1855,7 @@ namespace Oxide.Plugins
                 {
                     foreach (var trigger in triggerList)
                     {
-                        var sqrDistance = (position - trigger.Position).sqrMagnitude;
+                        var sqrDistance = (position - trigger.WorldPosition).sqrMagnitude;
                         if (sqrDistance >= shortestSqrDistance || sqrDistance >= maxDistance)
                             continue;
 
