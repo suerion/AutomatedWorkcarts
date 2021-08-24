@@ -1959,10 +1959,10 @@ namespace Oxide.Plugins
                 SetThrottle(GetNextVelocity(currentVelocity, WorkcartSpeed.Lo, WorkcartDirection.Invert));
                 CancelBraking();
                 _targetVelocity = desiredVelocity;
-                InvokeRepeating(BrakeUpdate, 0, 0);
+                InvokeRepeatingFixedTime(BrakeUpdate);
             }
-            private bool IsBraking => IsInvoking(BrakeUpdate);
-            private void CancelBraking() => CancelInvoke(BrakeUpdate);
+            private bool IsBraking => IsInvokingFixedTime(BrakeUpdate);
+            private void CancelBraking() => CancelInvokeFixedTime(BrakeUpdate);
 
             private bool IsStopping => IsBraking && _targetVelocity == EngineSpeeds.Zero;
 
