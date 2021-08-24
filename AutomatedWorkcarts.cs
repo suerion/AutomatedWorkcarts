@@ -1422,6 +1422,8 @@ namespace Oxide.Plugins
         private abstract class BaseTriggerWrapper
         {
             public WorkcartTriggerInfo TriggerInfo { get; protected set; }
+            public TrainTrackSpline Spline { get; private set; }
+            public float DistanceOnSpline { get; private set; }
             public virtual Vector3 Position => TriggerInfo.Position;
 
             protected GameObject _gameObject;
@@ -1446,9 +1448,22 @@ namespace Oxide.Plugins
                 trigger.interestLayers = Layers.Mask.Vehicle_World;
             }
 
-            public virtual void UpdatePosition()
+            public void UpdatePosition()
             {
                 _gameObject.transform.position = Position;
+
+                TrainTrackSpline spline;
+                float distanceOnSpline;
+                if (TrainTrackSpline.TryFindTrackNearby(Position, 2, out spline, out distanceOnSpline))
+                {
+                    Spline = spline;
+                    DistanceOnSpline = distanceOnSpline;
+                }
+                else
+                {
+                    Spline = null;
+                    DistanceOnSpline = 0;
+                }
             }
 
             public void Destroy()
@@ -1509,6 +1524,7 @@ namespace Oxide.Plugins
 
             private Dictionary<WorkcartTriggerInfo, MapTriggerWrapper> _mapTriggers = new Dictionary<WorkcartTriggerInfo, MapTriggerWrapper>();
             private Dictionary<WorkcartTriggerInfo, TunnelTriggerWrapper[]> _tunnelTriggers = new Dictionary<WorkcartTriggerInfo, TunnelTriggerWrapper[]>();
+            private Dictionary<TrainTrackSpline, List<BaseTriggerWrapper>> _splinesToTriggers = new Dictionary<TrainTrackSpline, List<BaseTriggerWrapper>>();
             private Dictionary<ulong, Timer> _drawTimers = new Dictionary<ulong, Timer>();
 
             private int GetHighestTriggerId(IEnumerable<WorkcartTriggerInfo> triggerList)
@@ -1519,6 +1535,39 @@ namespace Oxide.Plugins
                     highestTriggerId = Math.Max(highestTriggerId, triggerInfo.Id);
 
                 return highestTriggerId;
+            }
+
+            private void RegisterTriggerWithSpline(BaseTriggerWrapper triggerWrapper, TrainTrackSpline spline)
+            {
+                List<BaseTriggerWrapper> triggerWrappers;
+                if (!_splinesToTriggers.TryGetValue(spline, out triggerWrappers))
+                {
+                    triggerWrappers = new List<BaseTriggerWrapper>() { triggerWrapper };
+                    _splinesToTriggers[spline] = triggerWrappers;
+                }
+                else
+                {
+                    triggerWrappers.Add(triggerWrapper);
+                }
+            }
+
+            private void UnregisterTriggerFromSpline(BaseTriggerWrapper triggerWrapper, TrainTrackSpline spline)
+            {
+                List<BaseTriggerWrapper> triggerWrappers;
+                if (_splinesToTriggers.TryGetValue(spline, out triggerWrappers))
+                {
+                    triggerWrappers.Remove(triggerWrapper);
+                    if (triggerWrappers.Count == 0)
+                        _splinesToTriggers.Remove(spline);
+                }
+            }
+
+            public List<BaseTriggerWrapper> GetTriggersForSpline(TrainTrackSpline spline)
+            {
+                List<BaseTriggerWrapper> triggerWrappers;
+                return _splinesToTriggers.TryGetValue(spline, out triggerWrappers)
+                    ? triggerWrappers
+                    : null;
             }
 
             public WorkcartTriggerInfo FindTrigger(int triggerId, WorkcartTriggerType triggerType)
@@ -1536,6 +1585,26 @@ namespace Oxide.Plugins
                 return null;
             }
 
+            private TunnelTriggerWrapper[] CreateTunnelTriggers(WorkcartTriggerInfo triggerInfo)
+            {
+                var triggerWrapperList = TunnelTriggerWrapper.CreateTunnelTriggers(triggerInfo);
+                foreach (var tunnelTrigger in triggerWrapperList)
+                {
+                    if (tunnelTrigger.Spline != null)
+                        RegisterTriggerWithSpline(tunnelTrigger, tunnelTrigger.Spline);
+                }
+                return triggerWrapperList;
+            }
+
+            private MapTriggerWrapper CreateMapTrigger(WorkcartTriggerInfo triggerInfo)
+            {
+                var mapTrigger = MapTriggerWrapper.CreateWorldTrigger(triggerInfo);
+                if (mapTrigger.Spline != null)
+                    RegisterTriggerWithSpline(mapTrigger, mapTrigger.Spline);
+
+                return mapTrigger;
+            }
+
             public void AddTrigger(WorkcartTriggerInfo triggerInfo)
             {
                 if (triggerInfo.TriggerType == WorkcartTriggerType.Tunnel)
@@ -1543,7 +1612,7 @@ namespace Oxide.Plugins
                     if (triggerInfo.Id == 0)
                         triggerInfo.Id = GetHighestTriggerId(_tunnelTriggers.Keys) + 1;
 
-                    _tunnelTriggers[triggerInfo] = TunnelTriggerWrapper.CreateTunnelTriggers(triggerInfo);
+                    _tunnelTriggers[triggerInfo] = CreateTunnelTriggers(triggerInfo);
                     _tunnelData.AddTrigger(triggerInfo);
                 }
                 else
@@ -1551,7 +1620,7 @@ namespace Oxide.Plugins
                     if (triggerInfo.Id == 0)
                         triggerInfo.Id = GetHighestTriggerId(_mapTriggers.Keys) + 1;
 
-                    _mapTriggers[triggerInfo] = MapTriggerWrapper.CreateWorldTrigger(triggerInfo);
+                    _mapTriggers[triggerInfo] = CreateMapTrigger(triggerInfo);
                     _mapData.AddTrigger(triggerInfo);
                 }
             }
@@ -1566,6 +1635,21 @@ namespace Oxide.Plugins
                     _mapData.Save();
             }
 
+            private void UpdateTriggerWrapperPosition(BaseTriggerWrapper triggerWrapper)
+            {
+                var originalSpline = triggerWrapper.Spline;
+                triggerWrapper.UpdatePosition();
+
+                if (triggerWrapper.Spline != originalSpline)
+                {
+                    if (originalSpline != null)
+                        UnregisterTriggerFromSpline(triggerWrapper, originalSpline);
+
+                    if (triggerWrapper.Spline != null)
+                        RegisterTriggerWithSpline(triggerWrapper, triggerWrapper.Spline);
+                }
+            }
+
             public void MoveTrigger(WorkcartTriggerInfo triggerInfo, Vector3 position)
             {
                 triggerInfo.Position = position;
@@ -1578,7 +1662,7 @@ namespace Oxide.Plugins
                     if (_tunnelTriggers.TryGetValue(triggerInfo, out triggerWrapperList))
                     {
                         foreach (var triggerWrapper in triggerWrapperList)
-                            triggerWrapper.UpdatePosition();
+                            UpdateTriggerWrapperPosition(triggerWrapper);
                     }
                 }
                 else
@@ -1587,8 +1671,14 @@ namespace Oxide.Plugins
 
                     MapTriggerWrapper triggerWrapper;
                     if (_mapTriggers.TryGetValue(triggerInfo, out triggerWrapper))
-                        triggerWrapper.UpdatePosition();
+                        UpdateTriggerWrapperPosition(triggerWrapper);
                 }
+            }
+
+            private void DestroyTriggerWrapper(BaseTriggerWrapper triggerWrapper)
+            {
+                UnregisterTriggerFromSpline(triggerWrapper, triggerWrapper.Spline);
+                triggerWrapper.Destroy();
             }
 
             public void RemoveTrigger(WorkcartTriggerInfo triggerInfo)
@@ -1599,7 +1689,7 @@ namespace Oxide.Plugins
                     if (_tunnelTriggers.TryGetValue(triggerInfo, out triggerWrapperList))
                     {
                         foreach (var triggerWrapper in triggerWrapperList)
-                            triggerWrapper.Destroy();
+                            DestroyTriggerWrapper(triggerWrapper);
 
                         _tunnelTriggers.Remove(triggerInfo);
                     }
@@ -1611,7 +1701,7 @@ namespace Oxide.Plugins
                     MapTriggerWrapper triggerWrapper;
                     if (_mapTriggers.TryGetValue(triggerInfo, out triggerWrapper))
                     {
-                        triggerWrapper.Destroy();
+                        DestroyTriggerWrapper(triggerWrapper);
                         _mapTriggers.Remove(triggerInfo);
                     }
 
@@ -1624,7 +1714,7 @@ namespace Oxide.Plugins
                 if (_pluginConfig.EnableMapTriggers)
                 {
                     foreach (var triggerInfo in _mapData.MapTriggers)
-                        _mapTriggers[triggerInfo] = MapTriggerWrapper.CreateWorldTrigger(triggerInfo);
+                        _mapTriggers[triggerInfo] = CreateMapTrigger(triggerInfo);
                 }
 
                 foreach (var triggerInfo in _tunnelData.TunnelTriggers)
@@ -1633,7 +1723,7 @@ namespace Oxide.Plugins
                     if (tunnelType == TunnelType.Unsupported || !_pluginConfig.IsTunnelTypeEnabled(tunnelType))
                         continue;
 
-                    _tunnelTriggers[triggerInfo] = TunnelTriggerWrapper.CreateTunnelTriggers(triggerInfo);
+                    _tunnelTriggers[triggerInfo] = CreateTunnelTriggers(triggerInfo);
                 }
             }
 
@@ -1645,6 +1735,8 @@ namespace Oxide.Plugins
                 foreach (var triggerWrapperList in _tunnelTriggers.Values)
                     foreach (var triggerWrapper in triggerWrapperList)
                         triggerWrapper.Destroy();
+
+                _splinesToTriggers.Clear();
             }
 
             public void ShowAllRepeatedly(BasePlayer player, int duration = -1)
