@@ -2329,7 +2329,7 @@ namespace Oxide.Plugins
                         new WorkcartTriggerInfo
                         {
                             Id = 1,
-                            Position = new Vector3(4.5f, DefaultTriggerHeight, 53),
+                            Position = new Vector3(4.5f, DefaultTriggerHeight, 52),
                             TunnelType = TunnelType.TrainStation.ToString(),
                             Brake = true,
                             Speed = WorkcartSpeed.Zero.ToString(),
@@ -2349,7 +2349,7 @@ namespace Oxide.Plugins
                         new WorkcartTriggerInfo
                         {
                             Id = 3,
-                            Position = new Vector3(-4.5f, DefaultTriggerHeight, -13),
+                            Position = new Vector3(-4.5f, DefaultTriggerHeight, -11),
                             TunnelType = TunnelType.TrainStation.ToString(),
                             Brake = true,
                             Speed = WorkcartSpeed.Zero.ToString(),
