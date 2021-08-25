@@ -992,60 +992,16 @@ namespace Oxide.Plugins
 
         #region Dungeon Cells
 
-        private class DungeonCellWrapper
+        private enum TunnelType
         {
-            public static TunnelType GetTunnelType(DungeonGridCell dungeonCell) =>
-                GetTunnelType(GetShortName(dungeonCell.name));
-
-            private static TunnelType GetTunnelType(string shortName)
-            {
-                AutomatedWorkcarts.TunnelType tunnelType;
-                return DungeonCellTypes.TryGetValue(shortName, out tunnelType)
-                    ? tunnelType
-                    : AutomatedWorkcarts.TunnelType.Unsupported;
-            }
-
-            public static Quaternion GetRotation(string shortName)
-            {
-                Quaternion rotation;
-                return DungeonRotations.TryGetValue(shortName, out rotation)
-                    ? rotation
-                    : Quaternion.identity;
-            }
-
-            public string ShortName { get; private set; }
-            public TunnelType TunnelType { get; private set; }
-            public Vector3 Position { get; private set; }
-            public Quaternion Rotation { get; private set; }
-
-            private OBB _boundingBox;
-
-            public DungeonCellWrapper(DungeonGridCell dungeonCell)
-            {
-                ShortName = GetShortName(dungeonCell.name);
-                TunnelType = GetTunnelType(ShortName);
-                Position = dungeonCell.transform.position;
-                Rotation = GetRotation(ShortName);
-
-                Vector3 dimensions;
-                if (DungeonCellDimensions.TryGetValue(TunnelType, out dimensions))
-                    _boundingBox = new OBB(Position + new Vector3(0, dimensions.y / 2, 0), dimensions, Rotation);
-            }
-
-            // World position to local position.
-            public Vector3 InverseTransformPoint(Vector3 worldPosition) =>
-                Quaternion.Inverse(Rotation) * (worldPosition - Position);
-
-            // Local position to world position.
-            public Vector3 TransformPoint(Vector3 localPosition) =>
-                Position + Rotation * localPosition;
-
-            public bool IsInBounds(Vector3 position) => _boundingBox.Contains(position);
+            // Don't rename these since the names are persisted in data files.
+            TrainStation,
+            BarricadeTunnel,
+            LootTunnel,
+            Intersection,
+            LargeIntersection,
+            Unsupported
         }
-
-        #endregion
-
-        #region Workcart Triggers
 
         private static readonly Dictionary<string, Quaternion> DungeonRotations = new Dictionary<string, Quaternion>()
         {
@@ -1114,16 +1070,60 @@ namespace Oxide.Plugins
             [TunnelType.LargeIntersection] = new Vector3(216, 8.5f, 216),
         };
 
-        private enum TunnelType
+        private class DungeonCellWrapper
         {
-            // Don't rename these since the names are persisted in data files.
-            TrainStation,
-            BarricadeTunnel,
-            LootTunnel,
-            Intersection,
-            LargeIntersection,
-            Unsupported
+            public static TunnelType GetTunnelType(DungeonGridCell dungeonCell) =>
+                GetTunnelType(GetShortName(dungeonCell.name));
+
+            private static TunnelType GetTunnelType(string shortName)
+            {
+                AutomatedWorkcarts.TunnelType tunnelType;
+                return DungeonCellTypes.TryGetValue(shortName, out tunnelType)
+                    ? tunnelType
+                    : AutomatedWorkcarts.TunnelType.Unsupported;
+            }
+
+            public static Quaternion GetRotation(string shortName)
+            {
+                Quaternion rotation;
+                return DungeonRotations.TryGetValue(shortName, out rotation)
+                    ? rotation
+                    : Quaternion.identity;
+            }
+
+            public string ShortName { get; private set; }
+            public TunnelType TunnelType { get; private set; }
+            public Vector3 Position { get; private set; }
+            public Quaternion Rotation { get; private set; }
+
+            private OBB _boundingBox;
+
+            public DungeonCellWrapper(DungeonGridCell dungeonCell)
+            {
+                ShortName = GetShortName(dungeonCell.name);
+                TunnelType = GetTunnelType(ShortName);
+                Position = dungeonCell.transform.position;
+                Rotation = GetRotation(ShortName);
+
+                Vector3 dimensions;
+                if (DungeonCellDimensions.TryGetValue(TunnelType, out dimensions))
+                    _boundingBox = new OBB(Position + new Vector3(0, dimensions.y / 2, 0), dimensions, Rotation);
+            }
+
+            // World position to local position.
+            public Vector3 InverseTransformPoint(Vector3 worldPosition) =>
+                Quaternion.Inverse(Rotation) * (worldPosition - Position);
+
+            // Local position to world position.
+            public Vector3 TransformPoint(Vector3 localPosition) =>
+                Position + Rotation * localPosition;
+
+            public bool IsInBounds(Vector3 position) => _boundingBox.Contains(position);
         }
+
+        #endregion
+
+        #region Workcart Triggers
 
         private enum SpeedInstruction
         {
@@ -1209,7 +1209,7 @@ namespace Oxide.Plugins
             return EngineSpeedFromNumber(sign * unsignedSpeed);
         }
 
-        private static TrackSelection GetNextTrackSelection(TrackSelection trackSelection, TrackSelectionInstruction? trackSelectionInstruction)
+        private static TrackSelection DetermineNextTrackSelection(TrackSelection trackSelection, TrackSelectionInstruction? trackSelectionInstruction)
         {
             switch (trackSelectionInstruction)
             {
@@ -1992,7 +1992,7 @@ namespace Oxide.Plugins
                 var triggerSpeed = triggerInfo.GetSpeedInstruction();
                 var triggerDirection = triggerInfo.GetDirectionInstruction();
 
-                _workcart.SetTrackSelection(GetNextTrackSelection(_workcart.curTrackSelection, triggerInfo.GetTrackSelectionInstruction()));
+                _workcart.SetTrackSelection(DetermineNextTrackSelection(_workcart.curTrackSelection, triggerInfo.GetTrackSelectionInstruction()));
                 _departureVelocity = DetermineNextVelocity(currentIntendedVelocity, triggerInfo.GetDepartureSpeedInstruction(), triggerDirection);
                 _stopDuration = triggerInfo.GetStopDuration();
 
