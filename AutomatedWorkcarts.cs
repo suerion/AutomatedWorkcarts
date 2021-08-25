@@ -717,13 +717,13 @@ namespace Oxide.Plugins
                 return true;
             }
 
-            WorkcartSpeed speed;
-            if (Enum.TryParse<WorkcartSpeed>(arg, true, out speed))
+            SpeedInstruction speedInstruction;
+            if (Enum.TryParse<SpeedInstruction>(arg, true, out speedInstruction))
             {
-                var speedString = speed.ToString();
+                var speedString = speedInstruction.ToString();
 
                 // If zero speed is already set, assume this is the departure speed.
-                if (triggerInfo.Speed == WorkcartSpeed.Zero.ToString())
+                if (triggerInfo.Speed == SpeedInstruction.Zero.ToString())
                     triggerInfo.DepartureSpeed = speedString;
                 else
                     triggerInfo.Speed = speedString;
@@ -731,17 +731,17 @@ namespace Oxide.Plugins
                 return true;
             }
 
-            WorkcartDirection direction;
-            if (Enum.TryParse<WorkcartDirection>(arg, true, out direction))
+            DirectionInstruction directionInstruction;
+            if (Enum.TryParse<DirectionInstruction>(arg, true, out directionInstruction))
             {
-                triggerInfo.Direction = direction.ToString();
+                triggerInfo.Direction = directionInstruction.ToString();
                 return true;
             }
 
-            WorkcartTrackSelection trackSelection;
-            if (Enum.TryParse<WorkcartTrackSelection>(arg, true, out trackSelection))
+            TrackSelectionInstruction trackSelectionInstruction;
+            if (Enum.TryParse<TrackSelectionInstruction>(arg, true, out trackSelectionInstruction))
             {
-                triggerInfo.TrackSelection = trackSelection.ToString();
+                triggerInfo.TrackSelection = trackSelectionInstruction.ToString();
                 return true;
             }
 
@@ -1114,9 +1114,9 @@ namespace Oxide.Plugins
             [TunnelType.LargeIntersection] = new Vector3(216, 8.5f, 216),
         };
 
-        // Don't rename these since the names are persisted in data files.
         private enum TunnelType
         {
+            // Don't rename these since the names are persisted in data files.
             TrainStation,
             BarricadeTunnel,
             LootTunnel,
@@ -1125,26 +1125,26 @@ namespace Oxide.Plugins
             Unsupported
         }
 
-        // Don't rename these since the names are persisted in data files.
-        private enum WorkcartSpeed
+        private enum SpeedInstruction
         {
+            // Don't rename these since the names are persisted in data files.
             Zero = 0,
             Lo = 1,
             Med = 2,
             Hi = 3
         }
 
-        // Don't rename these since the names are persisted in data files.
-        private enum WorkcartDirection
+        private enum DirectionInstruction
         {
+            // Don't rename these since the names are persisted in data files.
             Fwd,
             Rev,
             Invert
         }
 
-        // Don't rename these since the names are persisted in data files.
-        private enum WorkcartTrackSelection
+        private enum TrackSelectionInstruction
         {
+            // Don't rename these since the names are persisted in data files.
             Default,
             Left,
             Right,
@@ -1179,7 +1179,7 @@ namespace Oxide.Plugins
             }
         }
 
-        private static EngineSpeeds GetNextVelocity(EngineSpeeds throttleSpeed, WorkcartSpeed? desiredSpeed, WorkcartDirection? desiredDirection)
+        private static EngineSpeeds DetermineNextVelocity(EngineSpeeds throttleSpeed, SpeedInstruction? desiredSpeed, DirectionInstruction? directionInstruction)
         {
             // -3 to 3
             var signedSpeed = EngineSpeedToNumber(throttleSpeed);
@@ -1190,39 +1190,39 @@ namespace Oxide.Plugins
             // 1 or -1
             var sign = signedSpeed == 0 ? 1 : signedSpeed / unsignedSpeed;
 
-            if (desiredDirection == WorkcartDirection.Fwd)
+            if (directionInstruction == DirectionInstruction.Fwd)
                 sign = 1;
-            else if (desiredDirection == WorkcartDirection.Rev)
+            else if (directionInstruction == DirectionInstruction.Rev)
                 sign = -1;
-            else if (desiredDirection == WorkcartDirection.Invert)
+            else if (directionInstruction == DirectionInstruction.Invert)
                 sign *= -1;
 
-            if (desiredSpeed == WorkcartSpeed.Hi)
+            if (desiredSpeed == SpeedInstruction.Hi)
                 unsignedSpeed = 3;
-            else if (desiredSpeed == WorkcartSpeed.Med)
+            else if (desiredSpeed == SpeedInstruction.Med)
                 unsignedSpeed = 2;
-            else if (desiredSpeed == WorkcartSpeed.Lo)
+            else if (desiredSpeed == SpeedInstruction.Lo)
                 unsignedSpeed = 1;
-            else if (desiredSpeed == WorkcartSpeed.Zero)
+            else if (desiredSpeed == SpeedInstruction.Zero)
                 unsignedSpeed = 0;
 
             return EngineSpeedFromNumber(sign * unsignedSpeed);
         }
 
-        private static TrackSelection GetNextTrackSelection(TrackSelection trackSelection, WorkcartTrackSelection? desiredTrackSelection)
+        private static TrackSelection GetNextTrackSelection(TrackSelection trackSelection, TrackSelectionInstruction? trackSelectionInstruction)
         {
-            switch (desiredTrackSelection)
+            switch (trackSelectionInstruction)
             {
-                case WorkcartTrackSelection.Default:
+                case TrackSelectionInstruction.Default:
                     return TrackSelection.Default;
 
-                case WorkcartTrackSelection.Left:
+                case TrackSelectionInstruction.Left:
                     return TrackSelection.Left;
 
-                case WorkcartTrackSelection.Right:
+                case TrackSelectionInstruction.Right:
                     return TrackSelection.Right;
 
-                case WorkcartTrackSelection.Swap:
+                case TrackSelectionInstruction.Swap:
                     return trackSelection == TrackSelection.Left
                         ? TrackSelection.Right
                         : trackSelection == TrackSelection.Right
@@ -1301,65 +1301,65 @@ namespace Oxide.Plugins
                 return (TunnelType)_tunnelType;
             }
 
-            private WorkcartSpeed? _speed;
-            public WorkcartSpeed? GetSpeed()
+            private SpeedInstruction? _speedInstruction;
+            public SpeedInstruction? GetSpeedInstruction()
             {
-                if (_speed == null && !string.IsNullOrWhiteSpace(Speed))
+                if (_speedInstruction == null && !string.IsNullOrWhiteSpace(Speed))
                 {
-                    WorkcartSpeed speed;
-                    if (Enum.TryParse<WorkcartSpeed>(Speed, out speed))
-                        _speed = speed;
+                    SpeedInstruction speed;
+                    if (Enum.TryParse<SpeedInstruction>(Speed, out speed))
+                        _speedInstruction = speed;
                 }
 
                 // Ensure there is a target speed when braking.
-                return Brake ? _speed ?? WorkcartSpeed.Zero : _speed;
+                return Brake ? _speedInstruction ?? SpeedInstruction.Zero : _speedInstruction;
             }
 
-            private WorkcartDirection? _direction;
-            public WorkcartDirection? GetDirection()
+            private DirectionInstruction? _directionInstruction;
+            public DirectionInstruction? GetDirectionInstruction()
             {
-                if (_direction == null && !string.IsNullOrWhiteSpace(Direction))
+                if (_directionInstruction == null && !string.IsNullOrWhiteSpace(Direction))
                 {
-                    WorkcartDirection direction;
-                    if (Enum.TryParse<WorkcartDirection>(Direction, out direction))
-                        _direction = direction;
+                    DirectionInstruction direction;
+                    if (Enum.TryParse<DirectionInstruction>(Direction, out direction))
+                        _directionInstruction = direction;
                 }
 
-                return _direction;
+                return _directionInstruction;
             }
 
-            private WorkcartTrackSelection? _trackSelection;
-            public WorkcartTrackSelection? GetTrackSelection()
+            private TrackSelectionInstruction? _trackSelectionInstruction;
+            public TrackSelectionInstruction? GetTrackSelectionInstruction()
             {
-                if (_trackSelection == null && !string.IsNullOrWhiteSpace(TrackSelection))
+                if (_trackSelectionInstruction == null && !string.IsNullOrWhiteSpace(TrackSelection))
                 {
-                    WorkcartTrackSelection trackSelection;
-                    if (Enum.TryParse<WorkcartTrackSelection>(TrackSelection, out trackSelection))
-                        _trackSelection = trackSelection;
+                    TrackSelectionInstruction trackSelection;
+                    if (Enum.TryParse<TrackSelectionInstruction>(TrackSelection, out trackSelection))
+                        _trackSelectionInstruction = trackSelection;
                 }
 
-                return _trackSelection;
+                return _trackSelectionInstruction;
             }
 
-            private WorkcartSpeed? _departureSpeed;
-            public WorkcartSpeed? GetDepartureSpeed()
+            private SpeedInstruction? _departureSpeedInstruction;
+            public SpeedInstruction? GetDepartureSpeedInstruction()
             {
-                if (_departureSpeed == null && !string.IsNullOrWhiteSpace(Speed))
+                if (_departureSpeedInstruction == null && !string.IsNullOrWhiteSpace(Speed))
                 {
-                    WorkcartSpeed speed;
-                    if (Enum.TryParse<WorkcartSpeed>(DepartureSpeed, out speed))
-                        _departureSpeed = speed;
+                    SpeedInstruction speed;
+                    if (Enum.TryParse<SpeedInstruction>(DepartureSpeed, out speed))
+                        _departureSpeedInstruction = speed;
                 }
 
-                return _departureSpeed ?? WorkcartSpeed.Med;
+                return _departureSpeedInstruction ?? SpeedInstruction.Med;
             }
 
             public void InvalidateCache()
             {
-                _speed = null;
-                _direction = null;
-                _trackSelection = null;
-                _departureSpeed = null;
+                _speedInstruction = null;
+                _directionInstruction = null;
+                _trackSelectionInstruction = null;
+                _departureSpeedInstruction = null;
             }
 
             public void CopyFrom(WorkcartTriggerInfo triggerInfo)
@@ -1377,9 +1377,9 @@ namespace Oxide.Plugins
                 if (AddConductor)
                     return Color.cyan;
 
-                var speed = GetSpeed();
-                var direction = GetDirection();
-                var trackSelection = GetTrackSelection();
+                var speedInstruction = GetSpeedInstruction();
+                var directionInstruction = GetDirectionInstruction();
+                var trackSelectionInstruction = GetTrackSelectionInstruction();
 
                 float hue, saturation;
 
@@ -1387,31 +1387,31 @@ namespace Oxide.Plugins
                 {
                     // Orange
                     hue = 0.5f/6f;
-                    saturation = speed == WorkcartSpeed.Zero ? 1
-                        : speed == WorkcartSpeed.Lo ? 0.8f
+                    saturation = speedInstruction == SpeedInstruction.Zero ? 1
+                        : speedInstruction == SpeedInstruction.Lo ? 0.8f
                         : 0.6f;
                     return Color.HSVToRGB(0.5f/6f, saturation, 1);
                 }
 
-                if (speed == WorkcartSpeed.Zero)
+                if (speedInstruction == SpeedInstruction.Zero)
                     return Color.white;
 
-                if (speed == null && direction == null && trackSelection != null)
+                if (speedInstruction == null && directionInstruction == null && trackSelectionInstruction != null)
                     return Color.magenta;
 
-                hue = direction == WorkcartDirection.Fwd
+                hue = directionInstruction == DirectionInstruction.Fwd
                     ? 1/3f // Green
-                    : direction == WorkcartDirection.Rev
+                    : directionInstruction == DirectionInstruction.Rev
                     ? 0 // Red
-                    : direction == WorkcartDirection.Invert
+                    : directionInstruction == DirectionInstruction.Invert
                     ? 0.5f/6f // Orange
                     : 1/6f; // Yellow
 
-                saturation = speed == WorkcartSpeed.Hi
+                saturation = speedInstruction == SpeedInstruction.Hi
                     ? 1
-                    : speed == WorkcartSpeed.Med
+                    : speedInstruction == SpeedInstruction.Med
                     ? 0.8f
-                    : speed == WorkcartSpeed.Lo
+                    : speedInstruction == SpeedInstruction.Lo
                     ? 0.6f
                     : 1;
 
@@ -1810,27 +1810,27 @@ namespace Oxide.Plugins
                 if (triggerInfo.AddConductor)
                     infoLines.Add(_pluginInstance.GetMessage(player, Lang.InfoTriggerAddConductor));
 
-                var direction = triggerInfo.GetDirection();
-                if (direction != null && !triggerInfo.Brake)
-                    infoLines.Add(_pluginInstance.GetMessage(player, Lang.InfoTriggerDirection, direction));
+                var directionInstruction = triggerInfo.GetDirectionInstruction();
+                if (directionInstruction != null && !triggerInfo.Brake)
+                    infoLines.Add(_pluginInstance.GetMessage(player, Lang.InfoTriggerDirection, directionInstruction));
 
-                var speed = triggerInfo.GetSpeed();
-                if (speed != null)
-                    infoLines.Add(_pluginInstance.GetMessage(player, triggerInfo.Brake ? Lang.InfoTriggerBrakeToSpeed : Lang.InfoTriggerSpeed, speed));
+                var speedInstruction = triggerInfo.GetSpeedInstruction();
+                if (speedInstruction != null)
+                    infoLines.Add(_pluginInstance.GetMessage(player, triggerInfo.Brake ? Lang.InfoTriggerBrakeToSpeed : Lang.InfoTriggerSpeed, speedInstruction));
 
-                if (speed == WorkcartSpeed.Zero)
+                if (speedInstruction == SpeedInstruction.Zero)
                     infoLines.Add(_pluginInstance.GetMessage(player, Lang.InfoTriggerStopDuration, triggerInfo.GetStopDuration()));
 
-                var trackSelection = triggerInfo.GetTrackSelection();
-                if (trackSelection != null)
-                    infoLines.Add(_pluginInstance.GetMessage(player, Lang.InfoTriggerTrackSelection, trackSelection));
+                var trackSelectionInstruction = triggerInfo.GetTrackSelectionInstruction();
+                if (trackSelectionInstruction != null)
+                    infoLines.Add(_pluginInstance.GetMessage(player, Lang.InfoTriggerTrackSelection, trackSelectionInstruction));
 
-                if (speed == WorkcartSpeed.Zero && direction != null)
-                    infoLines.Add(_pluginInstance.GetMessage(player, Lang.InfoTriggerDepartureDirection, direction));
+                if (speedInstruction == SpeedInstruction.Zero && directionInstruction != null)
+                    infoLines.Add(_pluginInstance.GetMessage(player, Lang.InfoTriggerDepartureDirection, directionInstruction));
 
-                var departureSpeed = triggerInfo.GetDepartureSpeed();
-                if (speed == WorkcartSpeed.Zero)
-                    infoLines.Add(_pluginInstance.GetMessage(player, Lang.InfoTriggerDepartureSpeed, departureSpeed));
+                var departureSpeedInstruction = triggerInfo.GetDepartureSpeedInstruction();
+                if (speedInstruction == SpeedInstruction.Zero)
+                    infoLines.Add(_pluginInstance.GetMessage(player, Lang.InfoTriggerDepartureSpeed, departureSpeedInstruction));
 
                 var textPosition = trigger.WorldPosition + new Vector3(0, 1.5f + infoLines.Count * 0.1f, 0);
                 player.SendConsoleCommand("ddraw.text", TriggerDisplayDuration, color, textPosition, string.Join("\n", infoLines));
@@ -1972,7 +1972,7 @@ namespace Oxide.Plugins
 
             public void StartImmediately(WorkcartTriggerInfo triggerInfo)
             {
-                var initialSpeed = GetNextVelocity(EngineSpeeds.Zero, triggerInfo.GetSpeed(), triggerInfo.GetDirection());
+                var initialSpeed = DetermineNextVelocity(EngineSpeeds.Zero, triggerInfo.GetSpeedInstruction(), triggerInfo.GetDirectionInstruction());
 
                 Invoke(() =>
                 {
@@ -1989,14 +1989,14 @@ namespace Oxide.Plugins
                 CancelWaitingAtStop();
                 CancelChilling();
 
-                var triggerSpeed = triggerInfo.GetSpeed();
-                var triggerDirection = triggerInfo.GetDirection();
+                var triggerSpeed = triggerInfo.GetSpeedInstruction();
+                var triggerDirection = triggerInfo.GetDirectionInstruction();
 
-                _workcart.SetTrackSelection(GetNextTrackSelection(_workcart.curTrackSelection, triggerInfo.GetTrackSelection()));
-                _departureVelocity = GetNextVelocity(currentIntendedVelocity, triggerInfo.GetDepartureSpeed(), triggerDirection);
+                _workcart.SetTrackSelection(GetNextTrackSelection(_workcart.curTrackSelection, triggerInfo.GetTrackSelectionInstruction()));
+                _departureVelocity = DetermineNextVelocity(currentIntendedVelocity, triggerInfo.GetDepartureSpeedInstruction(), triggerDirection);
                 _stopDuration = triggerInfo.GetStopDuration();
 
-                var nextVelocity = GetNextVelocity(currentIntendedVelocity, triggerSpeed, triggerDirection);
+                var nextVelocity = DetermineNextVelocity(currentIntendedVelocity, triggerSpeed, triggerDirection);
 
                 // Only cancel braking if the trigger specifies speed.
                 // Must do this after computing the next velocity.
@@ -2048,7 +2048,7 @@ namespace Oxide.Plugins
 
             private void StartBrakingUntilVelocity(EngineSpeeds currentVelocity, EngineSpeeds desiredVelocity)
             {
-                SetThrottle(GetNextVelocity(currentVelocity, WorkcartSpeed.Lo, WorkcartDirection.Invert));
+                SetThrottle(DetermineNextVelocity(currentVelocity, SpeedInstruction.Lo, DirectionInstruction.Invert));
                 CancelBraking();
                 _targetVelocity = desiredVelocity;
                 InvokeRepeatingFixedTime(BrakeUpdate);
@@ -2424,9 +2424,9 @@ namespace Oxide.Plugins
                             Position = new Vector3(4.5f, DefaultTriggerHeight, 52),
                             TunnelType = TunnelType.TrainStation.ToString(),
                             Brake = true,
-                            Speed = WorkcartSpeed.Zero.ToString(),
+                            Speed = SpeedInstruction.Zero.ToString(),
                             StopDuration = DefaultStationStopDuration,
-                            DepartureSpeed = WorkcartSpeed.Hi.ToString(),
+                            DepartureSpeed = SpeedInstruction.Hi.ToString(),
                         },
                         new WorkcartTriggerInfo
                         {
@@ -2434,9 +2434,9 @@ namespace Oxide.Plugins
                             Position = new Vector3(45, DefaultTriggerHeight, 18),
                             TunnelType = TunnelType.TrainStation.ToString(),
                             AddConductor = true,
-                            Direction = WorkcartDirection.Fwd.ToString(),
-                            Speed = WorkcartSpeed.Hi.ToString(),
-                            TrackSelection = WorkcartTrackSelection.Left.ToString(),
+                            Direction = DirectionInstruction.Fwd.ToString(),
+                            Speed = SpeedInstruction.Hi.ToString(),
+                            TrackSelection = TrackSelectionInstruction.Left.ToString(),
                         },
                         new WorkcartTriggerInfo
                         {
@@ -2444,9 +2444,9 @@ namespace Oxide.Plugins
                             Position = new Vector3(-4.5f, DefaultTriggerHeight, -11),
                             TunnelType = TunnelType.TrainStation.ToString(),
                             Brake = true,
-                            Speed = WorkcartSpeed.Zero.ToString(),
+                            Speed = SpeedInstruction.Zero.ToString(),
                             StopDuration = DefaultStationStopDuration,
-                            DepartureSpeed = WorkcartSpeed.Hi.ToString(),
+                            DepartureSpeed = SpeedInstruction.Hi.ToString(),
                         },
                         new WorkcartTriggerInfo
                         {
@@ -2454,9 +2454,9 @@ namespace Oxide.Plugins
                             Position = new Vector3(-45, DefaultTriggerHeight, -18),
                             TunnelType = TunnelType.TrainStation.ToString(),
                             AddConductor = true,
-                            Direction = WorkcartDirection.Fwd.ToString(),
-                            Speed = WorkcartSpeed.Hi.ToString(),
-                            TrackSelection = WorkcartTrackSelection.Left.ToString(),
+                            Direction = DirectionInstruction.Fwd.ToString(),
+                            Speed = SpeedInstruction.Hi.ToString(),
+                            TrackSelection = TrackSelectionInstruction.Left.ToString(),
                         },
 
                         new WorkcartTriggerInfo
@@ -2465,7 +2465,7 @@ namespace Oxide.Plugins
                             Position = new Vector3(-4.45f, DefaultTriggerHeight, -31),
                             TunnelType = TunnelType.BarricadeTunnel.ToString(),
                             Brake = true,
-                            Speed = WorkcartSpeed.Med.ToString(),
+                            Speed = SpeedInstruction.Med.ToString(),
                         },
                         new WorkcartTriggerInfo
                         {
@@ -2473,9 +2473,9 @@ namespace Oxide.Plugins
                             Position = new Vector3(-4.5f, DefaultTriggerHeight, -1f),
                             TunnelType = TunnelType.BarricadeTunnel.ToString(),
                             Brake = true,
-                            Speed = WorkcartSpeed.Zero.ToString(),
+                            Speed = SpeedInstruction.Zero.ToString(),
                             StopDuration = 5,
-                            DepartureSpeed = WorkcartSpeed.Hi.ToString(),
+                            DepartureSpeed = SpeedInstruction.Hi.ToString(),
                         },
                         new WorkcartTriggerInfo
                         {
@@ -2483,7 +2483,7 @@ namespace Oxide.Plugins
                             Position = new Vector3(4.45f, DefaultTriggerHeight, 39),
                             TunnelType = TunnelType.BarricadeTunnel.ToString(),
                             Brake = true,
-                            Speed = WorkcartSpeed.Med.ToString(),
+                            Speed = SpeedInstruction.Med.ToString(),
                         },
                         new WorkcartTriggerInfo
                         {
@@ -2491,9 +2491,9 @@ namespace Oxide.Plugins
                             Position = new Vector3(4.5f, DefaultTriggerHeight, 9f),
                             TunnelType = TunnelType.BarricadeTunnel.ToString(),
                             Brake = true,
-                            Speed = WorkcartSpeed.Zero.ToString(),
+                            Speed = SpeedInstruction.Zero.ToString(),
                             StopDuration = 5,
-                            DepartureSpeed = WorkcartSpeed.Hi.ToString(),
+                            DepartureSpeed = SpeedInstruction.Hi.ToString(),
                         },
 
                         new WorkcartTriggerInfo
@@ -2502,9 +2502,9 @@ namespace Oxide.Plugins
                             Position = new Vector3(3, DefaultTriggerHeight, 35f),
                             TunnelType = TunnelType.LootTunnel.ToString(),
                             Brake = true,
-                            Speed = WorkcartSpeed.Zero.ToString(),
+                            Speed = SpeedInstruction.Zero.ToString(),
                             StopDuration = DefaultQuickStopDuration,
-                            DepartureSpeed = WorkcartSpeed.Hi.ToString(),
+                            DepartureSpeed = SpeedInstruction.Hi.ToString(),
                         },
                         new WorkcartTriggerInfo
                         {
@@ -2512,9 +2512,9 @@ namespace Oxide.Plugins
                             Position = new Vector3(-3, DefaultTriggerHeight, -35f),
                             TunnelType = TunnelType.LootTunnel.ToString(),
                             Brake = true,
-                            Speed = WorkcartSpeed.Zero.ToString(),
+                            Speed = SpeedInstruction.Zero.ToString(),
                             StopDuration = DefaultQuickStopDuration,
-                            DepartureSpeed = WorkcartSpeed.Hi.ToString(),
+                            DepartureSpeed = SpeedInstruction.Hi.ToString(),
                         },
 
                         new WorkcartTriggerInfo
@@ -2523,9 +2523,9 @@ namespace Oxide.Plugins
                             Position = new Vector3(35, DefaultTriggerHeight, -3.0f),
                             TunnelType = TunnelType.Intersection.ToString(),
                             Brake = true,
-                            Speed = WorkcartSpeed.Zero.ToString(),
+                            Speed = SpeedInstruction.Zero.ToString(),
                             StopDuration = DefaultQuickStopDuration,
-                            DepartureSpeed = WorkcartSpeed.Hi.ToString(),
+                            DepartureSpeed = SpeedInstruction.Hi.ToString(),
                         }
                     }
                 };
@@ -2827,9 +2827,9 @@ namespace Oxide.Plugins
 
         private string GetTriggerOptions(IPlayer player)
         {
-            var speedOptions = GetMessage(player, Lang.HelpSpeedOptions, GetEnumOptions<WorkcartSpeed>());
-            var directionOptions = GetMessage(player, Lang.HelpDirectionOptions, GetEnumOptions<WorkcartDirection>());
-            var trackSelectionOptions = GetMessage(player, Lang.HelpTrackSelectionOptions, GetEnumOptions<WorkcartTrackSelection>());
+            var speedOptions = GetMessage(player, Lang.HelpSpeedOptions, GetEnumOptions<SpeedInstruction>());
+            var directionOptions = GetMessage(player, Lang.HelpDirectionOptions, GetEnumOptions<DirectionInstruction>());
+            var trackSelectionOptions = GetMessage(player, Lang.HelpTrackSelectionOptions, GetEnumOptions<TrackSelectionInstruction>());
             var otherOptions = GetMessage(player, Lang.HelpOtherOptions);
 
             return $"{speedOptions}\n{directionOptions}\n{trackSelectionOptions}\n{otherOptions}";
