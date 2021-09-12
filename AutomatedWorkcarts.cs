@@ -1501,13 +1501,13 @@ namespace Oxide.Plugins
                 return triggerWrapperList;
             }
 
-            private DungeonCellWrapper _dungeonCellWrapper;
+            public DungeonCellWrapper DungeonCellWrapper { get; private set; }
 
-            public override Vector3 WorldPosition => _dungeonCellWrapper.TransformPoint(TriggerInfo.Position);
+            public override Vector3 WorldPosition => DungeonCellWrapper.TransformPoint(TriggerInfo.Position);
 
             public TunnelTriggerWrapper(WorkcartTriggerInfo triggerInfo, DungeonCellWrapper dungeonCellWrapper) : base(triggerInfo)
             {
-                _dungeonCellWrapper = dungeonCellWrapper;
+                DungeonCellWrapper = dungeonCellWrapper;
             }
         }
 
