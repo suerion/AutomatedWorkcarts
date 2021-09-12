@@ -151,7 +151,8 @@ Default configuration:
   "VendingMapMarker": {
     "Enabled": false,
     "Name": "Automated Workcart"
-  }
+  },
+  "TriggerDisplayDistance": 150.0
 }
 ```
 
@@ -180,6 +181,7 @@ Default configuration:
 - `VendingMapMarker`
   - `Enabled` (`true` or `false`) -- Whether to enable vending machine map markers.
   - `Name` -- The name to display when hoving the mouse over the marker.
+- `TriggerDisplayDistance ` -- Determines how close you must be to a trigger to see it when viewing triggers.
 
 ## FAQ
 

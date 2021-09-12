@@ -1512,8 +1512,7 @@ namespace Oxide.Plugins
         {
             private const float TriggerDisplayDuration = 1f;
             private const float TriggerDisplayRadius = 1f;
-            private const float TriggerDrawDistance = 150;
-            private static readonly float TriggerDrawDistanceSquared = TriggerDrawDistance * TriggerDrawDistance;
+            private float TriggerDisplayDistanceSquared => _pluginConfig.TriggerDisplayDistance * _pluginConfig.TriggerDisplayDistance;
 
             private Dictionary<WorkcartTriggerInfo, MapTriggerWrapper> _mapTriggers = new Dictionary<WorkcartTriggerInfo, MapTriggerWrapper>();
             private Dictionary<WorkcartTriggerInfo, TunnelTriggerWrapper[]> _tunnelTriggers = new Dictionary<WorkcartTriggerInfo, TunnelTriggerWrapper[]>();
@@ -1769,7 +1768,7 @@ namespace Oxide.Plugins
 
                 foreach (var trigger in _mapTriggers.Values)
                 {
-                    if ((playerPosition - trigger.WorldPosition).sqrMagnitude <= TriggerDrawDistanceSquared)
+                    if ((playerPosition - trigger.WorldPosition).sqrMagnitude <= TriggerDisplayDistanceSquared)
                         ShowTrigger(player, trigger);
                 }
 
@@ -1777,7 +1776,7 @@ namespace Oxide.Plugins
                 {
                     foreach (var trigger in triggerList)
                     {
-                        if ((playerPosition - trigger.WorldPosition).sqrMagnitude <= TriggerDrawDistanceSquared)
+                        if ((playerPosition - trigger.WorldPosition).sqrMagnitude <= TriggerDisplayDistanceSquared)
                             ShowTrigger(player, trigger, triggerList.Length);
                     }
                 }
@@ -2654,6 +2653,9 @@ namespace Oxide.Plugins
 
             [JsonProperty("VendingMapMarker")]
             public VendingMarkerOptions VendingMapMarker = new VendingMarkerOptions();
+
+            [JsonProperty("TriggerDisplayDistance")]
+            public float TriggerDisplayDistance = 150;
 
             public bool IsTunnelTypeEnabled(TunnelType tunnelType)
             {
