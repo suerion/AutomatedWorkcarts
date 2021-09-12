@@ -125,6 +125,7 @@ namespace Oxide.Plugins
             if (trainController == null)
             {
                 if (trigger.TriggerInfo.AddConductor
+                    && !trigger.TriggerInfo.Destroy
                     && !IsWorkcartOwned(workcart)
                     && CanHaveMoreConductors())
                 {
@@ -667,6 +668,12 @@ namespace Oxide.Plugins
             if (argLower == "brake")
             {
                 triggerInfo.Brake = true;
+                return true;
+            }
+
+            if (argLower == "destroy")
+            {
+                triggerInfo.Destroy = true;
                 return true;
             }
 
@@ -1248,6 +1255,9 @@ namespace Oxide.Plugins
             [JsonProperty("Brake", DefaultValueHandling = DefaultValueHandling.Ignore)]
             public bool Brake = false;
 
+            [JsonProperty("Destroy", DefaultValueHandling = DefaultValueHandling.Ignore)]
+            public bool Destroy = false;
+
             [JsonProperty("Direction", DefaultValueHandling = DefaultValueHandling.Ignore)]
             public string Direction;
 
@@ -1356,6 +1366,7 @@ namespace Oxide.Plugins
             {
                 AddConductor = triggerInfo.AddConductor;
                 Brake = triggerInfo.Brake;
+                Destroy = triggerInfo.Destroy;
                 Speed = triggerInfo.Speed;
                 DepartureSpeed = triggerInfo.DepartureSpeed;
                 Direction = triggerInfo.Direction;
@@ -1364,6 +1375,9 @@ namespace Oxide.Plugins
 
             public Color GetColor()
             {
+                if (Destroy)
+                    return Color.red;
+
                 if (AddConductor)
                     return Color.cyan;
 
@@ -1804,30 +1818,38 @@ namespace Oxide.Plugins
                 else
                     infoLines.Add(_pluginInstance.GetMessage(player, Lang.InfoTriggerMap, triggerInfo.Id));
 
-                if (triggerInfo.AddConductor)
-                    infoLines.Add(_pluginInstance.GetMessage(player, Lang.InfoTriggerAddConductor));
+                if (triggerInfo.Destroy)
+                {
+                    infoLines.Add(_pluginInstance.GetMessage(player, Lang.InfoTriggerDestroy));
+                }
+                else
+                {
+                    if (triggerInfo.AddConductor)
+                        infoLines.Add(_pluginInstance.GetMessage(player, Lang.InfoTriggerAddConductor));
 
-                var directionInstruction = triggerInfo.GetDirectionInstruction();
-                if (directionInstruction != null && !triggerInfo.Brake)
-                    infoLines.Add(_pluginInstance.GetMessage(player, Lang.InfoTriggerDirection, directionInstruction));
+                    var directionInstruction = triggerInfo.GetDirectionInstruction();
+                    if (directionInstruction != null && !triggerInfo.Brake)
+                        infoLines.Add(_pluginInstance.GetMessage(player, Lang.InfoTriggerDirection, directionInstruction));
 
-                var speedInstruction = triggerInfo.GetSpeedInstruction();
-                if (speedInstruction != null)
-                    infoLines.Add(_pluginInstance.GetMessage(player, triggerInfo.Brake ? Lang.InfoTriggerBrakeToSpeed : Lang.InfoTriggerSpeed, speedInstruction));
+                    var speedInstruction = triggerInfo.GetSpeedInstruction();
+                    if (speedInstruction != null)
+                        infoLines.Add(_pluginInstance.GetMessage(player, triggerInfo.Brake ? Lang.InfoTriggerBrakeToSpeed : Lang.InfoTriggerSpeed, speedInstruction));
 
-                if (speedInstruction == SpeedInstruction.Zero)
-                    infoLines.Add(_pluginInstance.GetMessage(player, Lang.InfoTriggerStopDuration, triggerInfo.GetStopDuration()));
+                    if (speedInstruction == SpeedInstruction.Zero)
+                        infoLines.Add(_pluginInstance.GetMessage(player, Lang.InfoTriggerStopDuration, triggerInfo.GetStopDuration()));
 
-                var trackSelectionInstruction = triggerInfo.GetTrackSelectionInstruction();
-                if (trackSelectionInstruction != null)
-                    infoLines.Add(_pluginInstance.GetMessage(player, Lang.InfoTriggerTrackSelection, trackSelectionInstruction));
+                    var trackSelectionInstruction = triggerInfo.GetTrackSelectionInstruction();
+                    if (trackSelectionInstruction != null)
+                        infoLines.Add(_pluginInstance.GetMessage(player, Lang.InfoTriggerTrackSelection, trackSelectionInstruction));
 
-                if (speedInstruction == SpeedInstruction.Zero && directionInstruction != null)
-                    infoLines.Add(_pluginInstance.GetMessage(player, Lang.InfoTriggerDepartureDirection, directionInstruction));
+                    if (speedInstruction == SpeedInstruction.Zero && directionInstruction != null)
+                        infoLines.Add(_pluginInstance.GetMessage(player, Lang.InfoTriggerDepartureDirection, directionInstruction));
 
-                var departureSpeedInstruction = triggerInfo.GetDepartureSpeedInstruction();
-                if (speedInstruction == SpeedInstruction.Zero)
-                    infoLines.Add(_pluginInstance.GetMessage(player, Lang.InfoTriggerDepartureSpeed, departureSpeedInstruction));
+                    var departureSpeedInstruction = triggerInfo.GetDepartureSpeedInstruction();
+                    if (speedInstruction == SpeedInstruction.Zero)
+                        infoLines.Add(_pluginInstance.GetMessage(player, Lang.InfoTriggerDepartureSpeed, departureSpeedInstruction));
+
+                }
 
                 var textPosition = trigger.WorldPosition + new Vector3(0, 1.5f + infoLines.Count * 0.1f, 0);
                 player.SendConsoleCommand("ddraw.text", TriggerDisplayDuration, color, textPosition, string.Join("\n", infoLines));
@@ -1984,6 +2006,12 @@ namespace Oxide.Plugins
 
             public void HandleWorkcartTrigger(WorkcartTriggerInfo triggerInfo)
             {
+                if (triggerInfo.Destroy)
+                {
+                    Invoke(() => _workcart.Kill(BaseNetworkable.DestroyMode.Gib), 0);
+                    return;
+                }
+
                 var currentIntendedVelocity = CurrentIntendedVelocity;
 
                 // Cancel these after determing next current intended velocity, since it has logic for these.
@@ -2915,6 +2943,7 @@ namespace Oxide.Plugins
             public const string InfoTriggerMap = "Info.Trigger.Map";
             public const string InfoTriggerTunnel = "Info.Trigger.Tunnel";
             public const string InfoTriggerAddConductor = "Info.Trigger.Conductor";
+            public const string InfoTriggerDestroy = "Info.Trigger.Destroy";
             public const string InfoTriggerStopDuration = "Info.Trigger.StopDuration";
 
             public const string InfoTriggerSpeed = "Info.Trigger.Speed";
@@ -2961,7 +2990,7 @@ namespace Oxide.Plugins
                 [Lang.HelpSpeedOptions] = "Speeds: {0}",
                 [Lang.HelpDirectionOptions] = "Directions: {0}",
                 [Lang.HelpTrackSelectionOptions] = "Track selection: {0}",
-                [Lang.HelpOtherOptions] = "Other options: <color=#fd4>Conductor</color> | <color=#fd4>Brake</color>",
+                [Lang.HelpOtherOptions] = "Other options: <color=#fd4>Conductor</color> | <color=#fd4>Brake</color> | <color=#fd4>Destroy</color>",
 
                 [Lang.InfoTrigger] = "Workcart Trigger #{0}{1}",
                 [Lang.InfoTriggerMapPrefix] = "M",
@@ -2970,6 +2999,7 @@ namespace Oxide.Plugins
                 [Lang.InfoTriggerMap] = "Map-specific",
                 [Lang.InfoTriggerTunnel] = "Tunnel type: {0} (x{1})",
                 [Lang.InfoTriggerAddConductor] = "Adds Conductor",
+                [Lang.InfoTriggerDestroy] = "Destroys workcart",
                 [Lang.InfoTriggerStopDuration] = "Stop duration: {0}s",
 
                 [Lang.InfoTriggerSpeed] = "Speed: {0}",

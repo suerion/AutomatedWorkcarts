@@ -77,6 +77,7 @@ To see the triggers visually, grant the `automatedworkcarts.managetriggers` perm
     - `Conductor` -- Adds a conductor to the workcart if not already present. Recommended to place on some or all workcart spawn locations, depending on how many workcarts you want to automate.
       - Note: Owned workcarts cannot receive conductors. Vanilla workcarts don't have owners, but most plugins that spawn vehicles for players will assign ownership.
     - `Brake` -- Instructs the workcart to brake until it reaches the designated speed. For example, if the workcart is going `Fwd_Hi` and enters a `Brake Med` trigger, it will temporarily go `Rev_Lo` until it slows down enough, then it will go `Fwd Med`.
+    - `Destroy` -- Destroys the workcart. This is primarily for lazy track designs. You should not need this if you design your routes thoughtfully.
   - Simple examples:
     - `aw.addtrigger Lo` -- Causes the workcart to move at `Lo` speed in its current direction. Exmaple: `Fwd_Hi` -> `Fwd_Lo`.
     - `aw.addtrigger Fwd Lo` -- Causes the workcart to move forward at `Lo` speed, regardless of its current direction. Example: `Rev_Hi` -> `Fwd_Lo`.
@@ -256,13 +257,14 @@ The best practice is to have separate, independent tracks for player vs automate
   "Help.SpeedOptions": "Speeds: {0}",
   "Help.DirectionOptions": "Directions: {0}",
   "Help.TrackSelectionOptions": "Track selection: {0}",
-  "Help.OtherOptions": "Other options: <color=#fd4>Conductor</color> | <color=#fd4>Brake</color>",
+  "Help.OtherOptions": "Other options: <color=#fd4>Conductor</color> | <color=#fd4>Brake</color> | <color=#fd4>Destroy</color>",
   "Info.Trigger": "Workcart Trigger #{0}{1}",
   "Info.Trigger.Prefix.Map": "M",
   "Info.Trigger.Prefix.Tunnel": "T",
   "Info.Trigger.Map": "Map-specific",
   "Info.Trigger.Tunnel": "Tunnel type: {0} (x{1})",
   "Info.Trigger.Conductor": "Adds Conductor",
+  "Info.Trigger.Destroy": "Destroys workcart",
   "Info.Trigger.StopDuration": "Stop duration: {0}s",
   "Info.Trigger.Speed": "Speed: {0}",
   "Info.Trigger.BrakeToSpeed": "Brake to speed: {0}",
