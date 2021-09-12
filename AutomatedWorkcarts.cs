@@ -2219,6 +2219,7 @@ namespace Oxide.Plugins
             private void StartTrain(EngineSpeeds initialSpeed)
             {
                 _workcart.engineController.TryStartEngine(Conductor);
+                DisableHazardChecks();
                 SetThrottle(initialSpeed);
                 _workcart.SetTrackSelection(_pluginConfig.GetDefaultTrackSelection());
             }
@@ -2235,6 +2236,17 @@ namespace Oxide.Plugins
                 }
 
                 Conductor.SendNetworkUpdate();
+            }
+
+            private void DisableHazardChecks()
+            {
+                Invoke(() => _workcart.CancelInvoke(_workcart.CheckForHazards), 1f);
+            }
+
+            private void EnableHazardChecks()
+            {
+                if (_workcart.IsOn() && !_workcart.IsInvoking(_workcart.CheckForHazards))
+                    _workcart.InvokeRandomized(_workcart.CheckForHazards, 0f, 1f, 0.1f);
             }
 
             private void EnableUnlimitedFuel()
@@ -2260,6 +2272,7 @@ namespace Oxide.Plugins
                     _vendingMarker.Kill();
 
                 DisableUnlimitedFuel();
+                EnableHazardChecks();
             }
         }
 
