@@ -140,25 +140,6 @@ namespace Oxide.Plugins
             return null;
         }
 
-        private bool? OnEntityTakeDamage(BasePlayer player)
-        {
-            var workcart = player.GetMountedVehicle() as TrainEngine;
-            if (workcart == null)
-                return null;
-
-            var trainController = workcart.GetComponent<TrainController>();
-            if (trainController == null)
-                return null;
-
-            if (player == trainController.Conductor)
-            {
-                // Return true (standard) to cancel default behavior (prevent damage).
-                return true;
-            }
-
-            return null;
-        }
-
         private void OnEntityEnter(WorkcartTrigger trigger, TrainEngine workcart)
         {
             var trainController = workcart.GetComponent<TrainController>();
