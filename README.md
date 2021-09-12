@@ -102,6 +102,7 @@ To see the triggers visually, grant the `automatedworkcarts.managetriggers` perm
 Tip: For the commands that update, move or remove triggers, you can skip the `<id>` argument if you are aiming at a nearby trigger.
 
 The following command aliases are also available:
+- `aw.showtriggers` -> `awt.show`
 - `aw.addtrigger` -> `awt.add`
 - `aw.addtunneltrigger` -> `awt.addt`
 - `aw.updatetrigger` -> `awt.update`

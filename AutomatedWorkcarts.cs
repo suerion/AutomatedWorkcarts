@@ -510,7 +510,7 @@ namespace Oxide.Plugins
             ReplyToPlayer(player, Lang.RemoveTriggerSuccess, GetTriggerPrefix(player, triggerInfo), triggerInfo.Id);
         }
 
-        [Command("aw.showtriggers")]
+        [Command("aw.showtriggers", "awt.show")]
         private void CommandShowStops(IPlayer player, string cmd, string[] args)
         {
             if (player.IsServer
