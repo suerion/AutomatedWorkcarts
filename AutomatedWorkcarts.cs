@@ -1077,10 +1077,10 @@ namespace Oxide.Plugins
 
             private static TunnelType GetTunnelType(string shortName)
             {
-                AutomatedWorkcarts.TunnelType tunnelType;
+                TunnelType tunnelType;
                 return DungeonCellTypes.TryGetValue(shortName, out tunnelType)
                     ? tunnelType
-                    : AutomatedWorkcarts.TunnelType.Unsupported;
+                    : TunnelType.Unsupported;
             }
 
             public static Quaternion GetRotation(string shortName)
