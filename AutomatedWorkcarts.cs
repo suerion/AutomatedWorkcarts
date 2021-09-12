@@ -6,6 +6,7 @@ using Oxide.Core.Libraries.Covalence;
 using Oxide.Core.Plugins;
 using Rust;
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
@@ -39,6 +40,8 @@ namespace Oxide.Plugins
         private WorkcartTriggerManager _triggerManager = new WorkcartTriggerManager();
         private AutomatedWorkcartManager _workcartManager = new AutomatedWorkcartManager();
 
+        private Coroutine _startupCoroutine;
+
         #endregion
 
         #region Hooks
@@ -58,6 +61,9 @@ namespace Oxide.Plugins
 
         private void Unload()
         {
+            if (_startupCoroutine != null)
+                ServerMgr.Instance.StopCoroutine(_startupCoroutine);
+
             _pluginData.Save();
             _triggerManager.DestroyAll();
             TrainController.DestroyAll();
@@ -73,31 +79,7 @@ namespace Oxide.Plugins
         {
             _tunnelData.MigrateTriggers();
             _mapData = StoredMapData.Load();
-            _triggerManager.CreateAll();
-
-            var foundWorkcarts = new List<uint>();
-
-            foreach (var entity in BaseNetworkable.serverEntities)
-            {
-                var workcart = entity as TrainEngine;
-                if (workcart == null)
-                    continue;
-
-                if (_pluginData.HasWorkcartId(workcart.net.ID))
-                {
-                    foundWorkcarts.Add(workcart.net.ID);
-                    timer.Once(UnityEngine.Random.Range(0, 1f), () =>
-                    {
-                        if (workcart != null
-                            && !IsWorkcartOwned(workcart)
-                            && CanHaveMoreConductors()
-                            && !IsWorkcartAutomated(workcart))
-                            TryAddTrainController(workcart);
-                    });
-                }
-            }
-
-            _pluginData.ReplaceWorkcartIds(foundWorkcarts);
+            _startupCoroutine = ServerMgr.Instance.StartCoroutine(DoStartupRoutine());
         }
 
         private void OnServerSave()
@@ -733,6 +715,36 @@ namespace Oxide.Plugins
         #endregion
 
         #region Helper Methods
+
+        private IEnumerator DoStartupRoutine()
+        {
+            _pluginInstance.TrackStart();
+            yield return _triggerManager.CreateAll();
+
+            var foundWorkcarts = new List<uint>();
+            foreach (var entity in BaseNetworkable.serverEntities)
+            {
+                var workcart = entity as TrainEngine;
+                if (workcart == null)
+                    continue;
+
+                if (_pluginData.HasWorkcartId(workcart.net.ID))
+                {
+                    foundWorkcarts.Add(workcart.net.ID);
+                    timer.Once(UnityEngine.Random.Range(0, 1f), () =>
+                    {
+                        if (workcart != null
+                            && !IsWorkcartOwned(workcart)
+                            && CanHaveMoreConductors()
+                            && !IsWorkcartAutomated(workcart))
+                            TryAddTrainController(workcart);
+                    });
+                }
+            }
+
+            _pluginData.ReplaceWorkcartIds(foundWorkcarts);
+            _pluginInstance.TrackEnd();
+        }
 
         private static bool AutomationWasBlocked(TrainEngine workcart)
         {
@@ -1690,12 +1702,17 @@ namespace Oxide.Plugins
                 }
             }
 
-            public void CreateAll()
+            public IEnumerator CreateAll()
             {
                 if (_pluginConfig.EnableMapTriggers)
                 {
                     foreach (var triggerInfo in _mapData.MapTriggers)
+                    {
                         _mapTriggers[triggerInfo] = CreateMapTrigger(triggerInfo);
+                        _pluginInstance.TrackEnd();
+                        yield return CoroutineEx.waitForEndOfFrame;
+                        _pluginInstance.TrackStart();
+                    }
                 }
 
                 foreach (var triggerInfo in _tunnelData.TunnelTriggers)
@@ -1705,6 +1722,9 @@ namespace Oxide.Plugins
                         continue;
 
                     _tunnelTriggers[triggerInfo] = CreateTunnelTriggers(triggerInfo);
+                    _pluginInstance.TrackEnd();
+                    yield return CoroutineEx.waitForEndOfFrame;
+                    _pluginInstance.TrackStart();
                 }
             }
 
