@@ -40,6 +40,7 @@ namespace Oxide.Plugins
         private WorkcartTriggerManager _triggerManager = new WorkcartTriggerManager();
         private AutomatedWorkcartManager _workcartManager = new AutomatedWorkcartManager();
 
+        private ProtectionProperties _immortalProtection;
         private Coroutine _startupCoroutine;
 
         #endregion
@@ -59,6 +60,18 @@ namespace Oxide.Plugins
                 Unsubscribe(nameof(OnPlayerConnected));
         }
 
+        private void OnServerInitialized()
+        {
+            _tunnelData.MigrateTriggers();
+            _mapData = StoredMapData.Load();
+
+            _immortalProtection = ScriptableObject.CreateInstance<ProtectionProperties>();
+            _immortalProtection.name = "AutomatedWorkcartsProtection";
+            _immortalProtection.Add(1);
+
+            _startupCoroutine = ServerMgr.Instance.StartCoroutine(DoStartupRoutine());
+        }
+
         private void Unload()
         {
             if (_startupCoroutine != null)
@@ -68,18 +81,13 @@ namespace Oxide.Plugins
             _triggerManager.DestroyAll();
             TrainController.DestroyAll();
 
+            UnityEngine.Object.Destroy(_immortalProtection);
+
             _mapData = null;
             _pluginData = null;
             _tunnelData = null;
             _pluginConfig = null;
             _pluginInstance = null;
-        }
-
-        private void OnServerInitialized()
-        {
-            _tunnelData.MigrateTriggers();
-            _mapData = StoredMapData.Load();
-            _startupCoroutine = ServerMgr.Instance.StartCoroutine(DoStartupRoutine());
         }
 
         private void OnServerSave()
@@ -109,17 +117,6 @@ namespace Oxide.Plugins
                 return;
 
             _workcartManager.Unregister(workcart);
-        }
-
-        private bool? OnEntityTakeDamage(TrainEngine workcart)
-        {
-            if (workcart.GetComponent<TrainController>() != null)
-            {
-                // Return true (standard) to cancel default behavior (prevent damage).
-                return true;
-            }
-
-            return null;
         }
 
         private void OnEntityEnter(WorkcartTrigger trigger, TrainEngine workcart)
@@ -1949,6 +1946,8 @@ namespace Oxide.Plugins
             public NPCShopKeeper Conductor { get; private set; }
             private TrainEngine _workcart;
             private Transform _transform;
+            private ProtectionProperties _originalProtection;
+
             private MapMarkerGenericRadius _genericMarker;
             private VendingMachineMapMarker _vendingMarker;
 
@@ -1963,6 +1962,8 @@ namespace Oxide.Plugins
                     return;
 
                 _transform = _workcart.transform;
+                _originalProtection = _workcart.baseProtection;
+                _workcart.baseProtection = _pluginInstance._immortalProtection;
 
                 AddConductor();
                 MaybeAddMapMarkers();
@@ -2270,6 +2271,9 @@ namespace Oxide.Plugins
 
                 if (_vendingMarker != null)
                     _vendingMarker.Kill();
+
+                if (_originalProtection != null)
+                    _workcart.baseProtection = _originalProtection;
 
                 DisableUnlimitedFuel();
                 EnableHazardChecks();
