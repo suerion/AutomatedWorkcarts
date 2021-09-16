@@ -874,7 +874,7 @@ namespace Oxide.Plugins
 
             var trainController = TrainController.AddToWorkcart(workcart, persistentData);
             if (triggerInfo != null)
-                trainController.StartImmediately(triggerInfo);
+                trainController.HandleConductorTrigger(triggerInfo);
 
             _pluginInstance._workcartManager.Register(workcart, persistentData);
             Interface.CallHook("OnWorkcartAutomationStarted", workcart);
@@ -2145,18 +2145,25 @@ namespace Oxide.Plugins
                 AddConductor();
                 MaybeAddMapMarkers();
                 EnableUnlimitedFuel();
-                StartTrain(_pluginConfig.GetDefaultSpeed());
+
+                _workcart.engineController.TryStartEngine(Conductor);
+                Invoke(DisableHazardChecks, 1f);
+
+                SetThrottle(_pluginConfig.GetDefaultSpeed());
+                SetTrackSelection(_pluginConfig.GetDefaultTrackSelection());
             }
 
-            public void StartImmediately(WorkcartTriggerInfo triggerInfo)
+            public void HandleConductorTrigger(WorkcartTriggerInfo triggerInfo)
             {
-                var initialSpeed = DetermineNextVelocity(EngineSpeeds.Zero, triggerInfo.GetSpeedInstruction(), triggerInfo.GetDirectionInstruction());
+                SetThrottle(EngineSpeeds.Zero);
 
+                // Delay at least one second in case the workcart needs to reposition after spawning.
+                // Not delaying may cause the workcart to get stuck for unknown reasons.
+                // Delay a random interval to spread out load.
                 Invoke(() =>
                 {
-                    StartTrain(initialSpeed);
                     HandleWorkcartTrigger(triggerInfo);
-                }, UnityEngine.Random.Range(0, 1f));
+                }, UnityEngine.Random.Range(1, 2f));
             }
 
             public void HandleWorkcartTrigger(WorkcartTriggerInfo triggerInfo)
@@ -2224,9 +2231,14 @@ namespace Oxide.Plugins
             private bool IsWaitingAtStop => IsInvoking(DepartFromStop);
             private void CancelWaitingAtStop() => CancelInvoke(DepartFromStop);
 
-            public void SetThrottle(EngineSpeeds engineSpeed)
+            private void SetThrottle(EngineSpeeds engineSpeed)
             {
                 _workcart.SetThrottle(engineSpeed);
+            }
+
+            private void SetTrackSelection(TrackSelection trackSelection)
+            {
+                _workcart.SetTrackSelection(trackSelection);
             }
 
             public void ScheduleDestruction() => Invoke(DestroyCinematically, 0);
@@ -2403,14 +2415,6 @@ namespace Oxide.Plugins
                 }, 0, 1, 0.25f);
             }
 
-            private void StartTrain(EngineSpeeds initialSpeed)
-            {
-                _workcart.engineController.TryStartEngine(Conductor);
-                DisableHazardChecks();
-                SetThrottle(initialSpeed);
-                _workcart.SetTrackSelection(_pluginConfig.GetDefaultTrackSelection());
-            }
-
             private void AddOutfit()
             {
                 Conductor.inventory.Strip();
@@ -2427,7 +2431,7 @@ namespace Oxide.Plugins
 
             private void DisableHazardChecks()
             {
-                Invoke(() => _workcart.CancelInvoke(_workcart.CheckForHazards), 1f);
+                _workcart.CancelInvoke(_workcart.CheckForHazards);
             }
 
             private void EnableHazardChecks()
