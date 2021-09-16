@@ -299,6 +299,14 @@ namespace Oxide.Plugins
                         : GetMessage(player, Lang.ToggleOnSuccess);
 
                     player.Reply(baseMessage + " " + GetConductorCountMessage(player));
+
+                    if (player.HasPermission(PermissionManageTriggers))
+                    {
+                        if (persistentData?.Route != null)
+                            _triggerManager.SetPlayerDisplayedRoute(basePlayer, persistentData.Route);
+
+                        _triggerManager.ShowAllRepeatedly(basePlayer);
+                    }
                 }
                 else
                 {
