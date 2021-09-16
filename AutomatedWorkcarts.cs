@@ -1968,10 +1968,12 @@ namespace Oxide.Plugins
                         infoLines.Add(_pluginInstance.GetMessage(player, Lang.InfoTriggerAddConductor));
 
                     var directionInstruction = triggerInfo.GetDirectionInstruction();
-                    if (directionInstruction != null && !triggerInfo.Brake)
+                    var speedInstruction = triggerInfo.GetSpeedInstruction();
+
+                    // When speed is zero, departure direction will be shown instead of direction.
+                    if (directionInstruction != null && speedInstruction != SpeedInstruction.Zero)
                         infoLines.Add(_pluginInstance.GetMessage(player, Lang.InfoTriggerDirection, directionInstruction));
 
-                    var speedInstruction = triggerInfo.GetSpeedInstruction();
                     if (speedInstruction != null)
                         infoLines.Add(_pluginInstance.GetMessage(player, triggerInfo.Brake ? Lang.InfoTriggerBrakeToSpeed : Lang.InfoTriggerSpeed, speedInstruction));
 
@@ -1982,13 +1984,12 @@ namespace Oxide.Plugins
                     if (trackSelectionInstruction != null)
                         infoLines.Add(_pluginInstance.GetMessage(player, Lang.InfoTriggerTrackSelection, trackSelectionInstruction));
 
-                    if (speedInstruction == SpeedInstruction.Zero && directionInstruction != null)
+                    if (directionInstruction != null && speedInstruction == SpeedInstruction.Zero)
                         infoLines.Add(_pluginInstance.GetMessage(player, Lang.InfoTriggerDepartureDirection, directionInstruction));
 
                     var departureSpeedInstruction = triggerInfo.GetDepartureSpeedInstruction();
                     if (speedInstruction == SpeedInstruction.Zero)
                         infoLines.Add(_pluginInstance.GetMessage(player, Lang.InfoTriggerDepartureSpeed, departureSpeedInstruction));
-
                 }
 
                 var textPosition = trigger.WorldPosition + new Vector3(0, 1.5f + infoLines.Count * 0.1f, 0);
