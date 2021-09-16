@@ -10,6 +10,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
+using VLB;
 using static TrainEngine;
 using static TrainTrackSpline;
 
@@ -121,7 +122,7 @@ namespace Oxide.Plugins
 
         private void OnEntityEnter(WorkcartTrigger trigger, TrainEngine workcart)
         {
-            var trainController = workcart.GetComponent<TrainController>();
+            var trainController = TrainController.GetForWorkcart(workcart);
             if (trainController == null)
             {
                 if (trigger.TriggerInfo.AddConductor
@@ -157,8 +158,8 @@ namespace Oxide.Plugins
                 TrainEngine forwardWorkcart, backwardWorkcart;
                 DetermineWorkcartOrientations(workcart, otherWorkcart, out forwardWorkcart, out backwardWorkcart);
 
-                var forwardController = forwardWorkcart.GetComponent<TrainController>();
-                var backController = backwardWorkcart.GetComponent<TrainController>();
+                var forwardController = TrainController.GetForWorkcart(forwardWorkcart);
+                var backController = TrainController.GetForWorkcart(backwardWorkcart);
 
                 // Do nothing if neither workcart is automated.
                 if (forwardController == null && backController == null)
@@ -191,8 +192,8 @@ namespace Oxide.Plugins
             else
             {
                 // Going opposite directions or perpendicular.
-                var controller = workcart.GetComponent<TrainController>();
-                var otherController = otherWorkcart.GetComponent<TrainController>();
+                var controller = TrainController.GetForWorkcart(workcart);
+                var otherController = TrainController.GetForWorkcart(otherWorkcart);
 
                 // Do nothing if neither workcart is automated.
                 if (controller == null && otherController == null)
@@ -267,7 +268,7 @@ namespace Oxide.Plugins
                 return;
             }
 
-            var trainController = workcart.GetComponent<TrainController>();
+            var trainController = TrainController.GetForWorkcart(workcart);
             if (trainController == null)
             {
                 if (IsWorkcartOwned(workcart))
@@ -282,10 +283,27 @@ namespace Oxide.Plugins
                     return;
                 }
 
-                if (TryAddTrainController(workcart))
-                    player.Reply(GetMessage(player, Lang.ToggleOnSuccess, _workcartManager.NumWorkcarts) + " " + GetConductorCountMessage(player));
+                PersistentWorkcartData persistentData = null;
+
+                if (args.Length > 0)
+                {
+                    var routeName = GetRouteNameFromArg(player, args[0], requirePrefix: false);
+                    if (!string.IsNullOrWhiteSpace(routeName))
+                        persistentData = new PersistentWorkcartData { Route = routeName };
+                }
+
+                if (TryAddTrainController(workcart, persistentData: persistentData))
+                {
+                    var baseMessage = persistentData != null
+                        ? GetMessage(player, Lang.ToggleOnWithRouteSuccess, persistentData.Route)
+                        : GetMessage(player, Lang.ToggleOnSuccess);
+
+                    player.Reply(baseMessage + " " + GetConductorCountMessage(player));
+                }
                 else
+                {
                     ReplyToPlayer(player, Lang.ErrorAutomateBlocked);
+                }
             }
             else
             {
@@ -365,21 +383,29 @@ namespace Oxide.Plugins
 
         private void AddTriggerShared(IPlayer player, string cmd, string[] args, WorkcartTriggerInfo triggerInfo)
         {
-            if (args.Length == 0)
+            foreach (var arg in args)
+            {
+                if (!VerifyValidArgAndModifyTrigger(player, cmd, arg, triggerInfo, Lang.AddTriggerSyntax))
+                    return;
+            }
+
+            if (!triggerInfo.AddConductor
+                && !triggerInfo.Destroy
+                && triggerInfo.GetTrackSelectionInstruction() == null
+                && triggerInfo.GetSpeedInstruction() == null
+                && triggerInfo.GetDirectionInstruction() == null)
             {
                 triggerInfo.Speed = EngineSpeeds.Zero.ToString();
             }
-            else
-            {
-                foreach (var arg in args)
-                {
-                    if (!VerifyValidArgAndModifyTrigger(player, cmd, arg, triggerInfo, Lang.AddTriggerSyntax))
-                        return;
-                }
-            }
+
+            var basePlayer = player.Object as BasePlayer;
 
             _triggerManager.AddTrigger(triggerInfo);
-            _triggerManager.ShowAllRepeatedly(player.Object as BasePlayer);
+
+            if (triggerInfo.Route != null)
+                _triggerManager.SetPlayerDisplayedRoute(basePlayer, triggerInfo.Route);
+
+            _triggerManager.ShowAllRepeatedly(basePlayer);
             ReplyToPlayer(player, Lang.AddTriggerSuccess, GetTriggerPrefix(player, triggerInfo), triggerInfo.Id);
         }
 
@@ -411,6 +437,10 @@ namespace Oxide.Plugins
             }
 
             _triggerManager.UpdateTrigger(triggerInfo);
+
+            if (triggerInfo.Route != null)
+                _triggerManager.SetPlayerDisplayedRoute(basePlayer, triggerInfo.Route);
+
             _triggerManager.ShowAllRepeatedly(basePlayer);
             ReplyToPlayer(player, Lang.UpdateTriggerSuccess, GetTriggerPrefix(player, triggerInfo), triggerInfo.Id);
         }
@@ -445,6 +475,10 @@ namespace Oxide.Plugins
 
             triggerInfo.CopyFrom(newTriggerInfo);
             _triggerManager.UpdateTrigger(triggerInfo);
+
+            if (triggerInfo.Route != null)
+                _triggerManager.SetPlayerDisplayedRoute(basePlayer, triggerInfo.Route);
+
             _triggerManager.ShowAllRepeatedly(basePlayer);
             ReplyToPlayer(player, Lang.UpdateTriggerSuccess, GetTriggerPrefix(player, triggerInfo), triggerInfo.Id);
         }
@@ -484,6 +518,10 @@ namespace Oxide.Plugins
             }
 
             _triggerManager.MoveTrigger(triggerInfo, trackPosition);
+
+            if (triggerInfo.Route != null)
+                _triggerManager.SetPlayerDisplayedRoute(basePlayer, triggerInfo.Route);
+
             _triggerManager.ShowAllRepeatedly(basePlayer);
             ReplyToPlayer(player, Lang.MoveTriggerSuccess, GetTriggerPrefix(player, triggerInfo), triggerInfo.Id);
         }
@@ -516,12 +554,38 @@ namespace Oxide.Plugins
                 || !VerifyAnyTriggers(player))
                 return;
 
-            int duration;
-            if (args.Length == 0 || !int.TryParse(args[0], out duration))
-                duration = 60;
+            int duration = 60;
+            string routeName = null;
 
-            _triggerManager.ShowAllRepeatedly(player.Object as BasePlayer, duration);
-            ReplyToPlayer(player, Lang.ShowTriggersSuccess, FormatTime(duration));
+            foreach (var arg in args)
+            {
+                if (duration == 60)
+                {
+                    int argIntValue;
+                    if (int.TryParse(arg, out argIntValue))
+                    {
+                        duration = argIntValue;
+                        continue;
+                    }
+                }
+
+                if (routeName == null)
+                {
+                    var routeNameArg = GetRouteNameFromArg(player, arg, requirePrefix: false);
+                    if (!string.IsNullOrWhiteSpace(routeNameArg))
+                        routeName = routeNameArg;
+                }
+            }
+
+            var basePlayer = player.Object as BasePlayer;
+
+            _triggerManager.SetPlayerDisplayedRoute(basePlayer, routeName);
+            _triggerManager.ShowAllRepeatedly(basePlayer, duration);
+
+            if (routeName != null)
+                ReplyToPlayer(player, Lang.ShowTriggersWithRouteSuccess, routeName, FormatTime(duration));
+            else
+                ReplyToPlayer(player, Lang.ShowTriggersSuccess, FormatTime(duration));
         }
 
         #endregion
@@ -656,6 +720,14 @@ namespace Oxide.Plugins
             return true;
         }
 
+        private string GetRouteNameFromArg(IPlayer player, string routeName, bool requirePrefix = true)
+        {
+            if (routeName.StartsWith("@"))
+                return routeName.Substring(1);
+
+            return requirePrefix ? null : routeName;
+        }
+
         private bool VerifyValidArgAndModifyTrigger(IPlayer player, string cmd, string arg, WorkcartTriggerInfo triggerInfo, string errorMessageName)
         {
             var argLower = arg.ToLower();
@@ -681,6 +753,13 @@ namespace Oxide.Plugins
             if (float.TryParse(arg, out stopDuration))
             {
                 triggerInfo.StopDuration = stopDuration;
+                return true;
+            }
+
+            var routeName = GetRouteNameFromArg(player, arg, requirePrefix: true);
+            if (!string.IsNullOrWhiteSpace(routeName))
+            {
+                triggerInfo.Route = routeName;
                 return true;
             }
 
@@ -725,28 +804,29 @@ namespace Oxide.Plugins
             _pluginInstance.TrackStart();
             yield return _triggerManager.CreateAll();
 
-            var foundWorkcarts = new List<uint>();
+            var foundWorkcartIds = new HashSet<uint>();
             foreach (var entity in BaseNetworkable.serverEntities)
             {
                 var workcart = entity as TrainEngine;
                 if (workcart == null)
                     continue;
 
-                if (_pluginData.HasWorkcartId(workcart.net.ID))
+                var persistentData = _pluginData.GetWorkcartPersistentData(workcart.net.ID);
+                if (persistentData != null)
                 {
-                    foundWorkcarts.Add(workcart.net.ID);
+                    foundWorkcartIds.Add(workcart.net.ID);
                     timer.Once(UnityEngine.Random.Range(0, 1f), () =>
                     {
                         if (workcart != null
                             && !IsWorkcartOwned(workcart)
                             && CanHaveMoreConductors()
                             && !IsWorkcartAutomated(workcart))
-                            TryAddTrainController(workcart);
+                            TryAddTrainController(workcart, persistentData: persistentData);
                     });
                 }
             }
 
-            _pluginData.ReplaceWorkcartIds(foundWorkcarts);
+            _pluginData.TrimToWorkcartIds(foundWorkcartIds);
             _pluginInstance.TrackEnd();
         }
 
@@ -769,19 +849,26 @@ namespace Oxide.Plugins
         private static bool IsWorkcartOwned(TrainEngine workcart) => workcart.OwnerID != 0;
 
         private static bool IsWorkcartAutomated(TrainEngine workcart) =>
-            workcart.GetComponent<TrainController>() != null;
+            TrainController.GetForWorkcart(workcart) != null;
 
-        private static bool TryAddTrainController(TrainEngine workcart, WorkcartTriggerInfo triggerInfo = null)
+        private static bool TryAddTrainController(TrainEngine workcart, WorkcartTriggerInfo triggerInfo = null, PersistentWorkcartData persistentData = null)
         {
             if (AutomationWasBlocked(workcart))
                 return false;
 
-            var trainController = workcart.gameObject.AddComponent<TrainController>();
+            if (persistentData == null)
+            {
+                persistentData = new PersistentWorkcartData
+                {
+                    Route = triggerInfo?.Route,
+                };
+            }
+
+            var trainController = TrainController.AddToWorkcart(workcart, persistentData);
             if (triggerInfo != null)
                 trainController.StartImmediately(triggerInfo);
 
-            workcart.SetHealth(workcart.MaxHealth());
-            _pluginInstance._workcartManager.Register(workcart);
+            _pluginInstance._workcartManager.Register(workcart, persistentData);
             Interface.CallHook("OnWorkcartAutomationStarted", workcart);
 
             return true;
@@ -789,7 +876,7 @@ namespace Oxide.Plugins
 
         private static void RemoveTrainController(TrainEngine workcart, bool immediate = false)
         {
-            var controller = workcart.GetComponent<TrainController>();
+            var controller = TrainController.GetForWorkcart(workcart);
             if (controller == null)
                 return;
 
@@ -924,7 +1011,7 @@ namespace Oxide.Plugins
 
         private static Vector3 GetWorkcartForward(TrainEngine workcart)
         {
-            var trainController = workcart.GetComponent<TrainController>();
+            var trainController = TrainController.GetForWorkcart(workcart);
             var speed = trainController != null
                 ? trainController.CurrentIntendedVelocity
                 : workcart.CurThrottleSetting;
@@ -1246,6 +1333,9 @@ namespace Oxide.Plugins
             [JsonProperty("Position")]
             public Vector3 Position;
 
+            [JsonProperty("Route", DefaultValueHandling = DefaultValueHandling.Ignore)]
+            public string Route;
+
             [JsonProperty("TunnelType", DefaultValueHandling = DefaultValueHandling.Ignore)]
             public string TunnelType;
 
@@ -1354,6 +1444,17 @@ namespace Oxide.Plugins
                 return _departureSpeedInstruction ?? SpeedInstruction.Med;
             }
 
+            public bool MatchesRoute(string routeName)
+            {
+                if (string.IsNullOrWhiteSpace(Route))
+                {
+                    // Trigger has no specified route so it applies to all workcarts.
+                    return true;
+                }
+
+                return routeName?.ToLower() == Route.ToLower();
+            }
+
             public void InvalidateCache()
             {
                 _speedInstruction = null;
@@ -1364,6 +1465,7 @@ namespace Oxide.Plugins
 
             public void CopyFrom(WorkcartTriggerInfo triggerInfo)
             {
+                Route = triggerInfo.Route;
                 AddConductor = triggerInfo.AddConductor;
                 Brake = triggerInfo.Brake;
                 Destroy = triggerInfo.Destroy;
@@ -1373,8 +1475,11 @@ namespace Oxide.Plugins
                 TrackSelection = triggerInfo.TrackSelection;
             }
 
-            public Color GetColor()
+            public Color GetColor(string routeName)
             {
+                if (!MatchesRoute(routeName))
+                    return Color.grey;
+
                 if (Destroy)
                     return Color.red;
 
@@ -1521,6 +1626,12 @@ namespace Oxide.Plugins
 
         private class WorkcartTriggerManager
         {
+            private class PlayerInfo
+            {
+                public Timer Timer;
+                public string Route;
+            }
+
             private const float TriggerDisplayDuration = 1f;
             private const float TriggerDisplayRadius = 1f;
             private float TriggerDisplayDistanceSquared => _pluginConfig.TriggerDisplayDistance * _pluginConfig.TriggerDisplayDistance;
@@ -1528,7 +1639,7 @@ namespace Oxide.Plugins
             private Dictionary<WorkcartTriggerInfo, MapTriggerWrapper> _mapTriggers = new Dictionary<WorkcartTriggerInfo, MapTriggerWrapper>();
             private Dictionary<WorkcartTriggerInfo, TunnelTriggerWrapper[]> _tunnelTriggers = new Dictionary<WorkcartTriggerInfo, TunnelTriggerWrapper[]>();
             private Dictionary<TrainTrackSpline, List<BaseTriggerWrapper>> _splinesToTriggers = new Dictionary<TrainTrackSpline, List<BaseTriggerWrapper>>();
-            private Dictionary<ulong, Timer> _drawTimers = new Dictionary<ulong, Timer>();
+            private Dictionary<ulong, PlayerInfo> _playerInfo = new Dictionary<ulong, PlayerInfo>();
 
             private int GetHighestTriggerId(IEnumerable<WorkcartTriggerInfo> triggerList)
             {
@@ -1750,25 +1861,43 @@ namespace Oxide.Plugins
                 _splinesToTriggers.Clear();
             }
 
+            private PlayerInfo GetOrCreatePlayerInfo(BasePlayer player)
+            {
+                PlayerInfo playerInfo;
+                if (!_playerInfo.TryGetValue(player.userID, out playerInfo))
+                {
+                    playerInfo = new PlayerInfo();
+                    _playerInfo[player.userID] = playerInfo;
+                }
+
+                return playerInfo;
+            }
+
+            public void SetPlayerDisplayedRoute(BasePlayer player, string routeName)
+            {
+                GetOrCreatePlayerInfo(player).Route = routeName;
+            }
+
             public void ShowAllRepeatedly(BasePlayer player, int duration = -1)
             {
-                ShowNearbyTriggers(player, player.transform.position);
+                var playerInfo = GetOrCreatePlayerInfo(player);
 
-                Timer existingTimer;
-                if (_drawTimers.TryGetValue(player.userID, out existingTimer) && !existingTimer.Destroyed)
+                ShowNearbyTriggers(player, player.transform.position, playerInfo.Route);
+
+                if (!playerInfo.Timer?.Destroyed ?? false)
                 {
-                    var newDuration = duration >= 0 ? duration : Math.Max(existingTimer.Repetitions, 60);
-                    existingTimer.Reset(delay: -1, repetitions: newDuration);
+                    var newDuration = duration >= 0 ? duration : Math.Max(playerInfo.Timer.Repetitions, 60);
+                    playerInfo.Timer.Reset(delay: -1, repetitions: newDuration);
                     return;
                 }
 
-                _drawTimers[player.userID] = _pluginInstance.timer.Repeat(TriggerDisplayDuration - 0.1f, duration, () =>
+                playerInfo.Timer = _pluginInstance.timer.Repeat(TriggerDisplayDuration - 0.2f, duration, () =>
                 {
-                    ShowNearbyTriggers(player, player.transform.position);
+                    ShowNearbyTriggers(player, player.transform.position, playerInfo.Route);
                 });
             }
 
-            private void ShowNearbyTriggers(BasePlayer player, Vector3 playerPosition)
+            private void ShowNearbyTriggers(BasePlayer player, Vector3 playerPosition, string routeName)
             {
                 var isAdmin = player.IsAdmin;
                 if (!isAdmin)
@@ -1780,7 +1909,7 @@ namespace Oxide.Plugins
                 foreach (var trigger in _mapTriggers.Values)
                 {
                     if ((playerPosition - trigger.WorldPosition).sqrMagnitude <= TriggerDisplayDistanceSquared)
-                        ShowTrigger(player, trigger);
+                        ShowTrigger(player, trigger, routeName);
                 }
 
                 foreach (var triggerList in _tunnelTriggers.Values)
@@ -1788,7 +1917,7 @@ namespace Oxide.Plugins
                     foreach (var trigger in triggerList)
                     {
                         if ((playerPosition - trigger.WorldPosition).sqrMagnitude <= TriggerDisplayDistanceSquared)
-                            ShowTrigger(player, trigger, triggerList.Length);
+                            ShowTrigger(player, trigger, routeName, triggerList.Length);
                     }
                 }
 
@@ -1799,10 +1928,10 @@ namespace Oxide.Plugins
                 }
             }
 
-            private static void ShowTrigger(BasePlayer player, BaseTriggerWrapper trigger, int count = 1)
+            private static void ShowTrigger(BasePlayer player, BaseTriggerWrapper trigger, string routeName, int count = 1)
             {
                 var triggerInfo = trigger.TriggerInfo;
-                var color = triggerInfo.GetColor();
+                var color = triggerInfo.GetColor(routeName);
 
                 var spherePosition = trigger.WorldPosition;
                 player.SendConsoleCommand("ddraw.sphere", TriggerDisplayDuration, color, spherePosition, TriggerDisplayRadius);
@@ -1817,6 +1946,9 @@ namespace Oxide.Plugins
                     infoLines.Add(_pluginInstance.GetMessage(player, Lang.InfoTriggerTunnel, triggerInfo.TunnelType, count));
                 else
                     infoLines.Add(_pluginInstance.GetMessage(player, Lang.InfoTriggerMap, triggerInfo.Id));
+
+                if (!string.IsNullOrWhiteSpace(triggerInfo.Route))
+                    infoLines.Add(_pluginInstance.GetMessage(player, Lang.InfoTriggerRoute, triggerInfo.Route));
 
                 if (triggerInfo.Destroy)
                 {
@@ -1907,10 +2039,10 @@ namespace Oxide.Plugins
             public int NumWorkcarts => _automatedWorkcarts.Count;
             public TrainEngine[] GetWorkcarts() => _automatedWorkcarts.ToArray();
 
-            public void Register(TrainEngine workcart)
+            public void Register(TrainEngine workcart, PersistentWorkcartData persistentData)
             {
                 _automatedWorkcarts.Add(workcart);
-                _pluginData.AddWorkcartId(workcart.net.ID);
+                _pluginData.AddWorkcartId(workcart.net.ID, persistentData);
             }
 
             public void Unregister(TrainEngine workcart)
@@ -1936,7 +2068,7 @@ namespace Oxide.Plugins
                     if (workcart == null)
                         continue;
 
-                    var controller = workcart.GetComponent<TrainController>();
+                    var controller = TrainController.GetForWorkcart(workcart);
                     if (controller == null)
                         continue;
 
@@ -1952,6 +2084,16 @@ namespace Oxide.Plugins
         private class TrainController : FacepunchBehaviour
         {
             private const float ChillDuration = 3f;
+
+            public static TrainController GetForWorkcart(TrainEngine workcart) =>
+                workcart.GetComponent<TrainController>();
+
+            public static TrainController AddToWorkcart(TrainEngine workcart, PersistentWorkcartData persistentData)
+            {
+                var controller = workcart.GetOrAddComponent<TrainController>();
+                controller._persistentData = persistentData;
+                return controller;
+            }
 
             public static void DestroyAll()
             {
@@ -1977,6 +2119,8 @@ namespace Oxide.Plugins
             private EngineSpeeds _departureVelocity;
             private float _stopDuration;
 
+            private PersistentWorkcartData _persistentData;
+
             private void Awake()
             {
                 _workcart = GetComponent<TrainEngine>();
@@ -1986,6 +2130,8 @@ namespace Oxide.Plugins
                 _transform = _workcart.transform;
                 _originalProtection = _workcart.baseProtection;
                 _workcart.baseProtection = _pluginInstance._immortalProtection;
+
+                _workcart.SetHealth(_workcart.MaxHealth());
 
                 AddConductor();
                 MaybeAddMapMarkers();
@@ -2006,6 +2152,9 @@ namespace Oxide.Plugins
 
             public void HandleWorkcartTrigger(WorkcartTriggerInfo triggerInfo)
             {
+                if (!triggerInfo.MatchesRoute(_persistentData.Route))
+                    return;
+
                 if (triggerInfo.Destroy)
                 {
                     Invoke(() => _workcart.Kill(BaseNetworkable.DestroyMode.Gib), 0);
@@ -2014,7 +2163,7 @@ namespace Oxide.Plugins
 
                 var currentIntendedVelocity = CurrentIntendedVelocity;
 
-                // Cancel these after determing next current intended velocity, since it has logic for these.
+                // These are canceled after determing next current intended velocity, since that computation logic takes these into account.
                 CancelWaitingAtStop();
                 CancelChilling();
 
@@ -2312,15 +2461,37 @@ namespace Oxide.Plugins
 
         #region Data
 
+        private class PersistentWorkcartData
+        {
+            [JsonProperty("Route", DefaultValueHandling = DefaultValueHandling.Ignore)]
+            public string Route;
+        }
+
         private class StoredPluginData
         {
-            [JsonProperty("AutomatedWorkcardIds")]
-            public HashSet<uint> AutomatedWorkcardIds = new HashSet<uint>();
+            [JsonProperty("AutomatedWorkcardIds", DefaultValueHandling = DefaultValueHandling.Ignore)]
+            public HashSet<uint> AutomatedWorkcardIds;
+
+            [JsonProperty("AutomatedWorkcarts")]
+            public Dictionary<uint, PersistentWorkcartData> AutomatedWorkcarts = new Dictionary<uint, PersistentWorkcartData>();
 
             public static string Filename => _pluginInstance.Name;
 
-            public static StoredPluginData Load() =>
-                Interface.Oxide.DataFileSystem.ReadObject<StoredPluginData>(Filename) ?? new StoredPluginData();
+            public static StoredPluginData Load()
+            {
+                var data = Interface.Oxide.DataFileSystem.ReadObject<StoredPluginData>(Filename) ?? new StoredPluginData();
+
+                // Migrate from the legacy `AutomatedWorkcardIds` to `AutomatedWorkcarts` which supports persistent data.
+                if (data.AutomatedWorkcardIds != null)
+                {
+                    foreach (var workcartId in data.AutomatedWorkcardIds)
+                        data.AutomatedWorkcarts[workcartId] = new PersistentWorkcartData();
+
+                    data.AutomatedWorkcardIds = null;
+                }
+
+                return data;
+            }
 
             public static StoredPluginData Clear() => new StoredPluginData().Save();
 
@@ -2330,24 +2501,37 @@ namespace Oxide.Plugins
                 return this;
             }
 
-            public bool HasWorkcartId(uint workcartId)
+            public PersistentWorkcartData GetWorkcartPersistentData(uint workcartId)
             {
-                return AutomatedWorkcardIds.Contains(workcartId);
+                PersistentWorkcartData persistentData;
+                return AutomatedWorkcarts.TryGetValue(workcartId, out persistentData)
+                    ? persistentData
+                    : null;
             }
 
-            public void AddWorkcartId(uint workcartId)
+            public bool HasWorkcartId(uint workcartId)
             {
-                AutomatedWorkcardIds.Add(workcartId);
+                return AutomatedWorkcarts.ContainsKey(workcartId);
+            }
+
+            public void AddWorkcartId(uint workcartId, PersistentWorkcartData persistentData)
+            {
+                AutomatedWorkcarts[workcartId] = persistentData;
             }
 
             public void RemoveWorkcartId(uint workcartId)
             {
-                AutomatedWorkcardIds.Remove(workcartId);
+                AutomatedWorkcarts.Remove(workcartId);
             }
 
-            public void ReplaceWorkcartIds(List<uint> workcardIds)
+            public void TrimToWorkcartIds(HashSet<uint> foundWorkcartIds)
             {
-                AutomatedWorkcardIds = new HashSet<uint>(workcardIds);
+                foreach (var workcartId in AutomatedWorkcarts.Keys.ToArray())
+                {
+                    if (!foundWorkcartIds.Contains(workcartId))
+                        AutomatedWorkcarts.Remove(workcartId);
+                }
+
                 Save();
             }
         }
@@ -2916,9 +3100,11 @@ namespace Oxide.Plugins
             public const string ErrorNoAutomatedWorkcarts = "Error.NoAutomatedWorkcarts";
 
             public const string ToggleOnSuccess = "Toggle.Success.On";
+            public const string ToggleOnWithRouteSuccess = "Toggle.Success.On.WithRoute";
             public const string ToggleOffSuccess = "Toggle.Success.Off";
             public const string ResetAllSuccess = "ResetAll.Success";
             public const string ShowTriggersSuccess = "ShowTriggers.Success";
+            public const string ShowTriggersWithRouteSuccess = "ShowTriggers.WithRoute.Success";
 
             public const string AddTriggerSyntax = "AddTrigger.Syntax";
             public const string AddTriggerSuccess = "AddTrigger.Success";
@@ -2941,6 +3127,7 @@ namespace Oxide.Plugins
             public const string InfoTriggerTunnelPrefix = "Info.Trigger.Prefix.Tunnel";
 
             public const string InfoTriggerMap = "Info.Trigger.Map";
+            public const string InfoTriggerRoute = "Info.Trigger.Route";
             public const string InfoTriggerTunnel = "Info.Trigger.Tunnel";
             public const string InfoTriggerAddConductor = "Info.Trigger.Conductor";
             public const string InfoTriggerDestroy = "Info.Trigger.Destroy";
@@ -2972,9 +3159,11 @@ namespace Oxide.Plugins
                 [Lang.ErrorNoAutomatedWorkcarts] = "Error: There are no automated workcarts.",
 
                 [Lang.ToggleOnSuccess] = "That workcart is now automated.",
+                [Lang.ToggleOnWithRouteSuccess] = "That workcart is now automated with route <color=#fd4>@{0}</color>.",
                 [Lang.ToggleOffSuccess] = "That workcart is no longer automated.",
                 [Lang.ResetAllSuccess] = "All {0} conductors have been removed.",
                 [Lang.ShowTriggersSuccess] = "Showing all triggers for <color=#fd4>{0}</color>.",
+                [Lang.ShowTriggersWithRouteSuccess] = "Showing all triggers for route <color=#fd4>@{0}</color> for <color=#fd4>{1}</color>",
 
                 [Lang.AddTriggerSyntax] = "Syntax: <color=#fd4>{0} <option1> <option2> ...</color>\n{1}",
                 [Lang.AddTriggerSuccess] = "Successfully added trigger #<color=#fd4>{0}{1}</color>.",
@@ -2997,6 +3186,7 @@ namespace Oxide.Plugins
                 [Lang.InfoTriggerTunnelPrefix] = "T",
 
                 [Lang.InfoTriggerMap] = "Map-specific",
+                [Lang.InfoTriggerRoute] = "Route: @{0}",
                 [Lang.InfoTriggerTunnel] = "Tunnel type: {0} (x{1})",
                 [Lang.InfoTriggerAddConductor] = "Adds Conductor",
                 [Lang.InfoTriggerDestroy] = "Destroys workcart",
