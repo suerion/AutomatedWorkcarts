@@ -2431,6 +2431,7 @@ namespace Oxide.Plugins
 
             private void DisableHazardChecks()
             {
+                _workcart.SetFlag(TrainEngine.Flag_HazardAhead, false);
                 _workcart.CancelInvoke(_workcart.CheckForHazards);
             }
 
