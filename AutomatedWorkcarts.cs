@@ -1562,7 +1562,11 @@ namespace Oxide.Plugins
             }
         }
 
-        private abstract class BaseTriggerWrapper
+        #endregion
+
+        #region Trigger Instances
+
+        private abstract class BaseTriggerInstance
         {
             public TriggerData TriggerData { get; protected set; }
             public TrainTrackSpline Spline { get; private set; }
@@ -1571,7 +1575,7 @@ namespace Oxide.Plugins
 
             protected GameObject _gameObject;
 
-            protected BaseTriggerWrapper(TriggerData triggerData)
+            protected BaseTriggerInstance(TriggerData triggerData)
             {
                 TriggerData = triggerData;
             }
@@ -1629,46 +1633,46 @@ namespace Oxide.Plugins
             }
         }
 
-        private class MapTriggerWrapper : BaseTriggerWrapper
+        private class MapTriggerInstance : BaseTriggerInstance
         {
-            public static MapTriggerWrapper CreateWorldTrigger(TriggerData triggerData)
+            public static MapTriggerInstance CreateWorldTrigger(TriggerData triggerData)
             {
-                var triggerWrapper = new MapTriggerWrapper(triggerData);
+                var triggerInstance = new MapTriggerInstance(triggerData);
 
                 if (triggerData.Enabled)
-                    triggerWrapper.CreateTrigger();
+                    triggerInstance.CreateTrigger();
 
-                return triggerWrapper;
+                return triggerInstance;
             }
 
-            public MapTriggerWrapper(TriggerData triggerData) : base(triggerData) {}
+            public MapTriggerInstance(TriggerData triggerData) : base(triggerData) {}
         }
 
-        private class TunnelTriggerWrapper : BaseTriggerWrapper
+        private class TunnelTriggerInstance : BaseTriggerInstance
         {
-            public static TunnelTriggerWrapper[] CreateTunnelTriggers(TriggerData triggerData)
+            public static TunnelTriggerInstance[] CreateTunnelTriggers(TriggerData triggerData)
             {
                 var matchingDungeonCells = FindAllTunnelsOfType(triggerData.GetTunnelType());
-                var triggerWrapperList = new TunnelTriggerWrapper[matchingDungeonCells.Count];
+                var triggerInstanceList = new TunnelTriggerInstance[matchingDungeonCells.Count];
 
                 for (var i = 0; i < matchingDungeonCells.Count; i++)
                 {
-                    var triggerWrapper = new TunnelTriggerWrapper(triggerData, matchingDungeonCells[i]);
+                    var triggerInstance = new TunnelTriggerInstance(triggerData, matchingDungeonCells[i]);
 
                     if (triggerData.Enabled)
-                        triggerWrapper.CreateTrigger();
+                        triggerInstance.CreateTrigger();
 
-                    triggerWrapperList[i] = triggerWrapper;
+                    triggerInstanceList[i] = triggerInstance;
                 }
 
-                return triggerWrapperList;
+                return triggerInstanceList;
             }
 
             public DungeonCellWrapper DungeonCellWrapper { get; private set; }
 
             public override Vector3 WorldPosition => DungeonCellWrapper.TransformPoint(TriggerData.Position);
 
-            public TunnelTriggerWrapper(TriggerData triggerData, DungeonCellWrapper dungeonCellWrapper) : base(triggerData)
+            public TunnelTriggerInstance(TriggerData triggerData, DungeonCellWrapper dungeonCellWrapper) : base(triggerData)
             {
                 DungeonCellWrapper = dungeonCellWrapper;
             }
@@ -1690,9 +1694,9 @@ namespace Oxide.Plugins
             private const float TriggerDisplayRadius = 1f;
             private float TriggerDisplayDistanceSquared => _pluginConfig.TriggerDisplayDistance * _pluginConfig.TriggerDisplayDistance;
 
-            private Dictionary<TriggerData, MapTriggerWrapper> _mapTriggers = new Dictionary<TriggerData, MapTriggerWrapper>();
-            private Dictionary<TriggerData, TunnelTriggerWrapper[]> _tunnelTriggers = new Dictionary<TriggerData, TunnelTriggerWrapper[]>();
-            private Dictionary<TrainTrackSpline, List<BaseTriggerWrapper>> _splinesToTriggers = new Dictionary<TrainTrackSpline, List<BaseTriggerWrapper>>();
+            private Dictionary<TriggerData, MapTriggerInstance> _mapTriggers = new Dictionary<TriggerData, MapTriggerInstance>();
+            private Dictionary<TriggerData, TunnelTriggerInstance[]> _tunnelTriggers = new Dictionary<TriggerData, TunnelTriggerInstance[]>();
+            private Dictionary<TrainTrackSpline, List<BaseTriggerInstance>> _splinesToTriggers = new Dictionary<TrainTrackSpline, List<BaseTriggerInstance>>();
             private Dictionary<ulong, PlayerInfo> _playerInfo = new Dictionary<ulong, PlayerInfo>();
 
             private int GetHighestTriggerId(IEnumerable<TriggerData> triggerList)
@@ -1705,36 +1709,36 @@ namespace Oxide.Plugins
                 return highestTriggerId;
             }
 
-            private void RegisterTriggerWithSpline(BaseTriggerWrapper triggerWrapper, TrainTrackSpline spline)
+            private void RegisterTriggerWithSpline(BaseTriggerInstance triggerInstance, TrainTrackSpline spline)
             {
-                List<BaseTriggerWrapper> triggerWrappers;
-                if (!_splinesToTriggers.TryGetValue(spline, out triggerWrappers))
+                List<BaseTriggerInstance> triggerInstanceList;
+                if (!_splinesToTriggers.TryGetValue(spline, out triggerInstanceList))
                 {
-                    triggerWrappers = new List<BaseTriggerWrapper>() { triggerWrapper };
-                    _splinesToTriggers[spline] = triggerWrappers;
+                    triggerInstanceList = new List<BaseTriggerInstance>() { triggerInstance };
+                    _splinesToTriggers[spline] = triggerInstanceList;
                 }
                 else
                 {
-                    triggerWrappers.Add(triggerWrapper);
+                    triggerInstanceList.Add(triggerInstance);
                 }
             }
 
-            private void UnregisterTriggerFromSpline(BaseTriggerWrapper triggerWrapper, TrainTrackSpline spline)
+            private void UnregisterTriggerFromSpline(BaseTriggerInstance triggerInstance, TrainTrackSpline spline)
             {
-                List<BaseTriggerWrapper> triggerWrappers;
-                if (_splinesToTriggers.TryGetValue(spline, out triggerWrappers))
+                List<BaseTriggerInstance> triggerInstanceList;
+                if (_splinesToTriggers.TryGetValue(spline, out triggerInstanceList))
                 {
-                    triggerWrappers.Remove(triggerWrapper);
-                    if (triggerWrappers.Count == 0)
+                    triggerInstanceList.Remove(triggerInstance);
+                    if (triggerInstanceList.Count == 0)
                         _splinesToTriggers.Remove(spline);
                 }
             }
 
-            public List<BaseTriggerWrapper> GetTriggersForSpline(TrainTrackSpline spline)
+            public List<BaseTriggerInstance> GetTriggersForSpline(TrainTrackSpline spline)
             {
-                List<BaseTriggerWrapper> triggerWrappers;
-                return _splinesToTriggers.TryGetValue(spline, out triggerWrappers)
-                    ? triggerWrappers
+                List<BaseTriggerInstance> triggerInstanceList;
+                return _splinesToTriggers.TryGetValue(spline, out triggerInstanceList)
+                    ? triggerInstanceList
                     : null;
             }
 
@@ -1753,20 +1757,20 @@ namespace Oxide.Plugins
                 return null;
             }
 
-            private TunnelTriggerWrapper[] CreateTunnelTriggers(TriggerData triggerData)
+            private TunnelTriggerInstance[] CreateTunnelTriggers(TriggerData triggerData)
             {
-                var triggerWrapperList = TunnelTriggerWrapper.CreateTunnelTriggers(triggerData);
-                foreach (var tunnelTrigger in triggerWrapperList)
+                var triggerInstanceList = TunnelTriggerInstance.CreateTunnelTriggers(triggerData);
+                foreach (var tunnelTrigger in triggerInstanceList)
                 {
                     if (tunnelTrigger.Spline != null)
                         RegisterTriggerWithSpline(tunnelTrigger, tunnelTrigger.Spline);
                 }
-                return triggerWrapperList;
+                return triggerInstanceList;
             }
 
-            private MapTriggerWrapper CreateMapTrigger(TriggerData triggerData)
+            private MapTriggerInstance CreateMapTrigger(TriggerData triggerData)
             {
-                var mapTrigger = MapTriggerWrapper.CreateWorldTrigger(triggerData);
+                var mapTrigger = MapTriggerInstance.CreateWorldTrigger(triggerData);
                 if (mapTrigger.Spline != null)
                     RegisterTriggerWithSpline(mapTrigger, mapTrigger.Spline);
 
@@ -1806,15 +1810,15 @@ namespace Oxide.Plugins
 
                     if (enabledChanged)
                     {
-                        TunnelTriggerWrapper[] triggerWrapperList;
-                        if (_tunnelTriggers.TryGetValue(triggerData, out triggerWrapperList))
+                        TunnelTriggerInstance[] triggerInstanceList;
+                        if (_tunnelTriggers.TryGetValue(triggerData, out triggerInstanceList))
                         {
-                            foreach (var triggerWrapper in triggerWrapperList)
+                            foreach (var triggerInstance in triggerInstanceList)
                             {
                                 if (triggerData.Enabled)
-                                    triggerWrapper.Enable();
+                                    triggerInstance.Enable();
                                 else
-                                    triggerWrapper.Disable();
+                                    triggerInstance.Disable();
                             }
                         }
                     }
@@ -1825,30 +1829,30 @@ namespace Oxide.Plugins
 
                     if (enabledChanged)
                     {
-                        MapTriggerWrapper triggerWrapper;
-                        if (_mapTriggers.TryGetValue(triggerData, out triggerWrapper))
+                        MapTriggerInstance triggerInstance;
+                        if (_mapTriggers.TryGetValue(triggerData, out triggerInstance))
                         {
                             if (triggerData.Enabled)
-                                triggerWrapper.Enable();
+                                triggerInstance.Enable();
                             else
-                                triggerWrapper.Disable();
+                                triggerInstance.Disable();
                         }
                     }
                 }
             }
 
-            private void UpdateTriggerWrapperPosition(BaseTriggerWrapper triggerWrapper)
+            private void UpdateTriggerInstancePosition(BaseTriggerInstance triggerInstance)
             {
-                var originalSpline = triggerWrapper.Spline;
-                triggerWrapper.UpdatePosition();
+                var originalSpline = triggerInstance.Spline;
+                triggerInstance.UpdatePosition();
 
-                if (triggerWrapper.Spline != originalSpline)
+                if (triggerInstance.Spline != originalSpline)
                 {
                     if (originalSpline != null)
-                        UnregisterTriggerFromSpline(triggerWrapper, originalSpline);
+                        UnregisterTriggerFromSpline(triggerInstance, originalSpline);
 
-                    if (triggerWrapper.Spline != null)
-                        RegisterTriggerWithSpline(triggerWrapper, triggerWrapper.Spline);
+                    if (triggerInstance.Spline != null)
+                        RegisterTriggerWithSpline(triggerInstance, triggerInstance.Spline);
                 }
             }
 
@@ -1860,38 +1864,38 @@ namespace Oxide.Plugins
                 {
                     _tunnelData.Save();
 
-                    TunnelTriggerWrapper[] triggerWrapperList;
-                    if (_tunnelTriggers.TryGetValue(triggerData, out triggerWrapperList))
+                    TunnelTriggerInstance[] triggerInstanceList;
+                    if (_tunnelTriggers.TryGetValue(triggerData, out triggerInstanceList))
                     {
-                        foreach (var triggerWrapper in triggerWrapperList)
-                            UpdateTriggerWrapperPosition(triggerWrapper);
+                        foreach (var triggerInstance in triggerInstanceList)
+                            UpdateTriggerInstancePosition(triggerInstance);
                     }
                 }
                 else
                 {
                     _mapData.Save();
 
-                    MapTriggerWrapper triggerWrapper;
-                    if (_mapTriggers.TryGetValue(triggerData, out triggerWrapper))
-                        UpdateTriggerWrapperPosition(triggerWrapper);
+                    MapTriggerInstance triggerInstance;
+                    if (_mapTriggers.TryGetValue(triggerData, out triggerInstance))
+                        UpdateTriggerInstancePosition(triggerInstance);
                 }
             }
 
-            private void DestroyTriggerWrapper(BaseTriggerWrapper triggerWrapper)
+            private void DestroyTriggerInstance(BaseTriggerInstance triggerInstance)
             {
-                UnregisterTriggerFromSpline(triggerWrapper, triggerWrapper.Spline);
-                triggerWrapper.Destroy();
+                UnregisterTriggerFromSpline(triggerInstance, triggerInstance.Spline);
+                triggerInstance.Destroy();
             }
 
             public void RemoveTrigger(TriggerData triggerData)
             {
                 if (triggerData.TriggerType == WorkcartTriggerType.Tunnel)
                 {
-                    TunnelTriggerWrapper[] triggerWrapperList;
-                    if (_tunnelTriggers.TryGetValue(triggerData, out triggerWrapperList))
+                    TunnelTriggerInstance[] triggerInstanceList;
+                    if (_tunnelTriggers.TryGetValue(triggerData, out triggerInstanceList))
                     {
-                        foreach (var triggerWrapper in triggerWrapperList)
-                            DestroyTriggerWrapper(triggerWrapper);
+                        foreach (var triggerInstance in triggerInstanceList)
+                            DestroyTriggerInstance(triggerInstance);
 
                         _tunnelTriggers.Remove(triggerData);
                     }
@@ -1900,10 +1904,10 @@ namespace Oxide.Plugins
                 }
                 else
                 {
-                    MapTriggerWrapper triggerWrapper;
-                    if (_mapTriggers.TryGetValue(triggerData, out triggerWrapper))
+                    MapTriggerInstance triggerInstance;
+                    if (_mapTriggers.TryGetValue(triggerData, out triggerInstance))
                     {
-                        DestroyTriggerWrapper(triggerWrapper);
+                        DestroyTriggerInstance(triggerInstance);
                         _mapTriggers.Remove(triggerData);
                     }
 
@@ -1939,12 +1943,12 @@ namespace Oxide.Plugins
 
             public void DestroyAll()
             {
-                foreach (var triggerWrapper in _mapTriggers.Values)
-                    triggerWrapper.Destroy();
+                foreach (var triggerInstance in _mapTriggers.Values)
+                    triggerInstance.Destroy();
 
-                foreach (var triggerWrapperList in _tunnelTriggers.Values)
-                    foreach (var triggerWrapper in triggerWrapperList)
-                        triggerWrapper.Destroy();
+                foreach (var triggerInstanceList in _tunnelTriggers.Values)
+                    foreach (var triggerInstance in triggerInstanceList)
+                        triggerInstance.Destroy();
 
                 _splinesToTriggers.Clear();
             }
@@ -2016,7 +2020,7 @@ namespace Oxide.Plugins
                 }
             }
 
-            private static void ShowTrigger(BasePlayer player, BaseTriggerWrapper trigger, string routeName, int count = 1)
+            private static void ShowTrigger(BasePlayer player, BaseTriggerInstance trigger, string routeName, int count = 1)
             {
                 var triggerData = trigger.TriggerData;
                 var color = triggerData.GetColor(routeName);
@@ -2078,9 +2082,9 @@ namespace Oxide.Plugins
                 player.SendConsoleCommand("ddraw.text", TriggerDisplayDuration, color, textPosition, string.Join("\n", infoLines));
             }
 
-            public BaseTriggerWrapper FindNearestTrigger(Vector3 position, float maxDistance = 10)
+            public BaseTriggerInstance FindNearestTrigger(Vector3 position, float maxDistance = 10)
             {
-                BaseTriggerWrapper closestTriggerWrapper = null;
+                BaseTriggerInstance closestTriggerInstance = null;
                 float shortestSqrDistance = float.MaxValue;
 
                 foreach (var trigger in _mapTriggers.Values)
@@ -2090,7 +2094,7 @@ namespace Oxide.Plugins
                         continue;
 
                     shortestSqrDistance = sqrDistance;
-                    closestTriggerWrapper = trigger;
+                    closestTriggerInstance = trigger;
                 }
 
                 foreach (var triggerList in _tunnelTriggers.Values)
@@ -2102,11 +2106,11 @@ namespace Oxide.Plugins
                             continue;
 
                         shortestSqrDistance = sqrDistance;
-                        closestTriggerWrapper = trigger;
+                        closestTriggerInstance = trigger;
                     }
                 }
 
-                return closestTriggerWrapper;
+                return closestTriggerInstance;
             }
 
             public TriggerData FindNearestTriggerWhereAiming(BasePlayer player, float maxDistance = 10)
