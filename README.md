@@ -105,8 +105,8 @@ To see the triggers visually, grant the `automatedworkcarts.managetriggers` perm
 
 - `aw.showtriggers @<optional_route_name> <optional_duration_in_seconds>` -- Shows all nearby triggers to the player for specified duration. Defaults to 60 seconds.
   - This displays each trigger's id, speed, direction, etc.
-  - Triggers are also automatically shown for at least 60 seconds when using any of the other trigger commands.
-  - When specifying a route name, global triggers and triggers matching that route will be shown with their normal colors, but triggers for different routes will be colored gray.
+  - Triggers are also automatically shown for at least 60 seconds when using any of the other trigger commands or when manually automating a workcart.
+  - When specifying a route name, global triggers and triggers matching that route will be shown with their default colors, but triggers for different routes will be colored gray.
 - `aw.addtrigger <option1> <option2> ...` -- Adds a trigger to the track position where you are aiming, with the specified options. Automated workcarts that pass through the trigger will be affected by the trigger's options.
   - Speed options: `Hi` | `Med` | `Lo` | `Zero`.
   - Direction options: `Fwd` | `Rev` | `Invert`.
@@ -118,8 +118,8 @@ To see the triggers visually, grant the `automatedworkcarts.managetriggers` perm
     - `Destroy` -- Destroys the workcart. This is intended for lazy track designs. You should not need this if you design your routes thoughtfully.
     - `@<route_name>` -- Instructs the workcart to ignore this trigger if it's not assigned this route (replace `<route_name>` with the name you want).
       - If the trigger has the `Conductor` property and the workcart does not already have a conductor, it will be assigned this route.
-    - `Enabled` -- Enables the trigger if currently disabled.
-    - `Disabled` -- Disables the trigger if currently enabled. Disabled triggers are ignored by workcarts and are colored gray.
+    - `Enabled` -- Enables the trigger.
+    - `Disabled` -- Disables the trigger. Disabled triggers are ignored by workcarts and are colored gray.
 - `aw.addtrunneltrigger <option1> <option2>` -- Adds a trigger to the track position where you are aiming.
   - Must be in a supported train tunnel (one enabled in plugin configuration).
   - This trigger will be replicated at all train tunnels of the same type. Editing or removing one of those triggers will affect them all.
@@ -130,12 +130,14 @@ To see the triggers visually, grant the `automatedworkcarts.managetriggers` perm
   - This is useful for removing properties from a trigger (without having to remove and add it back) since `aw.updatetrigger` does not remove properties.
 - `aw.movetrigger <id>` -- Moves the specified trigger to the track position where the player is aiming.
 - `aw.removetrigger <id>` -- Removes the specified trigger.
+- `aw.enabletrigger <id>` -- Enables the specified trigger. This is identical to `aw.updatetrigger <id> enabled`.
+- `aw.disabletrigger <id>` -- Disables the specified trigger. This is identical to `aw.updatetrigger <id> disabled`. Disabled triggers are ignored by workcarts and are colored gray.
 
 Tip: For the commands that update, move or remove triggers, you can skip the `<id>` argument if you are aiming at a nearby trigger.
 
 ### Command aliases
 
-The following command aliases are also available:
+The following command aliases are available:
 - `aw.showtriggers` -> `awt.show`
 - `aw.addtrigger` -> `awt.add`
 - `aw.addtunneltrigger` -> `awt.addt`
@@ -143,6 +145,8 @@ The following command aliases are also available:
 - `aw.replacetrigger` -> `awt.replace`
 - `aw.movetrigger` -> `awt.move`
 - `aw.removetrigger` -> `awt.remove`
+- `aw.enabletrigger` -> `awt.enable`
+- `aw.disabletrigger` -> `awt.disable`
 
 ### Command examples
 
@@ -316,7 +320,7 @@ The best practice is to have separate, independent tracks for player vs automate
   "UpdateTrigger.Syntax": "Syntax: <color=#fd4>{0} <id> <option1> <option2> ...</color>\n{1}",
   "UpdateTrigger.Success": "Successfully updated trigger #<color=#fd4>{0}{1}</color>",
   "MoveTrigger.Success": "Successfully moved trigger #<color=#fd4>{0}{1}</color>",
-  "RemoveTrigger.Syntax": "Syntax: <color=#fd4>{0} <id></color>",
+  "Trigger.SimpleSyntax": "Syntax: <color=#fd4>{0} <id></color>",
   "RemoveTrigger.Success": "Trigger #<color=#fd4>{0}{1}</color> successfully removed.",
   "Info.ConductorCount.Limited": "Total conductors: <color=#fd4>{0}/{1}</color>.",
   "Info.ConductorCount.Unlimited": "Total conductors: <color=#fd4>{0}</color>.",

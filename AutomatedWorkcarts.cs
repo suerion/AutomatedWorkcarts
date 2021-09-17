@@ -421,16 +421,9 @@ namespace Oxide.Plugins
         [Command("aw.updatetrigger", "awt.update")]
         private void CommandUpdateTrigger(IPlayer player, string cmd, string[] args)
         {
-            if (player.IsServer
-                || !VerifyPermission(player, PermissionManageTriggers)
-                || !VerifyAnyTriggers(player))
-                return;
-
-            var basePlayer = player.Object as BasePlayer;
             TriggerData triggerData;
             string[] optionArgs;
-
-            if (!VerifyValidTrigger(player, cmd, args, Lang.UpdateTriggerSyntax, out triggerData, out optionArgs))
+            if (!VerifyCanModifyTrigger(player, cmd, args, Lang.UpdateTriggerSyntax, out triggerData, out optionArgs))
                 return;
 
             if (optionArgs.Length == 0)
@@ -448,6 +441,7 @@ namespace Oxide.Plugins
 
             _triggerManager.UpdateTrigger(triggerData, newTriggerData);
 
+            var basePlayer = player.Object as BasePlayer;
             if (triggerData.Route != null)
                 _triggerManager.SetPlayerDisplayedRoute(basePlayer, triggerData.Route);
 
@@ -458,16 +452,9 @@ namespace Oxide.Plugins
         [Command("aw.replacetrigger", "awt.replace")]
         private void CommandReplaceTrigger(IPlayer player, string cmd, string[] args)
         {
-            if (player.IsServer
-                || !VerifyPermission(player, PermissionManageTriggers)
-                || !VerifyAnyTriggers(player))
-                return;
-
-            var basePlayer = player.Object as BasePlayer;
             TriggerData triggerData;
             string[] optionArgs;
-
-            if (!VerifyValidTrigger(player, cmd, args, Lang.UpdateTriggerSyntax, out triggerData, out optionArgs))
+            if (!VerifyCanModifyTrigger(player, cmd, args, Lang.UpdateTriggerSyntax, out triggerData, out optionArgs))
                 return;
 
             if (optionArgs.Length == 0)
@@ -485,6 +472,7 @@ namespace Oxide.Plugins
 
             _triggerManager.UpdateTrigger(triggerData, newTriggerData);
 
+            var basePlayer = player.Object as BasePlayer;
             if (triggerData.Route != null)
                 _triggerManager.SetPlayerDisplayedRoute(basePlayer, triggerData.Route);
 
@@ -492,19 +480,47 @@ namespace Oxide.Plugins
             ReplyToPlayer(player, Lang.UpdateTriggerSuccess, GetTriggerPrefix(player, triggerData), triggerData.Id);
         }
 
+        [Command("aw.enabletrigger", "awt.enable")]
+        private void CommandEnableTrigger(IPlayer player, string cmd, string[] args)
+        {
+            TriggerData triggerData;
+            string[] optionArgs;
+            if (!VerifyCanModifyTrigger(player, cmd, args, Lang.SimpleTriggerSyntax, out triggerData, out optionArgs))
+                return;
+
+            var newTriggerData = triggerData.Clone();
+            newTriggerData.Enabled = true;
+            _triggerManager.UpdateTrigger(triggerData, newTriggerData);
+
+            var basePlayer = player.Object as BasePlayer;
+            _triggerManager.ShowAllRepeatedly(basePlayer);
+            ReplyToPlayer(player, Lang.UpdateTriggerSuccess, GetTriggerPrefix(player, triggerData), triggerData.Id);
+        }
+
+        [Command("aw.disabletrigger", "awt.disable")]
+        private void CommandDisableTrigger(IPlayer player, string cmd, string[] args)
+        {
+            TriggerData triggerData;
+            string[] optionArgs;
+            if (!VerifyCanModifyTrigger(player, cmd, args, Lang.SimpleTriggerSyntax, out triggerData, out optionArgs))
+                return;
+
+            var newTriggerData = triggerData.Clone();
+            newTriggerData.Enabled = false;
+            _triggerManager.UpdateTrigger(triggerData, newTriggerData);
+
+            var basePlayer = player.Object as BasePlayer;
+            _triggerManager.ShowAllRepeatedly(basePlayer);
+            ReplyToPlayer(player, Lang.UpdateTriggerSuccess, GetTriggerPrefix(player, triggerData), triggerData.Id);
+        }
+
         [Command("aw.movetrigger", "awt.move")]
         private void CommandMoveTrigger(IPlayer player, string cmd, string[] args)
         {
-            if (player.IsServer
-                || !VerifyPermission(player, PermissionManageTriggers)
-                || !VerifyAnyTriggers(player))
-                return;
-
-            var basePlayer = player.Object as BasePlayer;
             TriggerData triggerData;
-
             string[] optionArgs;
-            if (!VerifyValidTrigger(player, cmd, args, Lang.RemoveTriggerSyntax, out triggerData, out optionArgs))
+
+            if (!VerifyCanModifyTrigger(player, cmd, args, Lang.SimpleTriggerSyntax, out triggerData, out optionArgs))
                 return;
 
             Vector3 trackPosition;
@@ -528,6 +544,7 @@ namespace Oxide.Plugins
 
             _triggerManager.MoveTrigger(triggerData, trackPosition);
 
+            var basePlayer = player.Object as BasePlayer;
             if (triggerData.Route != null)
                 _triggerManager.SetPlayerDisplayedRoute(basePlayer, triggerData.Route);
 
@@ -538,19 +555,15 @@ namespace Oxide.Plugins
         [Command("aw.removetrigger", "awt.remove")]
         private void CommandRemoveTrigger(IPlayer player, string cmd, string[] args)
         {
-            if (player.IsServer
-                || !VerifyPermission(player, PermissionManageTriggers)
-                || !VerifyAnyTriggers(player))
-                return;
-
-            var basePlayer = player.Object as BasePlayer;
             TriggerData triggerData;
             string[] optionArgs;
 
-            if (!VerifyValidTrigger(player, cmd, args, Lang.RemoveTriggerSyntax, out triggerData, out optionArgs))
+            if (!VerifyCanModifyTrigger(player, cmd, args, Lang.SimpleTriggerSyntax, out triggerData, out optionArgs))
                 return;
 
             _triggerManager.RemoveTrigger(triggerData);
+
+            var basePlayer = player.Object as BasePlayer;
             _triggerManager.ShowAllRepeatedly(basePlayer);
             ReplyToPlayer(player, Lang.RemoveTriggerSuccess, GetTriggerPrefix(player, triggerData), triggerData.Id);
         }
@@ -718,6 +731,19 @@ namespace Oxide.Plugins
             _triggerManager.ShowAllRepeatedly(basePlayer);
             ReplyToPlayer(player, errorMessageName, cmd, GetTriggerOptions(player));
             return false;
+        }
+
+        private bool VerifyCanModifyTrigger(IPlayer player, string cmd, string[] args, string errorMessageName, out TriggerData triggerData, out string[] optionArgs)
+        {
+            triggerData = null;
+            optionArgs = null;
+
+            if (player.IsServer
+                || !VerifyPermission(player, PermissionManageTriggers)
+                || !VerifyAnyTriggers(player))
+                return false;
+
+            return VerifyValidTrigger(player, cmd, args, errorMessageName, out triggerData, out optionArgs);
         }
 
         private bool VerifySupportedNearbyTrainTunnel(IPlayer player, Vector3 trackPosition, out DungeonCellWrapper dungeonCellWrapper)
@@ -3273,7 +3299,7 @@ namespace Oxide.Plugins
             public const string MoveTriggerSuccess = "MoveTrigger.Success";
             public const string UpdateTriggerSyntax = "UpdateTrigger.Syntax";
             public const string UpdateTriggerSuccess = "UpdateTrigger.Success";
-            public const string RemoveTriggerSyntax = "RemoveTrigger.Syntax";
+            public const string SimpleTriggerSyntax = "Trigger.SimpleSyntax";
             public const string RemoveTriggerSuccess = "RemoveTrigger.Success";
 
             public const string InfoConductorCountLimited = "Info.ConductorCount.Limited";
@@ -3333,7 +3359,7 @@ namespace Oxide.Plugins
                 [Lang.UpdateTriggerSyntax] = "Syntax: <color=#fd4>{0} <id> <option1> <option2> ...</color>\n{1}",
                 [Lang.UpdateTriggerSuccess] = "Successfully updated trigger #<color=#fd4>{0}{1}</color>",
                 [Lang.MoveTriggerSuccess] = "Successfully moved trigger #<color=#fd4>{0}{1}</color>",
-                [Lang.RemoveTriggerSyntax] = "Syntax: <color=#fd4>{0} <id></color>",
+                [Lang.SimpleTriggerSyntax] = "Syntax: <color=#fd4>{0} <id></color>",
                 [Lang.RemoveTriggerSuccess] = "Trigger #<color=#fd4>{0}{1}</color> successfully removed.",
 
                 [Lang.InfoConductorCountLimited] = "Total conductors: <color=#fd4>{0}/{1}</color>.",
