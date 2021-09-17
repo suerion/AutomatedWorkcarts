@@ -1571,16 +1571,17 @@ namespace Oxide.Plugins
             public TriggerData TriggerData { get; protected set; }
             public TrainTrackSpline Spline { get; private set; }
             public float DistanceOnSpline { get; private set; }
-            public virtual Vector3 WorldPosition => TriggerData.Position;
 
-            protected GameObject _gameObject;
+            public abstract Vector3 WorldPosition { get; }
+
+            private GameObject _gameObject;
 
             protected BaseTriggerInstance(TriggerData triggerData)
             {
                 TriggerData = triggerData;
             }
 
-            protected void CreateTrigger()
+            public void CreateTrigger()
             {
                 _gameObject = new GameObject();
                 UpdatePosition();
@@ -1635,39 +1636,13 @@ namespace Oxide.Plugins
 
         private class MapTriggerInstance : BaseTriggerInstance
         {
-            public static MapTriggerInstance CreateWorldTrigger(TriggerData triggerData)
-            {
-                var triggerInstance = new MapTriggerInstance(triggerData);
-
-                if (triggerData.Enabled)
-                    triggerInstance.CreateTrigger();
-
-                return triggerInstance;
-            }
+            public override Vector3 WorldPosition => TriggerData.Position;
 
             public MapTriggerInstance(TriggerData triggerData) : base(triggerData) {}
         }
 
         private class TunnelTriggerInstance : BaseTriggerInstance
         {
-            public static TunnelTriggerInstance[] CreateTunnelTriggers(TriggerData triggerData)
-            {
-                var matchingDungeonCells = FindAllTunnelsOfType(triggerData.GetTunnelType());
-                var triggerInstanceList = new TunnelTriggerInstance[matchingDungeonCells.Count];
-
-                for (var i = 0; i < matchingDungeonCells.Count; i++)
-                {
-                    var triggerInstance = new TunnelTriggerInstance(triggerData, matchingDungeonCells[i]);
-
-                    if (triggerData.Enabled)
-                        triggerInstance.CreateTrigger();
-
-                    triggerInstanceList[i] = triggerInstance;
-                }
-
-                return triggerInstanceList;
-            }
-
             public DungeonCellWrapper DungeonCellWrapper { get; private set; }
 
             public override Vector3 WorldPosition => DungeonCellWrapper.TransformPoint(TriggerData.Position);
@@ -1675,6 +1650,83 @@ namespace Oxide.Plugins
             public TunnelTriggerInstance(TriggerData triggerData, DungeonCellWrapper dungeonCellWrapper) : base(triggerData)
             {
                 DungeonCellWrapper = dungeonCellWrapper;
+            }
+        }
+
+        #endregion
+
+        #region Trigger Controllers
+
+        private abstract class BaseTriggerController
+        {
+            public TriggerData TriggerData { get; protected set; }
+            public BaseTriggerInstance[] TriggerInstanceList { get; protected set; }
+
+            public BaseTriggerController(TriggerData triggerData)
+            {
+                TriggerData = triggerData;
+            }
+
+            public abstract void Create();
+
+            public void OnMove()
+            {
+                foreach (var triggerInstance in TriggerInstanceList)
+                    triggerInstance.UpdatePosition();
+            }
+
+            public void OnEnableDisable()
+            {
+                foreach (var triggerInstance in TriggerInstanceList)
+                {
+                    if (TriggerData.Enabled)
+                        triggerInstance.Enable();
+                    else
+                        triggerInstance.Disable();
+                }
+            }
+
+            public void Destroy()
+            {
+                if (TriggerInstanceList == null)
+                    return;
+
+                foreach (var triggerInstance in TriggerInstanceList)
+                    triggerInstance.Destroy();
+            }
+        }
+
+        private class MapTriggerController : BaseTriggerController
+        {
+            public MapTriggerController(TriggerData triggerData) : base(triggerData) {}
+
+            public override void Create()
+            {
+                var triggerInstance = new MapTriggerInstance(TriggerData);
+                TriggerInstanceList = new MapTriggerInstance[] { triggerInstance };
+
+                if (TriggerData.Enabled)
+                    triggerInstance.CreateTrigger();
+            }
+        }
+
+        private class TunnelTriggerController : BaseTriggerController
+        {
+            public TunnelTriggerController(TriggerData triggerData) : base(triggerData) {}
+
+            public override void Create()
+            {
+                var matchingDungeonCells = FindAllTunnelsOfType(TriggerData.GetTunnelType());
+                TriggerInstanceList = new TunnelTriggerInstance[matchingDungeonCells.Count];
+
+                for (var i = 0; i < matchingDungeonCells.Count; i++)
+                {
+                    var triggerInstance = new TunnelTriggerInstance(TriggerData, matchingDungeonCells[i]);
+                    TriggerInstanceList[i] = triggerInstance;
+
+                    if (TriggerData.Enabled)
+                        triggerInstance.CreateTrigger();
+                }
             }
         }
 
@@ -1694,8 +1746,7 @@ namespace Oxide.Plugins
             private const float TriggerDisplayRadius = 1f;
             private float TriggerDisplayDistanceSquared => _pluginConfig.TriggerDisplayDistance * _pluginConfig.TriggerDisplayDistance;
 
-            private Dictionary<TriggerData, MapTriggerInstance> _mapTriggers = new Dictionary<TriggerData, MapTriggerInstance>();
-            private Dictionary<TriggerData, TunnelTriggerInstance[]> _tunnelTriggers = new Dictionary<TriggerData, TunnelTriggerInstance[]>();
+            private Dictionary<TriggerData, BaseTriggerController> _triggerControllers = new Dictionary<TriggerData, BaseTriggerController>();
             private Dictionary<TrainTrackSpline, List<BaseTriggerInstance>> _splinesToTriggers = new Dictionary<TrainTrackSpline, List<BaseTriggerInstance>>();
             private Dictionary<ulong, PlayerInfo> _playerInfo = new Dictionary<ulong, PlayerInfo>();
 
@@ -1734,6 +1785,24 @@ namespace Oxide.Plugins
                 }
             }
 
+            private void RegisterTriggerWithSpline(BaseTriggerController triggerController)
+            {
+                foreach (var triggerInstance in triggerController.TriggerInstanceList)
+                {
+                    if (triggerInstance.Spline != null)
+                        RegisterTriggerWithSpline(triggerInstance, triggerInstance.Spline);
+                }
+            }
+
+            private void UnregisterTriggerFromSpline(BaseTriggerController triggerController)
+            {
+                foreach (var triggerInstance in triggerController.TriggerInstanceList)
+                {
+                    if (triggerInstance.Spline != null)
+                        UnregisterTriggerFromSpline(triggerInstance, triggerInstance.Spline);
+                }
+            }
+
             public List<BaseTriggerInstance> GetTriggersForSpline(TrainTrackSpline spline)
             {
                 List<BaseTriggerInstance> triggerInstanceList;
@@ -1744,37 +1813,13 @@ namespace Oxide.Plugins
 
             public TriggerData FindTrigger(int triggerId, WorkcartTriggerType triggerType)
             {
-                IEnumerable<TriggerData> triggerList = _mapTriggers.Keys;
-                if (triggerType == WorkcartTriggerType.Tunnel)
-                    triggerList = _tunnelTriggers.Keys;
-
-                foreach (var triggerData in triggerList)
+                foreach (var triggerData in _triggerControllers.Keys)
                 {
-                    if (triggerData.Id == triggerId)
+                    if (triggerData.TriggerType == triggerType && triggerData.Id == triggerId)
                         return triggerData;
                 }
 
                 return null;
-            }
-
-            private TunnelTriggerInstance[] CreateTunnelTriggers(TriggerData triggerData)
-            {
-                var triggerInstanceList = TunnelTriggerInstance.CreateTunnelTriggers(triggerData);
-                foreach (var tunnelTrigger in triggerInstanceList)
-                {
-                    if (tunnelTrigger.Spline != null)
-                        RegisterTriggerWithSpline(tunnelTrigger, tunnelTrigger.Spline);
-                }
-                return triggerInstanceList;
-            }
-
-            private MapTriggerInstance CreateMapTrigger(TriggerData triggerData)
-            {
-                var mapTrigger = MapTriggerInstance.CreateWorldTrigger(triggerData);
-                if (mapTrigger.Spline != null)
-                    RegisterTriggerWithSpline(mapTrigger, mapTrigger.Spline);
-
-                return mapTrigger;
             }
 
             public void AddTrigger(TriggerData triggerData)
@@ -1782,137 +1827,101 @@ namespace Oxide.Plugins
                 if (triggerData.TriggerType == WorkcartTriggerType.Tunnel)
                 {
                     if (triggerData.Id == 0)
-                        triggerData.Id = GetHighestTriggerId(_tunnelTriggers.Keys) + 1;
+                        triggerData.Id = GetHighestTriggerId(_tunnelData.TunnelTriggers) + 1;
 
-                    _tunnelTriggers[triggerData] = CreateTunnelTriggers(triggerData);
+                    CreateTunnelTriggerController(triggerData);
                     _tunnelData.AddTrigger(triggerData);
                 }
                 else
                 {
                     if (triggerData.Id == 0)
-                        triggerData.Id = GetHighestTriggerId(_mapTriggers.Keys) + 1;
+                        triggerData.Id = GetHighestTriggerId(_mapData.MapTriggers) + 1;
 
-                    _mapTriggers[triggerData] = CreateMapTrigger(triggerData);
+                    CreateMapTriggerController(triggerData);
                     _mapData.AddTrigger(triggerData);
                 }
             }
 
+            private void SaveTrigger(TriggerData triggerData)
+            {
+                if (triggerData.TriggerType == WorkcartTriggerType.Tunnel)
+                    _tunnelData.Save();
+                else
+                    _mapData.Save();
+            }
+
+            private BaseTriggerController GetTriggerController(TriggerData triggerData)
+            {
+                BaseTriggerController triggerController;
+                return _triggerControllers.TryGetValue(triggerData, out triggerController)
+                    ? triggerController
+                    : null;
+            }
+
             public void UpdateTrigger(TriggerData triggerData, TriggerData newTriggerData)
             {
-                triggerData.InvalidateCache();
+                var triggerController = GetTriggerController(triggerData);
+                if (triggerController == null)
+                    return;
 
                 var enabledChanged = triggerData.Enabled != newTriggerData.Enabled;
                 triggerData.CopyFrom(newTriggerData);
+                triggerData.InvalidateCache();
 
-                if (triggerData.TriggerType == WorkcartTriggerType.Tunnel)
-                {
-                    _tunnelData.Save();
+                if (enabledChanged)
+                    triggerController.OnEnableDisable();
 
-                    if (enabledChanged)
-                    {
-                        TunnelTriggerInstance[] triggerInstanceList;
-                        if (_tunnelTriggers.TryGetValue(triggerData, out triggerInstanceList))
-                        {
-                            foreach (var triggerInstance in triggerInstanceList)
-                            {
-                                if (triggerData.Enabled)
-                                    triggerInstance.Enable();
-                                else
-                                    triggerInstance.Disable();
-                            }
-                        }
-                    }
-                }
-                else
-                {
-                    _mapData.Save();
-
-                    if (enabledChanged)
-                    {
-                        MapTriggerInstance triggerInstance;
-                        if (_mapTriggers.TryGetValue(triggerData, out triggerInstance))
-                        {
-                            if (triggerData.Enabled)
-                                triggerInstance.Enable();
-                            else
-                                triggerInstance.Disable();
-                        }
-                    }
-                }
-            }
-
-            private void UpdateTriggerInstancePosition(BaseTriggerInstance triggerInstance)
-            {
-                var originalSpline = triggerInstance.Spline;
-                triggerInstance.UpdatePosition();
-
-                if (triggerInstance.Spline != originalSpline)
-                {
-                    if (originalSpline != null)
-                        UnregisterTriggerFromSpline(triggerInstance, originalSpline);
-
-                    if (triggerInstance.Spline != null)
-                        RegisterTriggerWithSpline(triggerInstance, triggerInstance.Spline);
-                }
+                SaveTrigger(triggerData);
             }
 
             public void MoveTrigger(TriggerData triggerData, Vector3 position)
             {
+                var triggerController = GetTriggerController(triggerData);
+                if (triggerController == null)
+                    return;
+
+                UnregisterTriggerFromSpline(triggerController);
                 triggerData.Position = position;
-
-                if (triggerData.TriggerType == WorkcartTriggerType.Tunnel)
-                {
-                    _tunnelData.Save();
-
-                    TunnelTriggerInstance[] triggerInstanceList;
-                    if (_tunnelTriggers.TryGetValue(triggerData, out triggerInstanceList))
-                    {
-                        foreach (var triggerInstance in triggerInstanceList)
-                            UpdateTriggerInstancePosition(triggerInstance);
-                    }
-                }
-                else
-                {
-                    _mapData.Save();
-
-                    MapTriggerInstance triggerInstance;
-                    if (_mapTriggers.TryGetValue(triggerData, out triggerInstance))
-                        UpdateTriggerInstancePosition(triggerInstance);
-                }
+                triggerController.OnMove();
+                RegisterTriggerWithSpline(triggerController);
+                SaveTrigger(triggerData);
             }
 
-            private void DestroyTriggerInstance(BaseTriggerInstance triggerInstance)
+            private void DestroyTriggerController(BaseTriggerController triggerController)
             {
-                UnregisterTriggerFromSpline(triggerInstance, triggerInstance.Spline);
-                triggerInstance.Destroy();
+                UnregisterTriggerFromSpline(triggerController);
+                triggerController.Destroy();
             }
 
             public void RemoveTrigger(TriggerData triggerData)
             {
+                var triggerController = GetTriggerController(triggerData);
+                if (triggerController == null)
+                    return;
+
+                DestroyTriggerController(triggerController);
+                _triggerControllers.Remove(triggerData);
+
                 if (triggerData.TriggerType == WorkcartTriggerType.Tunnel)
-                {
-                    TunnelTriggerInstance[] triggerInstanceList;
-                    if (_tunnelTriggers.TryGetValue(triggerData, out triggerInstanceList))
-                    {
-                        foreach (var triggerInstance in triggerInstanceList)
-                            DestroyTriggerInstance(triggerInstance);
-
-                        _tunnelTriggers.Remove(triggerData);
-                    }
-
                     _tunnelData.RemoveTrigger(triggerData);
-                }
                 else
-                {
-                    MapTriggerInstance triggerInstance;
-                    if (_mapTriggers.TryGetValue(triggerData, out triggerInstance))
-                    {
-                        DestroyTriggerInstance(triggerInstance);
-                        _mapTriggers.Remove(triggerData);
-                    }
-
                     _mapData.RemoveTrigger(triggerData);
-                }
+            }
+
+            private void CreateMapTriggerController(TriggerData triggerData)
+            {
+                var triggerController = new MapTriggerController(triggerData);
+                triggerController.Create();
+                RegisterTriggerWithSpline(triggerController);
+                _triggerControllers[triggerData] = triggerController;
+            }
+
+            private void CreateTunnelTriggerController(TriggerData triggerData)
+            {
+                var triggerController = new TunnelTriggerController(triggerData);
+                triggerController.Create();
+                RegisterTriggerWithSpline(triggerController);
+                _triggerControllers[triggerData] = triggerController;
             }
 
             public IEnumerator CreateAll()
@@ -1921,7 +1930,7 @@ namespace Oxide.Plugins
                 {
                     foreach (var triggerData in _mapData.MapTriggers)
                     {
-                        _mapTriggers[triggerData] = CreateMapTrigger(triggerData);
+                        CreateMapTriggerController(triggerData);
                         _pluginInstance.TrackEnd();
                         yield return CoroutineEx.waitForEndOfFrame;
                         _pluginInstance.TrackStart();
@@ -1934,7 +1943,7 @@ namespace Oxide.Plugins
                     if (tunnelType == TunnelType.Unsupported || !_pluginConfig.IsTunnelTypeEnabled(tunnelType))
                         continue;
 
-                    _tunnelTriggers[triggerData] = CreateTunnelTriggers(triggerData);
+                    CreateTunnelTriggerController(triggerData);
                     _pluginInstance.TrackEnd();
                     yield return CoroutineEx.waitForEndOfFrame;
                     _pluginInstance.TrackStart();
@@ -1943,13 +1952,10 @@ namespace Oxide.Plugins
 
             public void DestroyAll()
             {
-                foreach (var triggerInstance in _mapTriggers.Values)
-                    triggerInstance.Destroy();
+                foreach (var triggerController in _triggerControllers.Values)
+                    DestroyTriggerController(triggerController);
 
-                foreach (var triggerInstanceList in _tunnelTriggers.Values)
-                    foreach (var triggerInstance in triggerInstanceList)
-                        triggerInstance.Destroy();
-
+                _triggerControllers.Clear();
                 _splinesToTriggers.Clear();
             }
 
@@ -1998,18 +2004,12 @@ namespace Oxide.Plugins
                     player.SendNetworkUpdateImmediate();
                 }
 
-                foreach (var trigger in _mapTriggers.Values)
+                foreach (var triggerController in _triggerControllers.Values)
                 {
-                    if ((playerPosition - trigger.WorldPosition).sqrMagnitude <= TriggerDisplayDistanceSquared)
-                        ShowTrigger(player, trigger, routeName);
-                }
-
-                foreach (var triggerList in _tunnelTriggers.Values)
-                {
-                    foreach (var trigger in triggerList)
+                    foreach (var triggerInstance in triggerController.TriggerInstanceList)
                     {
-                        if ((playerPosition - trigger.WorldPosition).sqrMagnitude <= TriggerDisplayDistanceSquared)
-                            ShowTrigger(player, trigger, routeName, triggerList.Length);
+                        if ((playerPosition - triggerInstance.WorldPosition).sqrMagnitude <= TriggerDisplayDistanceSquared)
+                            ShowTrigger(player, triggerInstance, routeName, triggerController.TriggerInstanceList.Length);
                     }
                 }
 
@@ -2087,26 +2087,16 @@ namespace Oxide.Plugins
                 BaseTriggerInstance closestTriggerInstance = null;
                 float shortestSqrDistance = float.MaxValue;
 
-                foreach (var trigger in _mapTriggers.Values)
+                foreach (var triggerController in _triggerControllers.Values)
                 {
-                    var sqrDistance = (position - trigger.WorldPosition).sqrMagnitude;
-                    if (sqrDistance >= shortestSqrDistance || sqrDistance >= maxDistance)
-                        continue;
-
-                    shortestSqrDistance = sqrDistance;
-                    closestTriggerInstance = trigger;
-                }
-
-                foreach (var triggerList in _tunnelTriggers.Values)
-                {
-                    foreach (var trigger in triggerList)
+                    foreach (var triggerInstance in triggerController.TriggerInstanceList)
                     {
-                        var sqrDistance = (position - trigger.WorldPosition).sqrMagnitude;
+                        var sqrDistance = (position - triggerInstance.WorldPosition).sqrMagnitude;
                         if (sqrDistance >= shortestSqrDistance || sqrDistance >= maxDistance)
                             continue;
 
                         shortestSqrDistance = sqrDistance;
-                        closestTriggerInstance = trigger;
+                        closestTriggerInstance = triggerInstance;
                     }
                 }
 
