@@ -1869,7 +1869,14 @@ namespace Oxide.Plugins
                 triggerData.InvalidateCache();
 
                 if (enabledChanged)
+                {
                     triggerController.OnEnableDisable();
+
+                    if (triggerData.Enabled)
+                        RegisterTriggerWithSpline(triggerController);
+                    else
+                        UnregisterTriggerFromSpline(triggerController);
+                }
 
                 SaveTrigger(triggerData);
             }
