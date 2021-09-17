@@ -671,6 +671,9 @@ namespace Oxide.Plugins
             triggerType = WorkcartTriggerType.Map;
             triggerId = 0;
 
+            if (arg.StartsWith("#"))
+                arg = arg.Substring(1);
+
             if (arg.Length <= 1)
                 return false;
 
