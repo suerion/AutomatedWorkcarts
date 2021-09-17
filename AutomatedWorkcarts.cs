@@ -2464,7 +2464,7 @@ namespace Oxide.Plugins
                     }
 
                     _pluginInstance.TrackEnd();
-                }, 0, 1, 0.25f);
+                }, 0, _pluginConfig.MapMarkerUpdateInveralSeconds, _pluginConfig.MapMarkerUpdateInveralSeconds * 0.1f);
             }
 
             private void AddOutfit()
@@ -2956,6 +2956,9 @@ namespace Oxide.Plugins
 
             [JsonProperty("VendingMapMarker")]
             public VendingMarkerOptions VendingMapMarker = new VendingMarkerOptions();
+
+            [JsonProperty("MapMarkerUpdateInveralSeconds")]
+            public float MapMarkerUpdateInveralSeconds = 5.0f;
 
             [JsonProperty("TriggerDisplayDistance")]
             public float TriggerDisplayDistance = 150;

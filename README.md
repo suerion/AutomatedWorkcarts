@@ -213,6 +213,7 @@ Default configuration:
     "Enabled": false,
     "Name": "Automated Workcart"
   },
+  "MapMarkerUpdateInveralSeconds": 5.0,
   "TriggerDisplayDistance": 150.0
 }
 ```
@@ -242,6 +243,7 @@ Default configuration:
 - `VendingMapMarker`
   - `Enabled` (`true` or `false`) -- Whether to enable vending machine map markers.
   - `Name` -- The name to display when hoving the mouse over the marker.
+- `MapMarkerUpdateInveralSeconds` -- The number of seconds between map marker updates. Updating the map markers periodically for many workcarts can impact performance, so you may adjust this value to trade off between accuracy and performance.
 - `TriggerDisplayDistance ` -- Determines how close you must be to a trigger to see it when viewing triggers.
 
 ## FAQ
