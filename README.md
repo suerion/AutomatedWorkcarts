@@ -323,7 +323,7 @@ The best practice is to have separate, independent tracks for player vs automate
   "Help.SpeedOptions": "Speeds: {0}",
   "Help.DirectionOptions": "Directions: {0}",
   "Help.TrackSelectionOptions": "Track selection: {0}",
-  "Help.OtherOptions": "Other options: <color=#fd4>Conductor</color> | <color=#fd4>Brake</color> | <color=#fd4>Destroy</color>",
+  "Help.OtherOptions": "Other options: <color=#fd4>Conductor</color> | <color=#fd4>Brake</color> | <color=#fd4>Destroy</color> | <color=#fd4>@ROUTE_NAME</color> | <color=#fd4>Enabled</color> | <color=#fd4>Disabled</color>",
   "Info.Trigger": "Workcart Trigger #{0}{1}",
   "Info.Trigger.Prefix.Map": "M",
   "Info.Trigger.Prefix.Tunnel": "T",
