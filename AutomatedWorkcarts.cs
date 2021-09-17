@@ -2447,6 +2447,8 @@ namespace Oxide.Plugins
                 // and enabling global broadcast for lots of workcarts would significantly reduce client FPS.
                 InvokeRandomized(() =>
                 {
+                    _pluginInstance.TrackStart();
+
                     if (_genericMarker != null)
                     {
                         _genericMarker.transform.position = _transform.position;
@@ -2460,6 +2462,8 @@ namespace Oxide.Plugins
                         _vendingMarker.InvalidateNetworkCache();
                         _vendingMarker.SendNetworkUpdate_Position();
                     }
+
+                    _pluginInstance.TrackEnd();
                 }, 0, 1, 0.25f);
             }
 
