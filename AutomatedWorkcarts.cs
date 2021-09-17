@@ -127,12 +127,12 @@ namespace Oxide.Plugins
             var trainController = TrainController.GetForWorkcart(workcart);
             if (trainController == null)
             {
-                if (trigger.TriggerInfo.AddConductor
-                    && !trigger.TriggerInfo.Destroy
+                if (trigger.TriggerData.AddConductor
+                    && !trigger.TriggerData.Destroy
                     && !IsWorkcartOwned(workcart)
                     && CanHaveMoreConductors())
                 {
-                    TryAddTrainController(workcart, trigger.TriggerInfo);
+                    TryAddTrainController(workcart, trigger.TriggerData);
                 }
 
                 return;
@@ -141,7 +141,7 @@ namespace Oxide.Plugins
             if (trigger.entityContents?.Contains(workcart) ?? false)
                 return;
 
-            trainController.HandleWorkcartTrigger(trigger.TriggerInfo);
+            trainController.HandleWorkcartTrigger(trigger.TriggerData);
         }
 
         private void OnEntityEnter(TriggerTrainCollisions trigger, TrainEngine otherWorkcart)
@@ -353,9 +353,8 @@ namespace Oxide.Plugins
                 return;
             }
 
-            var triggerInfo = new WorkcartTriggerInfo() { Position = trackPosition };
-
-            AddTriggerShared(player, cmd, args, triggerInfo);
+            var triggerData = new TriggerData() { Position = trackPosition };
+            AddTriggerShared(player, cmd, args, triggerData);
         }
 
         [Command("aw.addtunneltrigger", "awt.addt")]
@@ -382,41 +381,41 @@ namespace Oxide.Plugins
                 return;
             }
 
-            var triggerInfo = new WorkcartTriggerInfo()
+            var triggerData = new TriggerData()
             {
                 TunnelType = dungeonCellWrapper.TunnelType.ToString(),
                 Position = dungeonCellWrapper.InverseTransformPoint(trackPosition),
             };
 
-            AddTriggerShared(player, cmd, args, triggerInfo);
+            AddTriggerShared(player, cmd, args, triggerData);
         }
 
-        private void AddTriggerShared(IPlayer player, string cmd, string[] args, WorkcartTriggerInfo triggerInfo)
+        private void AddTriggerShared(IPlayer player, string cmd, string[] args, TriggerData triggerData)
         {
             foreach (var arg in args)
             {
-                if (!VerifyValidArgAndModifyTrigger(player, cmd, arg, triggerInfo, Lang.AddTriggerSyntax))
+                if (!VerifyValidArgAndModifyTrigger(player, cmd, arg, triggerData, Lang.AddTriggerSyntax))
                     return;
             }
 
-            if (!triggerInfo.AddConductor
-                && !triggerInfo.Destroy
-                && triggerInfo.GetTrackSelectionInstruction() == null
-                && triggerInfo.GetSpeedInstruction() == null
-                && triggerInfo.GetDirectionInstruction() == null)
+            if (!triggerData.AddConductor
+                && !triggerData.Destroy
+                && triggerData.GetTrackSelectionInstruction() == null
+                && triggerData.GetSpeedInstruction() == null
+                && triggerData.GetDirectionInstruction() == null)
             {
-                triggerInfo.Speed = EngineSpeeds.Zero.ToString();
+                triggerData.Speed = EngineSpeeds.Zero.ToString();
             }
 
             var basePlayer = player.Object as BasePlayer;
 
-            _triggerManager.AddTrigger(triggerInfo);
+            _triggerManager.AddTrigger(triggerData);
 
-            if (triggerInfo.Route != null)
-                _triggerManager.SetPlayerDisplayedRoute(basePlayer, triggerInfo.Route);
+            if (triggerData.Route != null)
+                _triggerManager.SetPlayerDisplayedRoute(basePlayer, triggerData.Route);
 
             _triggerManager.ShowAllRepeatedly(basePlayer);
-            ReplyToPlayer(player, Lang.AddTriggerSuccess, GetTriggerPrefix(player, triggerInfo), triggerInfo.Id);
+            ReplyToPlayer(player, Lang.AddTriggerSuccess, GetTriggerPrefix(player, triggerData), triggerData.Id);
         }
 
         [Command("aw.updatetrigger", "awt.update")]
@@ -428,10 +427,10 @@ namespace Oxide.Plugins
                 return;
 
             var basePlayer = player.Object as BasePlayer;
-            WorkcartTriggerInfo triggerInfo;
+            TriggerData triggerData;
             string[] optionArgs;
 
-            if (!VerifyValidTrigger(player, cmd, args, Lang.UpdateTriggerSyntax, out triggerInfo, out optionArgs))
+            if (!VerifyValidTrigger(player, cmd, args, Lang.UpdateTriggerSyntax, out triggerData, out optionArgs))
                 return;
 
             if (optionArgs.Length == 0)
@@ -440,20 +439,20 @@ namespace Oxide.Plugins
                 return;
             }
 
-            var newTriggerInfo = triggerInfo.Clone();
+            var newTriggerData = triggerData.Clone();
             foreach (var arg in optionArgs)
             {
-                if (!VerifyValidArgAndModifyTrigger(player, cmd, arg, newTriggerInfo, Lang.UpdateTriggerSyntax))
+                if (!VerifyValidArgAndModifyTrigger(player, cmd, arg, newTriggerData, Lang.UpdateTriggerSyntax))
                     return;
             }
 
-            _triggerManager.UpdateTrigger(triggerInfo, newTriggerInfo);
+            _triggerManager.UpdateTrigger(triggerData, newTriggerData);
 
-            if (triggerInfo.Route != null)
-                _triggerManager.SetPlayerDisplayedRoute(basePlayer, triggerInfo.Route);
+            if (triggerData.Route != null)
+                _triggerManager.SetPlayerDisplayedRoute(basePlayer, triggerData.Route);
 
             _triggerManager.ShowAllRepeatedly(basePlayer);
-            ReplyToPlayer(player, Lang.UpdateTriggerSuccess, GetTriggerPrefix(player, triggerInfo), triggerInfo.Id);
+            ReplyToPlayer(player, Lang.UpdateTriggerSuccess, GetTriggerPrefix(player, triggerData), triggerData.Id);
         }
 
         [Command("aw.replacetrigger", "awt.replace")]
@@ -465,10 +464,10 @@ namespace Oxide.Plugins
                 return;
 
             var basePlayer = player.Object as BasePlayer;
-            WorkcartTriggerInfo triggerInfo;
+            TriggerData triggerData;
             string[] optionArgs;
 
-            if (!VerifyValidTrigger(player, cmd, args, Lang.UpdateTriggerSyntax, out triggerInfo, out optionArgs))
+            if (!VerifyValidTrigger(player, cmd, args, Lang.UpdateTriggerSyntax, out triggerData, out optionArgs))
                 return;
 
             if (optionArgs.Length == 0)
@@ -477,20 +476,20 @@ namespace Oxide.Plugins
                 return;
             }
 
-            var newTriggerInfo = new WorkcartTriggerInfo();
+            var newTriggerData = new TriggerData();
             foreach (var arg in optionArgs)
             {
-                if (!VerifyValidArgAndModifyTrigger(player, cmd, arg, newTriggerInfo, Lang.UpdateTriggerSyntax))
+                if (!VerifyValidArgAndModifyTrigger(player, cmd, arg, newTriggerData, Lang.UpdateTriggerSyntax))
                     return;
             }
 
-            _triggerManager.UpdateTrigger(triggerInfo, newTriggerInfo);
+            _triggerManager.UpdateTrigger(triggerData, newTriggerData);
 
-            if (triggerInfo.Route != null)
-                _triggerManager.SetPlayerDisplayedRoute(basePlayer, triggerInfo.Route);
+            if (triggerData.Route != null)
+                _triggerManager.SetPlayerDisplayedRoute(basePlayer, triggerData.Route);
 
             _triggerManager.ShowAllRepeatedly(basePlayer);
-            ReplyToPlayer(player, Lang.UpdateTriggerSuccess, GetTriggerPrefix(player, triggerInfo), triggerInfo.Id);
+            ReplyToPlayer(player, Lang.UpdateTriggerSuccess, GetTriggerPrefix(player, triggerData), triggerData.Id);
         }
 
         [Command("aw.movetrigger", "awt.move")]
@@ -502,23 +501,23 @@ namespace Oxide.Plugins
                 return;
 
             var basePlayer = player.Object as BasePlayer;
-            WorkcartTriggerInfo triggerInfo;
+            TriggerData triggerData;
 
             string[] optionArgs;
-            if (!VerifyValidTrigger(player, cmd, args, Lang.RemoveTriggerSyntax, out triggerInfo, out optionArgs))
+            if (!VerifyValidTrigger(player, cmd, args, Lang.RemoveTriggerSyntax, out triggerData, out optionArgs))
                 return;
 
             Vector3 trackPosition;
             if (!VerifyTrackPosition(player, out trackPosition))
                 return;
 
-            if (triggerInfo.TriggerType == WorkcartTriggerType.Tunnel)
+            if (triggerData.TriggerType == WorkcartTriggerType.Tunnel)
             {
                 DungeonCellWrapper dungeonCellWrapper;
                 if (!VerifySupportedNearbyTrainTunnel(player, trackPosition, out dungeonCellWrapper))
                     return;
 
-                if (dungeonCellWrapper.TunnelType != triggerInfo.GetTunnelType())
+                if (dungeonCellWrapper.TunnelType != triggerData.GetTunnelType())
                 {
                     ReplyToPlayer(player, Lang.ErrorUnsupportedTunnel);
                     return;
@@ -527,13 +526,13 @@ namespace Oxide.Plugins
                 trackPosition = dungeonCellWrapper.InverseTransformPoint(trackPosition);
             }
 
-            _triggerManager.MoveTrigger(triggerInfo, trackPosition);
+            _triggerManager.MoveTrigger(triggerData, trackPosition);
 
-            if (triggerInfo.Route != null)
-                _triggerManager.SetPlayerDisplayedRoute(basePlayer, triggerInfo.Route);
+            if (triggerData.Route != null)
+                _triggerManager.SetPlayerDisplayedRoute(basePlayer, triggerData.Route);
 
             _triggerManager.ShowAllRepeatedly(basePlayer);
-            ReplyToPlayer(player, Lang.MoveTriggerSuccess, GetTriggerPrefix(player, triggerInfo), triggerInfo.Id);
+            ReplyToPlayer(player, Lang.MoveTriggerSuccess, GetTriggerPrefix(player, triggerData), triggerData.Id);
         }
 
         [Command("aw.removetrigger", "awt.remove")]
@@ -545,15 +544,15 @@ namespace Oxide.Plugins
                 return;
 
             var basePlayer = player.Object as BasePlayer;
-            WorkcartTriggerInfo triggerInfo;
+            TriggerData triggerData;
             string[] optionArgs;
 
-            if (!VerifyValidTrigger(player, cmd, args, Lang.RemoveTriggerSyntax, out triggerInfo, out optionArgs))
+            if (!VerifyValidTrigger(player, cmd, args, Lang.RemoveTriggerSyntax, out triggerData, out optionArgs))
                 return;
 
-            _triggerManager.RemoveTrigger(triggerInfo);
+            _triggerManager.RemoveTrigger(triggerData);
             _triggerManager.ShowAllRepeatedly(basePlayer);
-            ReplyToPlayer(player, Lang.RemoveTriggerSuccess, GetTriggerPrefix(player, triggerInfo), triggerInfo.Id);
+            ReplyToPlayer(player, Lang.RemoveTriggerSuccess, GetTriggerPrefix(player, triggerData), triggerData.Id);
         }
 
         [Command("aw.showtriggers", "awt.show")]
@@ -647,10 +646,10 @@ namespace Oxide.Plugins
             return false;
         }
 
-        private bool VerifyTriggerExists(IPlayer player, int triggerId, WorkcartTriggerType triggerType, out WorkcartTriggerInfo triggerInfo)
+        private bool VerifyTriggerExists(IPlayer player, int triggerId, WorkcartTriggerType triggerType, out TriggerData triggerData)
         {
-            triggerInfo = _triggerManager.FindTrigger(triggerId, triggerType);
-            if (triggerInfo != null)
+            triggerData = _triggerManager.FindTrigger(triggerId, triggerType);
+            if (triggerData != null)
                 return true;
 
             _triggerManager.ShowAllRepeatedly(player.Object as BasePlayer);
@@ -695,22 +694,22 @@ namespace Oxide.Plugins
             return false;
         }
 
-        private bool VerifyValidTrigger(IPlayer player, string cmd, string[] args, string errorMessageName, out WorkcartTriggerInfo triggerInfo, out string[] optionArgs)
+        private bool VerifyValidTrigger(IPlayer player, string cmd, string[] args, string errorMessageName, out TriggerData triggerData, out string[] optionArgs)
         {
             var basePlayer = player.Object as BasePlayer;
             optionArgs = args;
-            triggerInfo = null;
+            triggerData = null;
 
             int triggerId;
             WorkcartTriggerType triggerType;
             if (args.Length > 0 && IsTriggerArg(player, args[0], out triggerId, out triggerType))
             {
                 optionArgs = args.Skip(1).ToArray();
-                return VerifyTriggerExists(player, triggerId, triggerType, out triggerInfo);
+                return VerifyTriggerExists(player, triggerId, triggerType, out triggerData);
             }
 
-            triggerInfo = _triggerManager.FindNearestTriggerWhereAiming(basePlayer);
-            if (triggerInfo != null)
+            triggerData = _triggerManager.FindNearestTriggerWhereAiming(basePlayer);
+            if (triggerData != null)
                 return true;
 
             _triggerManager.ShowAllRepeatedly(basePlayer);
@@ -738,50 +737,50 @@ namespace Oxide.Plugins
             return requirePrefix ? null : routeName;
         }
 
-        private bool VerifyValidArgAndModifyTrigger(IPlayer player, string cmd, string arg, WorkcartTriggerInfo triggerInfo, string errorMessageName)
+        private bool VerifyValidArgAndModifyTrigger(IPlayer player, string cmd, string arg, TriggerData triggerData, string errorMessageName)
         {
             var argLower = arg.ToLower();
             if (argLower == "start" || argLower == "conductor")
             {
-                triggerInfo.AddConductor = true;
+                triggerData.AddConductor = true;
                 return true;
             }
 
             if (argLower == "brake")
             {
-                triggerInfo.Brake = true;
+                triggerData.Brake = true;
                 return true;
             }
 
             if (argLower == "destroy")
             {
-                triggerInfo.Destroy = true;
+                triggerData.Destroy = true;
                 return true;
             }
 
             if (argLower == "enabled")
             {
-                triggerInfo.Enabled = true;
+                triggerData.Enabled = true;
                 return true;
             }
 
             if (argLower == "disabled")
             {
-                triggerInfo.Enabled = false;
+                triggerData.Enabled = false;
                 return true;
             }
 
             float stopDuration;
             if (float.TryParse(arg, out stopDuration))
             {
-                triggerInfo.StopDuration = stopDuration;
+                triggerData.StopDuration = stopDuration;
                 return true;
             }
 
             var routeName = GetRouteNameFromArg(player, arg, requirePrefix: true);
             if (!string.IsNullOrWhiteSpace(routeName))
             {
-                triggerInfo.Route = routeName;
+                triggerData.Route = routeName;
                 return true;
             }
 
@@ -791,10 +790,10 @@ namespace Oxide.Plugins
                 var speedString = speedInstruction.ToString();
 
                 // If zero speed is already set, assume this is the departure speed.
-                if (triggerInfo.Speed == SpeedInstruction.Zero.ToString())
-                    triggerInfo.DepartureSpeed = speedString;
+                if (triggerData.Speed == SpeedInstruction.Zero.ToString())
+                    triggerData.DepartureSpeed = speedString;
                 else
-                    triggerInfo.Speed = speedString;
+                    triggerData.Speed = speedString;
 
                 return true;
             }
@@ -802,14 +801,14 @@ namespace Oxide.Plugins
             DirectionInstruction directionInstruction;
             if (Enum.TryParse<DirectionInstruction>(arg, true, out directionInstruction))
             {
-                triggerInfo.Direction = directionInstruction.ToString();
+                triggerData.Direction = directionInstruction.ToString();
                 return true;
             }
 
             TrackSelectionInstruction trackSelectionInstruction;
             if (Enum.TryParse<TrackSelectionInstruction>(arg, true, out trackSelectionInstruction))
             {
-                triggerInfo.TrackSelection = trackSelectionInstruction.ToString();
+                triggerData.TrackSelection = trackSelectionInstruction.ToString();
                 return true;
             }
 
@@ -873,7 +872,7 @@ namespace Oxide.Plugins
         private static bool IsWorkcartAutomated(TrainEngine workcart) =>
             TrainController.GetForWorkcart(workcart) != null;
 
-        private static bool TryAddTrainController(TrainEngine workcart, WorkcartTriggerInfo triggerInfo = null, PersistentWorkcartData persistentData = null)
+        private static bool TryAddTrainController(TrainEngine workcart, TriggerData triggerData = null, PersistentWorkcartData persistentData = null)
         {
             if (AutomationWasBlocked(workcart))
                 return false;
@@ -882,13 +881,13 @@ namespace Oxide.Plugins
             {
                 persistentData = new PersistentWorkcartData
                 {
-                    Route = triggerInfo?.Route,
+                    Route = triggerData?.Route,
                 };
             }
 
             var trainController = TrainController.AddToWorkcart(workcart, persistentData);
-            if (triggerInfo != null)
-                trainController.HandleConductorTrigger(triggerInfo);
+            if (triggerData != null)
+                trainController.HandleConductorTrigger(triggerData);
 
             _pluginInstance._workcartManager.Register(workcart, persistentData);
             Interface.CallHook("OnWorkcartAutomationStarted", workcart);
@@ -1344,10 +1343,10 @@ namespace Oxide.Plugins
 
         private class WorkcartTrigger : TriggerBase
         {
-            public WorkcartTriggerInfo TriggerInfo;
+            public TriggerData TriggerData;
         }
 
-        private class WorkcartTriggerInfo
+        private class TriggerData
         {
             [JsonProperty("Id")]
             public int Id;
@@ -1489,25 +1488,25 @@ namespace Oxide.Plugins
                 _departureSpeedInstruction = null;
             }
 
-            public void CopyFrom(WorkcartTriggerInfo triggerInfo)
+            public void CopyFrom(TriggerData triggerData)
             {
-                Enabled = triggerInfo.Enabled;
-                Route = triggerInfo.Route;
-                AddConductor = triggerInfo.AddConductor;
-                Brake = triggerInfo.Brake;
-                Destroy = triggerInfo.Destroy;
-                Speed = triggerInfo.Speed;
-                DepartureSpeed = triggerInfo.DepartureSpeed;
-                Direction = triggerInfo.Direction;
-                TrackSelection = triggerInfo.TrackSelection;
-                StopDuration = triggerInfo.StopDuration;
+                Enabled = triggerData.Enabled;
+                Route = triggerData.Route;
+                AddConductor = triggerData.AddConductor;
+                Brake = triggerData.Brake;
+                Destroy = triggerData.Destroy;
+                Speed = triggerData.Speed;
+                DepartureSpeed = triggerData.DepartureSpeed;
+                Direction = triggerData.Direction;
+                TrackSelection = triggerData.TrackSelection;
+                StopDuration = triggerData.StopDuration;
             }
 
-            public WorkcartTriggerInfo Clone()
+            public TriggerData Clone()
             {
-                var triggerInfo = new WorkcartTriggerInfo();
-                triggerInfo.CopyFrom(this);
-                return triggerInfo;
+                var triggerData = new TriggerData();
+                triggerData.CopyFrom(this);
+                return triggerData;
             }
 
             public Color GetColor(string routeName)
@@ -1565,16 +1564,16 @@ namespace Oxide.Plugins
 
         private abstract class BaseTriggerWrapper
         {
-            public WorkcartTriggerInfo TriggerInfo { get; protected set; }
+            public TriggerData TriggerData { get; protected set; }
             public TrainTrackSpline Spline { get; private set; }
             public float DistanceOnSpline { get; private set; }
-            public virtual Vector3 WorldPosition => TriggerInfo.Position;
+            public virtual Vector3 WorldPosition => TriggerData.Position;
 
             protected GameObject _gameObject;
 
-            protected BaseTriggerWrapper(WorkcartTriggerInfo triggerInfo)
+            protected BaseTriggerWrapper(TriggerData triggerData)
             {
-                TriggerInfo = triggerInfo;
+                TriggerData = triggerData;
             }
 
             protected void CreateTrigger()
@@ -1588,7 +1587,7 @@ namespace Oxide.Plugins
                 sphereCollider.gameObject.layer = 6;
 
                 var trigger = _gameObject.AddComponent<WorkcartTrigger>();
-                trigger.TriggerInfo = TriggerInfo;
+                trigger.TriggerData = TriggerData;
                 trigger.interestLayers = Layers.Mask.Vehicle_World;
             }
 
@@ -1632,31 +1631,31 @@ namespace Oxide.Plugins
 
         private class MapTriggerWrapper : BaseTriggerWrapper
         {
-            public static MapTriggerWrapper CreateWorldTrigger(WorkcartTriggerInfo triggerInfo)
+            public static MapTriggerWrapper CreateWorldTrigger(TriggerData triggerData)
             {
-                var triggerWrapper = new MapTriggerWrapper(triggerInfo);
+                var triggerWrapper = new MapTriggerWrapper(triggerData);
 
-                if (triggerInfo.Enabled)
+                if (triggerData.Enabled)
                     triggerWrapper.CreateTrigger();
 
                 return triggerWrapper;
             }
 
-            public MapTriggerWrapper(WorkcartTriggerInfo triggerInfo) : base(triggerInfo) {}
+            public MapTriggerWrapper(TriggerData triggerData) : base(triggerData) {}
         }
 
         private class TunnelTriggerWrapper : BaseTriggerWrapper
         {
-            public static TunnelTriggerWrapper[] CreateTunnelTriggers(WorkcartTriggerInfo triggerInfo)
+            public static TunnelTriggerWrapper[] CreateTunnelTriggers(TriggerData triggerData)
             {
-                var matchingDungeonCells = FindAllTunnelsOfType(triggerInfo.GetTunnelType());
+                var matchingDungeonCells = FindAllTunnelsOfType(triggerData.GetTunnelType());
                 var triggerWrapperList = new TunnelTriggerWrapper[matchingDungeonCells.Count];
 
                 for (var i = 0; i < matchingDungeonCells.Count; i++)
                 {
-                    var triggerWrapper = new TunnelTriggerWrapper(triggerInfo, matchingDungeonCells[i]);
+                    var triggerWrapper = new TunnelTriggerWrapper(triggerData, matchingDungeonCells[i]);
 
-                    if (triggerInfo.Enabled)
+                    if (triggerData.Enabled)
                         triggerWrapper.CreateTrigger();
 
                     triggerWrapperList[i] = triggerWrapper;
@@ -1667,9 +1666,9 @@ namespace Oxide.Plugins
 
             public DungeonCellWrapper DungeonCellWrapper { get; private set; }
 
-            public override Vector3 WorldPosition => DungeonCellWrapper.TransformPoint(TriggerInfo.Position);
+            public override Vector3 WorldPosition => DungeonCellWrapper.TransformPoint(TriggerData.Position);
 
-            public TunnelTriggerWrapper(WorkcartTriggerInfo triggerInfo, DungeonCellWrapper dungeonCellWrapper) : base(triggerInfo)
+            public TunnelTriggerWrapper(TriggerData triggerData, DungeonCellWrapper dungeonCellWrapper) : base(triggerData)
             {
                 DungeonCellWrapper = dungeonCellWrapper;
             }
@@ -1691,17 +1690,17 @@ namespace Oxide.Plugins
             private const float TriggerDisplayRadius = 1f;
             private float TriggerDisplayDistanceSquared => _pluginConfig.TriggerDisplayDistance * _pluginConfig.TriggerDisplayDistance;
 
-            private Dictionary<WorkcartTriggerInfo, MapTriggerWrapper> _mapTriggers = new Dictionary<WorkcartTriggerInfo, MapTriggerWrapper>();
-            private Dictionary<WorkcartTriggerInfo, TunnelTriggerWrapper[]> _tunnelTriggers = new Dictionary<WorkcartTriggerInfo, TunnelTriggerWrapper[]>();
+            private Dictionary<TriggerData, MapTriggerWrapper> _mapTriggers = new Dictionary<TriggerData, MapTriggerWrapper>();
+            private Dictionary<TriggerData, TunnelTriggerWrapper[]> _tunnelTriggers = new Dictionary<TriggerData, TunnelTriggerWrapper[]>();
             private Dictionary<TrainTrackSpline, List<BaseTriggerWrapper>> _splinesToTriggers = new Dictionary<TrainTrackSpline, List<BaseTriggerWrapper>>();
             private Dictionary<ulong, PlayerInfo> _playerInfo = new Dictionary<ulong, PlayerInfo>();
 
-            private int GetHighestTriggerId(IEnumerable<WorkcartTriggerInfo> triggerList)
+            private int GetHighestTriggerId(IEnumerable<TriggerData> triggerList)
             {
                 var highestTriggerId = 0;
 
-                foreach (var triggerInfo in triggerList)
-                    highestTriggerId = Math.Max(highestTriggerId, triggerInfo.Id);
+                foreach (var triggerData in triggerList)
+                    highestTriggerId = Math.Max(highestTriggerId, triggerData.Id);
 
                 return highestTriggerId;
             }
@@ -1739,24 +1738,24 @@ namespace Oxide.Plugins
                     : null;
             }
 
-            public WorkcartTriggerInfo FindTrigger(int triggerId, WorkcartTriggerType triggerType)
+            public TriggerData FindTrigger(int triggerId, WorkcartTriggerType triggerType)
             {
-                IEnumerable<WorkcartTriggerInfo> triggerList = _mapTriggers.Keys;
+                IEnumerable<TriggerData> triggerList = _mapTriggers.Keys;
                 if (triggerType == WorkcartTriggerType.Tunnel)
                     triggerList = _tunnelTriggers.Keys;
 
-                foreach (var triggerInfo in triggerList)
+                foreach (var triggerData in triggerList)
                 {
-                    if (triggerInfo.Id == triggerId)
-                        return triggerInfo;
+                    if (triggerData.Id == triggerId)
+                        return triggerData;
                 }
 
                 return null;
             }
 
-            private TunnelTriggerWrapper[] CreateTunnelTriggers(WorkcartTriggerInfo triggerInfo)
+            private TunnelTriggerWrapper[] CreateTunnelTriggers(TriggerData triggerData)
             {
-                var triggerWrapperList = TunnelTriggerWrapper.CreateTunnelTriggers(triggerInfo);
+                var triggerWrapperList = TunnelTriggerWrapper.CreateTunnelTriggers(triggerData);
                 foreach (var tunnelTrigger in triggerWrapperList)
                 {
                     if (tunnelTrigger.Spline != null)
@@ -1765,54 +1764,54 @@ namespace Oxide.Plugins
                 return triggerWrapperList;
             }
 
-            private MapTriggerWrapper CreateMapTrigger(WorkcartTriggerInfo triggerInfo)
+            private MapTriggerWrapper CreateMapTrigger(TriggerData triggerData)
             {
-                var mapTrigger = MapTriggerWrapper.CreateWorldTrigger(triggerInfo);
+                var mapTrigger = MapTriggerWrapper.CreateWorldTrigger(triggerData);
                 if (mapTrigger.Spline != null)
                     RegisterTriggerWithSpline(mapTrigger, mapTrigger.Spline);
 
                 return mapTrigger;
             }
 
-            public void AddTrigger(WorkcartTriggerInfo triggerInfo)
+            public void AddTrigger(TriggerData triggerData)
             {
-                if (triggerInfo.TriggerType == WorkcartTriggerType.Tunnel)
+                if (triggerData.TriggerType == WorkcartTriggerType.Tunnel)
                 {
-                    if (triggerInfo.Id == 0)
-                        triggerInfo.Id = GetHighestTriggerId(_tunnelTriggers.Keys) + 1;
+                    if (triggerData.Id == 0)
+                        triggerData.Id = GetHighestTriggerId(_tunnelTriggers.Keys) + 1;
 
-                    _tunnelTriggers[triggerInfo] = CreateTunnelTriggers(triggerInfo);
-                    _tunnelData.AddTrigger(triggerInfo);
+                    _tunnelTriggers[triggerData] = CreateTunnelTriggers(triggerData);
+                    _tunnelData.AddTrigger(triggerData);
                 }
                 else
                 {
-                    if (triggerInfo.Id == 0)
-                        triggerInfo.Id = GetHighestTriggerId(_mapTriggers.Keys) + 1;
+                    if (triggerData.Id == 0)
+                        triggerData.Id = GetHighestTriggerId(_mapTriggers.Keys) + 1;
 
-                    _mapTriggers[triggerInfo] = CreateMapTrigger(triggerInfo);
-                    _mapData.AddTrigger(triggerInfo);
+                    _mapTriggers[triggerData] = CreateMapTrigger(triggerData);
+                    _mapData.AddTrigger(triggerData);
                 }
             }
 
-            public void UpdateTrigger(WorkcartTriggerInfo triggerInfo, WorkcartTriggerInfo newTriggerInfo)
+            public void UpdateTrigger(TriggerData triggerData, TriggerData newTriggerData)
             {
-                triggerInfo.InvalidateCache();
+                triggerData.InvalidateCache();
 
-                var enabledChanged = triggerInfo.Enabled != newTriggerInfo.Enabled;
-                triggerInfo.CopyFrom(newTriggerInfo);
+                var enabledChanged = triggerData.Enabled != newTriggerData.Enabled;
+                triggerData.CopyFrom(newTriggerData);
 
-                if (triggerInfo.TriggerType == WorkcartTriggerType.Tunnel)
+                if (triggerData.TriggerType == WorkcartTriggerType.Tunnel)
                 {
                     _tunnelData.Save();
 
                     if (enabledChanged)
                     {
                         TunnelTriggerWrapper[] triggerWrapperList;
-                        if (_tunnelTriggers.TryGetValue(triggerInfo, out triggerWrapperList))
+                        if (_tunnelTriggers.TryGetValue(triggerData, out triggerWrapperList))
                         {
                             foreach (var triggerWrapper in triggerWrapperList)
                             {
-                                if (triggerInfo.Enabled)
+                                if (triggerData.Enabled)
                                     triggerWrapper.Enable();
                                 else
                                     triggerWrapper.Disable();
@@ -1827,9 +1826,9 @@ namespace Oxide.Plugins
                     if (enabledChanged)
                     {
                         MapTriggerWrapper triggerWrapper;
-                        if (_mapTriggers.TryGetValue(triggerInfo, out triggerWrapper))
+                        if (_mapTriggers.TryGetValue(triggerData, out triggerWrapper))
                         {
-                            if (triggerInfo.Enabled)
+                            if (triggerData.Enabled)
                                 triggerWrapper.Enable();
                             else
                                 triggerWrapper.Disable();
@@ -1853,16 +1852,16 @@ namespace Oxide.Plugins
                 }
             }
 
-            public void MoveTrigger(WorkcartTriggerInfo triggerInfo, Vector3 position)
+            public void MoveTrigger(TriggerData triggerData, Vector3 position)
             {
-                triggerInfo.Position = position;
+                triggerData.Position = position;
 
-                if (triggerInfo.TriggerType == WorkcartTriggerType.Tunnel)
+                if (triggerData.TriggerType == WorkcartTriggerType.Tunnel)
                 {
                     _tunnelData.Save();
 
                     TunnelTriggerWrapper[] triggerWrapperList;
-                    if (_tunnelTriggers.TryGetValue(triggerInfo, out triggerWrapperList))
+                    if (_tunnelTriggers.TryGetValue(triggerData, out triggerWrapperList))
                     {
                         foreach (var triggerWrapper in triggerWrapperList)
                             UpdateTriggerWrapperPosition(triggerWrapper);
@@ -1873,7 +1872,7 @@ namespace Oxide.Plugins
                     _mapData.Save();
 
                     MapTriggerWrapper triggerWrapper;
-                    if (_mapTriggers.TryGetValue(triggerInfo, out triggerWrapper))
+                    if (_mapTriggers.TryGetValue(triggerData, out triggerWrapper))
                         UpdateTriggerWrapperPosition(triggerWrapper);
                 }
             }
@@ -1884,31 +1883,31 @@ namespace Oxide.Plugins
                 triggerWrapper.Destroy();
             }
 
-            public void RemoveTrigger(WorkcartTriggerInfo triggerInfo)
+            public void RemoveTrigger(TriggerData triggerData)
             {
-                if (triggerInfo.TriggerType == WorkcartTriggerType.Tunnel)
+                if (triggerData.TriggerType == WorkcartTriggerType.Tunnel)
                 {
                     TunnelTriggerWrapper[] triggerWrapperList;
-                    if (_tunnelTriggers.TryGetValue(triggerInfo, out triggerWrapperList))
+                    if (_tunnelTriggers.TryGetValue(triggerData, out triggerWrapperList))
                     {
                         foreach (var triggerWrapper in triggerWrapperList)
                             DestroyTriggerWrapper(triggerWrapper);
 
-                        _tunnelTriggers.Remove(triggerInfo);
+                        _tunnelTriggers.Remove(triggerData);
                     }
 
-                    _tunnelData.RemoveTrigger(triggerInfo);
+                    _tunnelData.RemoveTrigger(triggerData);
                 }
                 else
                 {
                     MapTriggerWrapper triggerWrapper;
-                    if (_mapTriggers.TryGetValue(triggerInfo, out triggerWrapper))
+                    if (_mapTriggers.TryGetValue(triggerData, out triggerWrapper))
                     {
                         DestroyTriggerWrapper(triggerWrapper);
-                        _mapTriggers.Remove(triggerInfo);
+                        _mapTriggers.Remove(triggerData);
                     }
 
-                    _mapData.RemoveTrigger(triggerInfo);
+                    _mapData.RemoveTrigger(triggerData);
                 }
             }
 
@@ -1916,22 +1915,22 @@ namespace Oxide.Plugins
             {
                 if (_pluginConfig.EnableMapTriggers)
                 {
-                    foreach (var triggerInfo in _mapData.MapTriggers)
+                    foreach (var triggerData in _mapData.MapTriggers)
                     {
-                        _mapTriggers[triggerInfo] = CreateMapTrigger(triggerInfo);
+                        _mapTriggers[triggerData] = CreateMapTrigger(triggerData);
                         _pluginInstance.TrackEnd();
                         yield return CoroutineEx.waitForEndOfFrame;
                         _pluginInstance.TrackStart();
                     }
                 }
 
-                foreach (var triggerInfo in _tunnelData.TunnelTriggers)
+                foreach (var triggerData in _tunnelData.TunnelTriggers)
                 {
-                    var tunnelType = triggerInfo.GetTunnelType();
+                    var tunnelType = triggerData.GetTunnelType();
                     if (tunnelType == TunnelType.Unsupported || !_pluginConfig.IsTunnelTypeEnabled(tunnelType))
                         continue;
 
-                    _tunnelTriggers[triggerInfo] = CreateTunnelTriggers(triggerInfo);
+                    _tunnelTriggers[triggerData] = CreateTunnelTriggers(triggerData);
                     _pluginInstance.TrackEnd();
                     yield return CoroutineEx.waitForEndOfFrame;
                     _pluginInstance.TrackStart();
@@ -2019,58 +2018,58 @@ namespace Oxide.Plugins
 
             private static void ShowTrigger(BasePlayer player, BaseTriggerWrapper trigger, string routeName, int count = 1)
             {
-                var triggerInfo = trigger.TriggerInfo;
-                var color = triggerInfo.GetColor(routeName);
+                var triggerData = trigger.TriggerData;
+                var color = triggerData.GetColor(routeName);
 
                 var spherePosition = trigger.WorldPosition;
                 player.SendConsoleCommand("ddraw.sphere", TriggerDisplayDuration, color, spherePosition, TriggerDisplayRadius);
 
-                var triggerPrefix = _pluginInstance.GetTriggerPrefix(player, triggerInfo);
+                var triggerPrefix = _pluginInstance.GetTriggerPrefix(player, triggerData);
                 var infoLines = new List<string>();
 
-                if (!triggerInfo.Enabled)
+                if (!triggerData.Enabled)
                     infoLines.Add(_pluginInstance.GetMessage(player, Lang.InfoTriggerrDisabled));
 
-                infoLines.Add(_pluginInstance.GetMessage(player, Lang.InfoTrigger, triggerPrefix, triggerInfo.Id));
+                infoLines.Add(_pluginInstance.GetMessage(player, Lang.InfoTrigger, triggerPrefix, triggerData.Id));
 
-                if (triggerInfo.TriggerType == WorkcartTriggerType.Tunnel)
-                    infoLines.Add(_pluginInstance.GetMessage(player, Lang.InfoTriggerTunnel, triggerInfo.TunnelType, count));
+                if (triggerData.TriggerType == WorkcartTriggerType.Tunnel)
+                    infoLines.Add(_pluginInstance.GetMessage(player, Lang.InfoTriggerTunnel, triggerData.TunnelType, count));
                 else
-                    infoLines.Add(_pluginInstance.GetMessage(player, Lang.InfoTriggerMap, triggerInfo.Id));
+                    infoLines.Add(_pluginInstance.GetMessage(player, Lang.InfoTriggerMap, triggerData.Id));
 
-                if (!string.IsNullOrWhiteSpace(triggerInfo.Route))
-                    infoLines.Add(_pluginInstance.GetMessage(player, Lang.InfoTriggerRoute, triggerInfo.Route));
+                if (!string.IsNullOrWhiteSpace(triggerData.Route))
+                    infoLines.Add(_pluginInstance.GetMessage(player, Lang.InfoTriggerRoute, triggerData.Route));
 
-                if (triggerInfo.Destroy)
+                if (triggerData.Destroy)
                 {
                     infoLines.Add(_pluginInstance.GetMessage(player, Lang.InfoTriggerDestroy));
                 }
                 else
                 {
-                    if (triggerInfo.AddConductor)
+                    if (triggerData.AddConductor)
                         infoLines.Add(_pluginInstance.GetMessage(player, Lang.InfoTriggerAddConductor));
 
-                    var directionInstruction = triggerInfo.GetDirectionInstruction();
-                    var speedInstruction = triggerInfo.GetSpeedInstruction();
+                    var directionInstruction = triggerData.GetDirectionInstruction();
+                    var speedInstruction = triggerData.GetSpeedInstruction();
 
                     // When speed is zero, departure direction will be shown instead of direction.
                     if (directionInstruction != null && speedInstruction != SpeedInstruction.Zero)
                         infoLines.Add(_pluginInstance.GetMessage(player, Lang.InfoTriggerDirection, directionInstruction));
 
                     if (speedInstruction != null)
-                        infoLines.Add(_pluginInstance.GetMessage(player, triggerInfo.Brake ? Lang.InfoTriggerBrakeToSpeed : Lang.InfoTriggerSpeed, speedInstruction));
+                        infoLines.Add(_pluginInstance.GetMessage(player, triggerData.Brake ? Lang.InfoTriggerBrakeToSpeed : Lang.InfoTriggerSpeed, speedInstruction));
 
                     if (speedInstruction == SpeedInstruction.Zero)
-                        infoLines.Add(_pluginInstance.GetMessage(player, Lang.InfoTriggerStopDuration, triggerInfo.GetStopDuration()));
+                        infoLines.Add(_pluginInstance.GetMessage(player, Lang.InfoTriggerStopDuration, triggerData.GetStopDuration()));
 
-                    var trackSelectionInstruction = triggerInfo.GetTrackSelectionInstruction();
+                    var trackSelectionInstruction = triggerData.GetTrackSelectionInstruction();
                     if (trackSelectionInstruction != null)
                         infoLines.Add(_pluginInstance.GetMessage(player, Lang.InfoTriggerTrackSelection, trackSelectionInstruction));
 
                     if (directionInstruction != null && speedInstruction == SpeedInstruction.Zero)
                         infoLines.Add(_pluginInstance.GetMessage(player, Lang.InfoTriggerDepartureDirection, directionInstruction));
 
-                    var departureSpeedInstruction = triggerInfo.GetDepartureSpeedInstruction();
+                    var departureSpeedInstruction = triggerData.GetDepartureSpeedInstruction();
                     if (speedInstruction == SpeedInstruction.Zero)
                         infoLines.Add(_pluginInstance.GetMessage(player, Lang.InfoTriggerDepartureSpeed, departureSpeedInstruction));
                 }
@@ -2110,13 +2109,13 @@ namespace Oxide.Plugins
                 return closestTriggerWrapper;
             }
 
-            public WorkcartTriggerInfo FindNearestTriggerWhereAiming(BasePlayer player, float maxDistance = 10)
+            public TriggerData FindNearestTriggerWhereAiming(BasePlayer player, float maxDistance = 10)
             {
                 Vector3 trackPosition;
                 if (!TryGetTrackPosition(player, out trackPosition))
                     return null;
 
-                return FindNearestTrigger(trackPosition, maxDistance)?.TriggerInfo;
+                return FindNearestTrigger(trackPosition, maxDistance)?.TriggerData;
             }
         }
 
@@ -2278,7 +2277,7 @@ namespace Oxide.Plugins
                 _persistentData.TrackSelection = _workcart.curTrackSelection;
             }
 
-            public void HandleConductorTrigger(WorkcartTriggerInfo triggerInfo)
+            public void HandleConductorTrigger(TriggerData triggerData)
             {
                 SetThrottle(EngineSpeeds.Zero);
 
@@ -2287,16 +2286,16 @@ namespace Oxide.Plugins
                 // Delay a random interval to spread out load.
                 Invoke(() =>
                 {
-                    HandleWorkcartTrigger(triggerInfo);
+                    HandleWorkcartTrigger(triggerData);
                 }, UnityEngine.Random.Range(1, 2f));
             }
 
-            public void HandleWorkcartTrigger(WorkcartTriggerInfo triggerInfo)
+            public void HandleWorkcartTrigger(TriggerData triggerData)
             {
-                if (!triggerInfo.MatchesRoute(_persistentData.Route))
+                if (!triggerData.MatchesRoute(_persistentData.Route))
                     return;
 
-                if (triggerInfo.Destroy)
+                if (triggerData.Destroy)
                 {
                     Invoke(() => _workcart.Kill(BaseNetworkable.DestroyMode.Gib), 0);
                     return;
@@ -2308,12 +2307,12 @@ namespace Oxide.Plugins
                 CancelWaitingAtStop();
                 CancelChilling();
 
-                var triggerSpeed = triggerInfo.GetSpeedInstruction();
-                var triggerDirection = triggerInfo.GetDirectionInstruction();
+                var triggerSpeed = triggerData.GetSpeedInstruction();
+                var triggerDirection = triggerData.GetDirectionInstruction();
 
-                _workcart.SetTrackSelection(DetermineNextTrackSelection(_workcart.curTrackSelection, triggerInfo.GetTrackSelectionInstruction()));
-                _departureVelocity = DetermineNextVelocity(intendedVelocity, triggerInfo.GetDepartureSpeedInstruction(), triggerDirection);
-                _stopDuration = triggerInfo.GetStopDuration();
+                _workcart.SetTrackSelection(DetermineNextTrackSelection(_workcart.curTrackSelection, triggerData.GetTrackSelectionInstruction()));
+                _departureVelocity = DetermineNextVelocity(intendedVelocity, triggerData.GetDepartureSpeedInstruction(), triggerDirection);
+                _stopDuration = triggerData.GetStopDuration();
 
                 var nextVelocity = DetermineNextVelocity(intendedVelocity, triggerSpeed, triggerDirection);
 
@@ -2322,7 +2321,7 @@ namespace Oxide.Plugins
                 if (triggerSpeed != null && IsBraking)
                     CancelBraking();
 
-                if (triggerInfo.Brake)
+                if (triggerData.Brake)
                 {
                     StartBrakingUntilVelocity(intendedVelocity, nextVelocity);
                     return;
@@ -2331,7 +2330,7 @@ namespace Oxide.Plugins
                 SetThrottle(nextVelocity);
 
                 if (nextVelocity == EngineSpeeds.Zero)
-                    BeginWaitingAtStop(triggerInfo.GetStopDuration());
+                    BeginWaitingAtStop(triggerData.GetStopDuration());
             }
 
             public void ResendGenericMarker()
@@ -2695,7 +2694,7 @@ namespace Oxide.Plugins
         private class StoredMapData
         {
             [JsonProperty("MapTriggers")]
-            public List<WorkcartTriggerInfo> MapTriggers = new List<WorkcartTriggerInfo>();
+            public List<TriggerData> MapTriggers = new List<TriggerData>();
 
             private static string GetMapName() =>
                 World.SaveFileName.Substring(0, World.SaveFileName.LastIndexOf("."));
@@ -2716,15 +2715,15 @@ namespace Oxide.Plugins
                 return this;
             }
 
-            public void AddTrigger(WorkcartTriggerInfo customTrigger)
+            public void AddTrigger(TriggerData customTrigger)
             {
                 MapTriggers.Add(customTrigger);
                 Save();
             }
 
-            public void RemoveTrigger(WorkcartTriggerInfo triggerInfo)
+            public void RemoveTrigger(TriggerData triggerData)
             {
-                MapTriggers.Remove(triggerInfo);
+                MapTriggers.Remove(triggerData);
                 Save();
             }
         }
@@ -2736,7 +2735,7 @@ namespace Oxide.Plugins
             private const float DefaultTriggerHeight = 0.29f;
 
             [JsonProperty("TunnelTriggers")]
-            public List<WorkcartTriggerInfo> TunnelTriggers = new List<WorkcartTriggerInfo>();
+            public List<TriggerData> TunnelTriggers = new List<TriggerData>();
 
             public static string Filename => $"{_pluginInstance.Name}/TunnelTriggers";
 
@@ -2754,15 +2753,15 @@ namespace Oxide.Plugins
                 return this;
             }
 
-            public void AddTrigger(WorkcartTriggerInfo triggerInfo)
+            public void AddTrigger(TriggerData triggerData)
             {
-                TunnelTriggers.Add(triggerInfo);
+                TunnelTriggers.Add(triggerData);
                 Save();
             }
 
-            public void RemoveTrigger(WorkcartTriggerInfo triggerInfo)
+            public void RemoveTrigger(TriggerData triggerData)
             {
-                TunnelTriggers.Remove(triggerInfo);
+                TunnelTriggers.Remove(triggerData);
                 Save();
             }
 
@@ -2770,20 +2769,20 @@ namespace Oxide.Plugins
             {
                 var migratedTriggers = 0;
 
-                foreach (var triggerInfo in _tunnelData.TunnelTriggers)
+                foreach (var triggerData in _tunnelData.TunnelTriggers)
                 {
-                    var tunnelType = triggerInfo.GetTunnelType();
+                    var tunnelType = triggerData.GetTunnelType();
                     if (tunnelType == TunnelType.TrainStation)
                     {
-                        if (triggerInfo.Position == new Vector3(0, DefaultTriggerHeight, -84))
+                        if (triggerData.Position == new Vector3(0, DefaultTriggerHeight, -84))
                         {
-                            triggerInfo.Position = new Vector3(45, DefaultTriggerHeight, 18);
+                            triggerData.Position = new Vector3(45, DefaultTriggerHeight, 18);
                             migratedTriggers++;
                             continue;
                         }
-                        if (triggerInfo.Position == new Vector3(0, DefaultTriggerHeight, 84))
+                        if (triggerData.Position == new Vector3(0, DefaultTriggerHeight, 84))
                         {
-                            triggerInfo.Position = new Vector3(-45, DefaultTriggerHeight, -18);
+                            triggerData.Position = new Vector3(-45, DefaultTriggerHeight, -18);
                             migratedTriggers++;
                             continue;
                         }
@@ -2803,7 +2802,7 @@ namespace Oxide.Plugins
                 {
                     TunnelTriggers =
                     {
-                        new WorkcartTriggerInfo
+                        new TriggerData
                         {
                             Id = 1,
                             Position = new Vector3(4.5f, DefaultTriggerHeight, 52),
@@ -2813,7 +2812,7 @@ namespace Oxide.Plugins
                             StopDuration = DefaultStationStopDuration,
                             DepartureSpeed = SpeedInstruction.Hi.ToString(),
                         },
-                        new WorkcartTriggerInfo
+                        new TriggerData
                         {
                             Id = 2,
                             Position = new Vector3(45, DefaultTriggerHeight, 18),
@@ -2823,7 +2822,7 @@ namespace Oxide.Plugins
                             Speed = SpeedInstruction.Hi.ToString(),
                             TrackSelection = TrackSelectionInstruction.Left.ToString(),
                         },
-                        new WorkcartTriggerInfo
+                        new TriggerData
                         {
                             Id = 3,
                             Position = new Vector3(-4.5f, DefaultTriggerHeight, -11),
@@ -2833,7 +2832,7 @@ namespace Oxide.Plugins
                             StopDuration = DefaultStationStopDuration,
                             DepartureSpeed = SpeedInstruction.Hi.ToString(),
                         },
-                        new WorkcartTriggerInfo
+                        new TriggerData
                         {
                             Id = 4,
                             Position = new Vector3(-45, DefaultTriggerHeight, -18),
@@ -2844,7 +2843,7 @@ namespace Oxide.Plugins
                             TrackSelection = TrackSelectionInstruction.Left.ToString(),
                         },
 
-                        new WorkcartTriggerInfo
+                        new TriggerData
                         {
                             Id = 5,
                             Position = new Vector3(-4.45f, DefaultTriggerHeight, -31),
@@ -2852,7 +2851,7 @@ namespace Oxide.Plugins
                             Brake = true,
                             Speed = SpeedInstruction.Med.ToString(),
                         },
-                        new WorkcartTriggerInfo
+                        new TriggerData
                         {
                             Id = 6,
                             Position = new Vector3(-4.5f, DefaultTriggerHeight, -1f),
@@ -2862,7 +2861,7 @@ namespace Oxide.Plugins
                             StopDuration = 5,
                             DepartureSpeed = SpeedInstruction.Hi.ToString(),
                         },
-                        new WorkcartTriggerInfo
+                        new TriggerData
                         {
                             Id = 7,
                             Position = new Vector3(4.45f, DefaultTriggerHeight, 39),
@@ -2870,7 +2869,7 @@ namespace Oxide.Plugins
                             Brake = true,
                             Speed = SpeedInstruction.Med.ToString(),
                         },
-                        new WorkcartTriggerInfo
+                        new TriggerData
                         {
                             Id = 8,
                             Position = new Vector3(4.5f, DefaultTriggerHeight, 9f),
@@ -2881,7 +2880,7 @@ namespace Oxide.Plugins
                             DepartureSpeed = SpeedInstruction.Hi.ToString(),
                         },
 
-                        new WorkcartTriggerInfo
+                        new TriggerData
                         {
                             Id = 9,
                             Position = new Vector3(3, DefaultTriggerHeight, 35f),
@@ -2891,7 +2890,7 @@ namespace Oxide.Plugins
                             StopDuration = DefaultQuickStopDuration,
                             DepartureSpeed = SpeedInstruction.Hi.ToString(),
                         },
-                        new WorkcartTriggerInfo
+                        new TriggerData
                         {
                             Id = 10,
                             Position = new Vector3(-3, DefaultTriggerHeight, -35f),
@@ -2902,7 +2901,7 @@ namespace Oxide.Plugins
                             DepartureSpeed = SpeedInstruction.Hi.ToString(),
                         },
 
-                        new WorkcartTriggerInfo
+                        new TriggerData
                         {
                             Id = 11,
                             Position = new Vector3(35, DefaultTriggerHeight, -3.0f),
@@ -3229,14 +3228,14 @@ namespace Oxide.Plugins
         private string GetTriggerPrefix(IPlayer player, WorkcartTriggerType triggerType) =>
             GetMessage(player, triggerType == WorkcartTriggerType.Tunnel ? Lang.InfoTriggerTunnelPrefix : Lang.InfoTriggerMapPrefix);
 
-        private string GetTriggerPrefix(IPlayer player, WorkcartTriggerInfo triggerInfo) =>
-            GetTriggerPrefix(player, triggerInfo.TriggerType);
+        private string GetTriggerPrefix(IPlayer player, TriggerData triggerData) =>
+            GetTriggerPrefix(player, triggerData.TriggerType);
 
         private string GetTriggerPrefix(BasePlayer player, WorkcartTriggerType triggerType) =>
             GetTriggerPrefix(player.IPlayer, triggerType);
 
-        private string GetTriggerPrefix(BasePlayer player, WorkcartTriggerInfo triggerInfo) =>
-            GetTriggerPrefix(player.IPlayer, triggerInfo.TriggerType);
+        private string GetTriggerPrefix(BasePlayer player, TriggerData triggerData) =>
+            GetTriggerPrefix(player.IPlayer, triggerData.TriggerType);
 
         private string GetConductorCountMessage(IPlayer player) =>
              _pluginConfig.MaxConductors >= 0
