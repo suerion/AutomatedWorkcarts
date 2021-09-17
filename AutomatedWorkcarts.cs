@@ -9,6 +9,7 @@ using Rust;
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Linq;
 using UnityEngine;
 using static TrainEngine;
@@ -439,13 +440,14 @@ namespace Oxide.Plugins
                 return;
             }
 
+            var newTriggerInfo = triggerInfo.Clone();
             foreach (var arg in optionArgs)
             {
-                if (!VerifyValidArgAndModifyTrigger(player, cmd, arg, triggerInfo, Lang.UpdateTriggerSyntax))
+                if (!VerifyValidArgAndModifyTrigger(player, cmd, arg, newTriggerInfo, Lang.UpdateTriggerSyntax))
                     return;
             }
 
-            _triggerManager.UpdateTrigger(triggerInfo);
+            _triggerManager.UpdateTrigger(triggerInfo, newTriggerInfo);
 
             if (triggerInfo.Route != null)
                 _triggerManager.SetPlayerDisplayedRoute(basePlayer, triggerInfo.Route);
@@ -482,8 +484,7 @@ namespace Oxide.Plugins
                     return;
             }
 
-            triggerInfo.CopyFrom(newTriggerInfo);
-            _triggerManager.UpdateTrigger(triggerInfo);
+            _triggerManager.UpdateTrigger(triggerInfo, newTriggerInfo);
 
             if (triggerInfo.Route != null)
                 _triggerManager.SetPlayerDisplayedRoute(basePlayer, triggerInfo.Route);
@@ -755,6 +756,18 @@ namespace Oxide.Plugins
             if (argLower == "destroy")
             {
                 triggerInfo.Destroy = true;
+                return true;
+            }
+
+            if (argLower == "enabled")
+            {
+                triggerInfo.Enabled = true;
+                return true;
+            }
+
+            if (argLower == "disabled")
+            {
+                triggerInfo.Enabled = false;
                 return true;
             }
 
@@ -1342,6 +1355,10 @@ namespace Oxide.Plugins
             [JsonProperty("Position")]
             public Vector3 Position;
 
+            [JsonProperty("Enabled", DefaultValueHandling = DefaultValueHandling.Ignore)]
+            [DefaultValue(true)]
+            public bool Enabled = true;
+
             [JsonProperty("Route", DefaultValueHandling = DefaultValueHandling.Ignore)]
             public string Route;
 
@@ -1474,6 +1491,7 @@ namespace Oxide.Plugins
 
             public void CopyFrom(WorkcartTriggerInfo triggerInfo)
             {
+                Enabled = triggerInfo.Enabled;
                 Route = triggerInfo.Route;
                 AddConductor = triggerInfo.AddConductor;
                 Brake = triggerInfo.Brake;
@@ -1482,11 +1500,19 @@ namespace Oxide.Plugins
                 DepartureSpeed = triggerInfo.DepartureSpeed;
                 Direction = triggerInfo.Direction;
                 TrackSelection = triggerInfo.TrackSelection;
+                StopDuration = triggerInfo.StopDuration;
+            }
+
+            public WorkcartTriggerInfo Clone()
+            {
+                var triggerInfo = new WorkcartTriggerInfo();
+                triggerInfo.CopyFrom(this);
+                return triggerInfo;
             }
 
             public Color GetColor(string routeName)
             {
-                if (!MatchesRoute(routeName))
+                if (!Enabled || !MatchesRoute(routeName))
                     return Color.grey;
 
                 if (Destroy)
@@ -1566,6 +1592,20 @@ namespace Oxide.Plugins
                 trigger.interestLayers = Layers.Mask.Vehicle_World;
             }
 
+            public void Enable()
+            {
+                if (_gameObject != null)
+                    _gameObject.SetActive(true);
+                else
+                    CreateTrigger();
+            }
+
+            public void Disable()
+            {
+                if (_gameObject != null)
+                    _gameObject.SetActive(false);
+            }
+
             public void UpdatePosition()
             {
                 _gameObject.transform.position = WorldPosition;
@@ -1595,7 +1635,10 @@ namespace Oxide.Plugins
             public static MapTriggerWrapper CreateWorldTrigger(WorkcartTriggerInfo triggerInfo)
             {
                 var triggerWrapper = new MapTriggerWrapper(triggerInfo);
-                triggerWrapper.CreateTrigger();
+
+                if (triggerInfo.Enabled)
+                    triggerWrapper.CreateTrigger();
+
                 return triggerWrapper;
             }
 
@@ -1612,7 +1655,10 @@ namespace Oxide.Plugins
                 for (var i = 0; i < matchingDungeonCells.Count; i++)
                 {
                     var triggerWrapper = new TunnelTriggerWrapper(triggerInfo, matchingDungeonCells[i]);
-                    triggerWrapper.CreateTrigger();
+
+                    if (triggerInfo.Enabled)
+                        triggerWrapper.CreateTrigger();
+
                     triggerWrapperList[i] = triggerWrapper;
                 }
 
@@ -1748,14 +1794,48 @@ namespace Oxide.Plugins
                 }
             }
 
-            public void UpdateTrigger(WorkcartTriggerInfo triggerInfo)
+            public void UpdateTrigger(WorkcartTriggerInfo triggerInfo, WorkcartTriggerInfo newTriggerInfo)
             {
                 triggerInfo.InvalidateCache();
 
+                var enabledChanged = triggerInfo.Enabled != newTriggerInfo.Enabled;
+                triggerInfo.CopyFrom(newTriggerInfo);
+
                 if (triggerInfo.TriggerType == WorkcartTriggerType.Tunnel)
+                {
                     _tunnelData.Save();
+
+                    if (enabledChanged)
+                    {
+                        TunnelTriggerWrapper[] triggerWrapperList;
+                        if (_tunnelTriggers.TryGetValue(triggerInfo, out triggerWrapperList))
+                        {
+                            foreach (var triggerWrapper in triggerWrapperList)
+                            {
+                                if (triggerInfo.Enabled)
+                                    triggerWrapper.Enable();
+                                else
+                                    triggerWrapper.Disable();
+                            }
+                        }
+                    }
+                }
                 else
+                {
                     _mapData.Save();
+
+                    if (enabledChanged)
+                    {
+                        MapTriggerWrapper triggerWrapper;
+                        if (_mapTriggers.TryGetValue(triggerInfo, out triggerWrapper))
+                        {
+                            if (triggerInfo.Enabled)
+                                triggerWrapper.Enable();
+                            else
+                                triggerWrapper.Disable();
+                        }
+                    }
+                }
             }
 
             private void UpdateTriggerWrapperPosition(BaseTriggerWrapper triggerWrapper)
@@ -1946,10 +2026,12 @@ namespace Oxide.Plugins
                 player.SendConsoleCommand("ddraw.sphere", TriggerDisplayDuration, color, spherePosition, TriggerDisplayRadius);
 
                 var triggerPrefix = _pluginInstance.GetTriggerPrefix(player, triggerInfo);
-                var infoLines = new List<string>()
-                {
-                    _pluginInstance.GetMessage(player, Lang.InfoTrigger, triggerPrefix, triggerInfo.Id)
-                };
+                var infoLines = new List<string>();
+
+                if (!triggerInfo.Enabled)
+                    infoLines.Add(_pluginInstance.GetMessage(player, Lang.InfoTriggerrDisabled));
+
+                infoLines.Add(_pluginInstance.GetMessage(player, Lang.InfoTrigger, triggerPrefix, triggerInfo.Id));
 
                 if (triggerInfo.TriggerType == WorkcartTriggerType.Tunnel)
                     infoLines.Add(_pluginInstance.GetMessage(player, Lang.InfoTriggerTunnel, triggerInfo.TunnelType, count));
@@ -3203,6 +3285,7 @@ namespace Oxide.Plugins
             public const string InfoTriggerMapPrefix = "Info.Trigger.Prefix.Map";
             public const string InfoTriggerTunnelPrefix = "Info.Trigger.Prefix.Tunnel";
 
+            public const string InfoTriggerrDisabled = "Info.Trigger.Disabled";
             public const string InfoTriggerMap = "Info.Trigger.Map";
             public const string InfoTriggerRoute = "Info.Trigger.Route";
             public const string InfoTriggerTunnel = "Info.Trigger.Tunnel";
@@ -3262,6 +3345,7 @@ namespace Oxide.Plugins
                 [Lang.InfoTriggerMapPrefix] = "M",
                 [Lang.InfoTriggerTunnelPrefix] = "T",
 
+                [Lang.InfoTriggerrDisabled] = "DISABLED",
                 [Lang.InfoTriggerMap] = "Map-specific",
                 [Lang.InfoTriggerRoute] = "Route: @{0}",
                 [Lang.InfoTriggerTunnel] = "Tunnel type: {0} (x{1})",

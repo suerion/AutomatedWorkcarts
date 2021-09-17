@@ -118,6 +118,8 @@ To see the triggers visually, grant the `automatedworkcarts.managetriggers` perm
     - `Destroy` -- Destroys the workcart. This is intended for lazy track designs. You should not need this if you design your routes thoughtfully.
     - `@<route_name>` -- Instructs the workcart to ignore this trigger if it's not assigned this route (replace `<route_name>` with the name you want).
       - If the trigger has the `Conductor` property and the workcart does not already have a conductor, it will be assigned this route.
+    - `Enabled` -- Enables the trigger if currently disabled.
+    - `Disabled` -- Disables the trigger if currently enabled. Disabled triggers are ignored by workcarts and are colored gray.
 - `aw.addtrunneltrigger <option1> <option2>` -- Adds a trigger to the track position where you are aiming.
   - Must be in a supported train tunnel (one enabled in plugin configuration).
   - This trigger will be replicated at all train tunnels of the same type. Editing or removing one of those triggers will affect them all.
@@ -325,6 +327,7 @@ The best practice is to have separate, independent tracks for player vs automate
   "Info.Trigger": "Workcart Trigger #{0}{1}",
   "Info.Trigger.Prefix.Map": "M",
   "Info.Trigger.Prefix.Tunnel": "T",
+  "Info.Trigger.Disabled": "DISABLED",
   "Info.Trigger.Map": "Map-specific",
   "Info.Trigger.Route": "Route: @{0}",
   "Info.Trigger.Tunnel": "Tunnel type: {0} (x{1})",
