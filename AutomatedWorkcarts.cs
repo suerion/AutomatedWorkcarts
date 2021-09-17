@@ -1,6 +1,7 @@
 ﻿using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Newtonsoft.Json.Serialization;
+using Newtonsoft.Json.Converters;
 using Oxide.Core;
 using Oxide.Core.Libraries.Covalence;
 using Oxide.Core.Plugins;
@@ -10,7 +11,6 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
-using VLB;
 using static TrainEngine;
 using static TrainTrackSpline;
 
@@ -78,7 +78,7 @@ namespace Oxide.Plugins
             if (_startupCoroutine != null)
                 ServerMgr.Instance.StopCoroutine(_startupCoroutine);
 
-            _pluginData.Save();
+            OnServerSave();
             _triggerManager.DestroyAll();
             TrainController.DestroyAll();
 
@@ -93,6 +93,7 @@ namespace Oxide.Plugins
 
         private void OnServerSave()
         {
+            _workcartManager.UpdatePersistentData();
             _pluginData.Save();
         }
 
@@ -1021,7 +1022,7 @@ namespace Oxide.Plugins
         {
             var trainController = TrainController.GetForWorkcart(workcart);
             var speed = trainController != null
-                ? trainController.CurrentIntendedVelocity
+                ? trainController.IntendedCurrentVelocity
                 : workcart.CurThrottleSetting;
 
             return EngineSpeedToNumber(speed) >= 0 ?
@@ -2084,6 +2085,21 @@ namespace Oxide.Plugins
                     controller.ResendGenericMarker();
                 }
             }
+
+            public void UpdatePersistentData()
+            {
+                foreach (var workcart in _automatedWorkcarts)
+                {
+                    if (workcart == null)
+                        continue;
+
+                    var controller = TrainController.GetForWorkcart(workcart);
+                    if (controller == null)
+                        continue;
+
+                    controller.UpdatePersistentData();
+                }
+            }
         }
 
         #endregion
@@ -2099,8 +2115,12 @@ namespace Oxide.Plugins
 
             public static TrainController AddToWorkcart(TrainEngine workcart, PersistentWorkcartData persistentData)
             {
-                var controller = workcart.GetOrAddComponent<TrainController>();
-                controller._persistentData = persistentData;
+                var controller = workcart.GetComponent<TrainController>();
+                if (controller != null)
+                    return controller;
+
+                controller = workcart.gameObject.AddComponent<TrainController>();
+                controller.Init(persistentData);
                 return controller;
             }
 
@@ -2130,6 +2150,12 @@ namespace Oxide.Plugins
 
             private PersistentWorkcartData _persistentData;
 
+            public bool IsDestroying => IsInvoking(DestroyCinematically);
+            private bool IsChilling => IsInvoking(EndChilling);
+            private bool IsBraking => IsInvokingFixedTime(BrakeUpdate);
+            private bool IsStopping => IsBraking && _targetVelocity == EngineSpeeds.Zero;
+            private bool IsWaitingAtStop => IsInvoking(DepartFromStop);
+
             private void Awake()
             {
                 _workcart = GetComponent<TrainEngine>();
@@ -2145,12 +2171,29 @@ namespace Oxide.Plugins
                 AddConductor();
                 MaybeAddMapMarkers();
                 EnableUnlimitedFuel();
+            }
+
+            public void Init(PersistentWorkcartData persistentData)
+            {
+                _persistentData = persistentData;
 
                 _workcart.engineController.TryStartEngine(Conductor);
+
+                // Delay disabling hazard checks since starting the engine does not immediately update entity flags.
                 Invoke(DisableHazardChecks, 1f);
 
-                SetThrottle(_pluginConfig.GetDefaultSpeed());
-                SetTrackSelection(_pluginConfig.GetDefaultTrackSelection());
+                var throttle = persistentData.Throttle ?? EngineSpeeds.Zero;
+                if (throttle == EngineSpeeds.Zero)
+                    throttle = _pluginConfig.GetDefaultSpeed();
+
+                SetThrottle(throttle);
+                SetTrackSelection(persistentData.TrackSelection ?? _pluginConfig.GetDefaultTrackSelection());
+            }
+
+            public void UpdatePersistentData()
+            {
+                _persistentData.Throttle = IntendedDepartureVelocity;
+                _persistentData.TrackSelection = _workcart.curTrackSelection;
             }
 
             public void HandleConductorTrigger(WorkcartTriggerInfo triggerInfo)
@@ -2177,7 +2220,7 @@ namespace Oxide.Plugins
                     return;
                 }
 
-                var currentIntendedVelocity = CurrentIntendedVelocity;
+                var intendedVelocity = IntendedCurrentVelocity;
 
                 // These are canceled after determing next current intended velocity, since that computation logic takes these into account.
                 CancelWaitingAtStop();
@@ -2187,10 +2230,10 @@ namespace Oxide.Plugins
                 var triggerDirection = triggerInfo.GetDirectionInstruction();
 
                 _workcart.SetTrackSelection(DetermineNextTrackSelection(_workcart.curTrackSelection, triggerInfo.GetTrackSelectionInstruction()));
-                _departureVelocity = DetermineNextVelocity(currentIntendedVelocity, triggerInfo.GetDepartureSpeedInstruction(), triggerDirection);
+                _departureVelocity = DetermineNextVelocity(intendedVelocity, triggerInfo.GetDepartureSpeedInstruction(), triggerDirection);
                 _stopDuration = triggerInfo.GetStopDuration();
 
-                var nextVelocity = DetermineNextVelocity(currentIntendedVelocity, triggerSpeed, triggerDirection);
+                var nextVelocity = DetermineNextVelocity(intendedVelocity, triggerSpeed, triggerDirection);
 
                 // Only cancel braking if the trigger specifies speed.
                 // Must do this after computing the next velocity.
@@ -2199,7 +2242,7 @@ namespace Oxide.Plugins
 
                 if (triggerInfo.Brake)
                 {
-                    StartBrakingUntilVelocity(currentIntendedVelocity, nextVelocity);
+                    StartBrakingUntilVelocity(intendedVelocity, nextVelocity);
                     return;
                 }
 
@@ -2219,7 +2262,7 @@ namespace Oxide.Plugins
 
             public void DepartEarlyIfStoppedOrStopping()
             {
-                if (IsWaitingAtStop || IsStopping)
+                if (IsStopping || IsWaitingAtStop)
                 {
                     CancelWaitingAtStop();
                     CancelBraking();
@@ -2228,7 +2271,6 @@ namespace Oxide.Plugins
             }
 
             private void DepartFromStop() => SetThrottle(_departureVelocity);
-            private bool IsWaitingAtStop => IsInvoking(DepartFromStop);
             private void CancelWaitingAtStop() => CancelInvoke(DepartFromStop);
 
             private void SetThrottle(EngineSpeeds engineSpeed)
@@ -2242,7 +2284,6 @@ namespace Oxide.Plugins
             }
 
             public void ScheduleDestruction() => Invoke(DestroyCinematically, 0);
-            public bool IsDestroying => IsInvoking(DestroyCinematically);
             private void DestroyCinematically() => DestroyWorkcart(_workcart);
 
             private void StartBrakingUntilVelocity(EngineSpeeds currentVelocity, EngineSpeeds desiredVelocity)
@@ -2252,10 +2293,8 @@ namespace Oxide.Plugins
                 _targetVelocity = desiredVelocity;
                 InvokeRepeatingFixedTime(BrakeUpdate);
             }
-            private bool IsBraking => IsInvokingFixedTime(BrakeUpdate);
-            private void CancelBraking() => CancelInvokeFixedTime(BrakeUpdate);
 
-            private bool IsStopping => IsBraking && _targetVelocity == EngineSpeeds.Zero;
+            private void CancelBraking() => CancelInvokeFixedTime(BrakeUpdate);
 
             private void BrakeUpdate()
             {
@@ -2276,7 +2315,7 @@ namespace Oxide.Plugins
 
                 if (!IsChilling)
                 {
-                    _targetVelocity = CurrentIntendedVelocity;
+                    _targetVelocity = IntendedCurrentVelocity;
                     if (!IsBraking)
                         _targetVelocity = _workcart.CurThrottleSetting;
                     else if (_targetVelocity == EngineSpeeds.Zero)
@@ -2289,15 +2328,22 @@ namespace Oxide.Plugins
                 Invoke(EndChilling, ChillDuration);
             }
 
-            private bool IsChilling => IsInvoking(EndChilling);
             private void EndChilling() => SetThrottle(_targetVelocity);
             private void CancelChilling() => CancelInvoke(EndChilling);
 
-            public EngineSpeeds CurrentIntendedVelocity => IsChilling || IsBraking
-                ? _targetVelocity
-                : _workcart.CurThrottleSetting == EngineSpeeds.Zero
-                ? _departureVelocity
-                : _workcart.CurThrottleSetting;
+            public EngineSpeeds IntendedCurrentVelocity =>
+                IsStopping || IsWaitingAtStop
+                    ? EngineSpeeds.Zero
+                    : IsChilling || IsBraking
+                    ? _targetVelocity
+                    : _workcart.CurThrottleSetting;
+
+            private EngineSpeeds IntendedDepartureVelocity =>
+                IsStopping || IsWaitingAtStop
+                    ? _departureVelocity
+                    : IsChilling || IsBraking
+                    ? _targetVelocity
+                    : _workcart.CurThrottleSetting;
 
             private float GetThrottleFraction(EngineSpeeds throttle)
             {
@@ -2397,7 +2443,7 @@ namespace Oxide.Plugins
                     return;
 
                 // Periodically update the marker positions since they aren't parented to the workcarts.
-                // We could them to the workcarts, but then they would only appear to players in network radius,
+                // We could parent them to the workcarts, but then they would only appear to players in network radius,
                 // and enabling global broadcast for lots of workcarts would significantly reduce client FPS.
                 InvokeRandomized(() =>
                 {
@@ -2479,6 +2525,14 @@ namespace Oxide.Plugins
         {
             [JsonProperty("Route", DefaultValueHandling = DefaultValueHandling.Ignore)]
             public string Route;
+
+            [JsonProperty("Throttle", DefaultValueHandling = DefaultValueHandling.Ignore)]
+            [JsonConverter(typeof(StringEnumConverter))]
+            public EngineSpeeds? Throttle;
+
+            [JsonProperty("TrackSelection", DefaultValueHandling = DefaultValueHandling.Ignore)]
+            [JsonConverter(typeof(StringEnumConverter))]
+            public TrackSelection? TrackSelection;
         }
 
         private class StoredPluginData
