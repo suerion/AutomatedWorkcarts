@@ -1641,6 +1641,9 @@ namespace Oxide.Plugins
 
             public void UpdatePosition()
             {
+                if (_gameObject == null)
+                    return;
+
                 _gameObject.transform.position = WorldPosition;
 
                 TrainTrackSpline spline;
