@@ -2450,12 +2450,14 @@ namespace Oxide.Plugins
                     if (_genericMarker != null)
                     {
                         _genericMarker.transform.position = _transform.position;
+                        _genericMarker.InvalidateNetworkCache();
                         _genericMarker.SendNetworkUpdate_Position();
                     }
 
                     if (_vendingMarker != null)
                     {
                         _vendingMarker.transform.position = _transform.position;
+                        _vendingMarker.InvalidateNetworkCache();
                         _vendingMarker.SendNetworkUpdate_Position();
                     }
                 }, 0, 1, 0.25f);
