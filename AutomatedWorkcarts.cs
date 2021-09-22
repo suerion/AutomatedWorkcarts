@@ -1459,6 +1459,9 @@ namespace Oxide.Plugins
                 return Brake ? _speedInstruction ?? SpeedInstruction.Zero : _speedInstruction;
             }
 
+            public SpeedInstruction GetSpeedInstructionOrZero() =>
+                GetSpeedInstruction() ?? SpeedInstruction.Zero;
+
             private DirectionInstruction? _directionInstruction;
             public DirectionInstruction? GetDirectionInstruction()
             {
@@ -1557,10 +1560,12 @@ namespace Oxide.Plugins
 
                 if (Brake)
                 {
+                    var brakeSpeedInstruction = GetSpeedInstructionOrZero();
+
                     // Orange
                     hue = 0.5f/6f;
-                    saturation = speedInstruction == SpeedInstruction.Zero ? 1
-                        : speedInstruction == SpeedInstruction.Lo ? 0.8f
+                    saturation = brakeSpeedInstruction == SpeedInstruction.Zero ? 1
+                        : brakeSpeedInstruction == SpeedInstruction.Lo ? 0.8f
                         : 0.6f;
                     return Color.HSVToRGB(0.5f/6f, saturation, 1);
                 }
@@ -2102,8 +2107,10 @@ namespace Oxide.Plugins
                     if (directionInstruction != null && speedInstruction != SpeedInstruction.Zero)
                         infoLines.Add(_pluginInstance.GetMessage(player, Lang.InfoTriggerDirection, directionInstruction));
 
-                    if (speedInstruction != null)
-                        infoLines.Add(_pluginInstance.GetMessage(player, triggerData.Brake ? Lang.InfoTriggerBrakeToSpeed : Lang.InfoTriggerSpeed, speedInstruction));
+                    if (triggerData.Brake)
+                        infoLines.Add(_pluginInstance.GetMessage(player, Lang.InfoTriggerBrakeToSpeed, triggerData.GetSpeedInstructionOrZero()));
+                    else if (speedInstruction != null)
+                        infoLines.Add(_pluginInstance.GetMessage(player, Lang.InfoTriggerSpeed, speedInstruction));
 
                     if (speedInstruction == SpeedInstruction.Zero)
                         infoLines.Add(_pluginInstance.GetMessage(player, Lang.InfoTriggerStopDuration, triggerData.GetStopDuration()));
@@ -2476,7 +2483,6 @@ namespace Oxide.Plugins
                     return;
                 }
 
-                var speedInstruction = triggerData.GetSpeedInstruction();
                 var directionInstruction = triggerData.GetDirectionInstruction();
                 var departureSpeedInstruction = triggerData.GetDepartureSpeedInstruction();
 
@@ -2487,17 +2493,19 @@ namespace Oxide.Plugins
 
                 if (triggerData.Brake)
                 {
-                    if (speedInstruction == SpeedInstruction.Zero)
+                    var brakeSpeedInstruction = triggerData.GetSpeedInstructionOrZero();
+                    if (brakeSpeedInstruction == SpeedInstruction.Zero)
                     {
                         SwitchState(new BrakingState(this, newDepartureThrottle, triggerData.GetStopDuration()));
                         return;
                     }
 
-                    var brakeUntilVelocity = DetermineNextThrottle(currentDepartureThrottle, speedInstruction, directionInstruction);
+                    var brakeUntilVelocity = DetermineNextThrottle(currentDepartureThrottle, brakeSpeedInstruction, directionInstruction);
                     SwitchState(new BrakingState(this, brakeUntilVelocity));
                     return;
                 }
 
+                var speedInstruction = triggerData.GetSpeedInstruction();
                 if (speedInstruction == SpeedInstruction.Zero)
                 {
                     // Trigger with speed Zero, but no braking.
@@ -2506,26 +2514,10 @@ namespace Oxide.Plugins
                 }
 
                 var nextThrottle = DetermineNextThrottle(DepartureThrottle, speedInstruction, directionInstruction);
-
-                var stoppedState = _workcartState as StoppedState;
-                if (stoppedState != null)
+                if (_workcartState != null)
                 {
-                    // Update departure throttle.
-                    stoppedState.NextThrottle = DetermineNextThrottle(DepartureThrottle, speedInstruction, directionInstruction);
-                }
-
-                var chillingState = _workcartState as ChillingState;
-                if (chillingState != null)
-                {
-                    // Update post-chill throttle.
-                    chillingState.NextThrottle = DetermineNextThrottle(DepartureThrottle, speedInstruction, directionInstruction);
-                    return;
-                }
-
-                var brakingState = _workcartState as BrakingState;
-                if (brakingState != null)
-                {
-                    brakingState.NextThrottle = nextThrottle;
+                    // Update brake-to speed, departure speed, or post-chill speed.
+                    _workcartState.NextThrottle = nextThrottle;
                     return;
                 }
 
