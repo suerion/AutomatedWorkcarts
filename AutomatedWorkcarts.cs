@@ -2804,22 +2804,51 @@ namespace Oxide.Plugins
             [JsonProperty("MapTriggers")]
             public List<TriggerData> MapTriggers = new List<TriggerData>();
 
-            private static string GetMapName() =>
+            // Return example: proceduralmap.1500.548423.212
+            private static string GetPerWipeSaveName() =>
                 World.SaveFileName.Substring(0, World.SaveFileName.LastIndexOf("."));
 
-            public static string Filename => $"{_pluginInstance.Name}/{GetMapName()}";
+            // Return example: proceduralmap.1500.548423
+            private static string GetCrossWipeSaveName()
+            {
+                var saveName = GetPerWipeSaveName();
+                return saveName.Substring(0, saveName.LastIndexOf("."));
+            }
+
+            private static bool IsProcedural() => World.SaveFileName.StartsWith("proceduralmap");
+
+            private static string GetPerWipeFilePath() => $"{_pluginInstance.Name}/{GetPerWipeSaveName()}";
+            private static string GetCrossWipeFilePath() => $"{_pluginInstance.Name}/{GetCrossWipeSaveName()}";
+            private static string GetFilepath() => IsProcedural() ? GetPerWipeFilePath() : GetCrossWipeFilePath();
 
             public static StoredMapData Load()
             {
-                if (Interface.Oxide.DataFileSystem.ExistsDatafile(Filename))
-                    return Interface.Oxide.DataFileSystem.ReadObject<StoredMapData>(Filename) ?? new StoredMapData();
+                var filepath = GetFilepath();
+
+                if (Interface.Oxide.DataFileSystem.ExistsDatafile(filepath))
+                    return Interface.Oxide.DataFileSystem.ReadObject<StoredMapData>(filepath) ?? new StoredMapData();
+
+                if (!IsProcedural())
+                {
+                    var perWipeFilepath = GetPerWipeFilePath();
+                    if (Interface.Oxide.DataFileSystem.ExistsDatafile(perWipeFilepath))
+                    {
+                        var data = Interface.Oxide.DataFileSystem.ReadObject<StoredMapData>(perWipeFilepath);
+                        if (data != null)
+                        {
+                            _pluginInstance.LogWarning($"Migrating map data file from '{perWipeFilepath}.json' to '{filepath}.json'");
+                            data.Save();
+                            return data;
+                        }
+                    }
+                }
 
                 return new StoredMapData();
             }
 
             public StoredMapData Save()
             {
-                Interface.Oxide.DataFileSystem.WriteObject(Filename, this);
+                Interface.Oxide.DataFileSystem.WriteObject(GetFilepath(), this);
                 return this;
             }
 

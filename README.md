@@ -29,6 +29,7 @@ The main purpose of triggers, aside from determining which workcarts will be aut
 - Enabled via the `EnableMapTriggers` configuration option.
 - Added with the `aw.addtrigger` or `awt.add` command.
 - Saved in data file: `oxide/data/AutomatedWorkcarts/MAP_NAME.json`.
+  - Note: The file name for non-procedural maps will exclude the wipe number so that you can re-use the triggers across force wipes
 
 #### Tunnel triggers
 
