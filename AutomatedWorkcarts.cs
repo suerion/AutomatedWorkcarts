@@ -2021,12 +2021,15 @@ namespace Oxide.Plugins
 
                 ShowNearbyTriggers(player, player.transform.position, playerInfo.Route);
 
-                if (!playerInfo.Timer?.Destroyed ?? false)
+                if (playerInfo.Timer != null && !playerInfo.Timer.Destroyed)
                 {
                     var newDuration = duration >= 0 ? duration : Math.Max(playerInfo.Timer.Repetitions, 60);
                     playerInfo.Timer.Reset(delay: -1, repetitions: newDuration);
                     return;
                 }
+
+                if (duration == -1)
+                    duration = 60;
 
                 playerInfo.Timer = _pluginInstance.timer.Repeat(TriggerDisplayDuration - 0.2f, duration, () =>
                 {
