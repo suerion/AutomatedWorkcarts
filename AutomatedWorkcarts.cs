@@ -171,7 +171,7 @@ namespace Oxide.Plugins
                 {
                     forwardController.DepartEarlyIfStoppedOrStopping();
                 }
-                else if (Math.Abs(EngineSpeedToNumber(forwardWorkcart.CurThrottleSetting)) < Math.Abs(EngineSpeedToNumber(backwardWorkcart.CurThrottleSetting)))
+                else if (Math.Abs(EngineThrottleToNumber(forwardWorkcart.CurThrottleSetting)) < Math.Abs(EngineThrottleToNumber(backwardWorkcart.CurThrottleSetting)))
                 {
                     // Destroy the forward workcart if it's not automated and going too slow.
                     LogWarning($"Destroying non-automated workcart due to insufficient speed.");
@@ -1062,11 +1062,11 @@ namespace Oxide.Plugins
         private static Vector3 GetWorkcartForward(TrainEngine workcart)
         {
             var trainController = TrainController.GetForWorkcart(workcart);
-            var speed = trainController != null
-                ? trainController.IntendedCurrentVelocity
+            var throttle = trainController != null
+                ? trainController.DepartureThrottle
                 : workcart.CurThrottleSetting;
 
-            return EngineSpeedToNumber(speed) >= 0 ?
+            return EngineThrottleToNumber(throttle) >= 0 ?
                 workcart.transform.forward
                 : -workcart.transform.forward;
         }
@@ -1285,9 +1285,9 @@ namespace Oxide.Plugins
             Swap
         }
 
-        private static int EngineSpeedToNumber(EngineSpeeds engineSpeed)
+        private static int EngineThrottleToNumber(EngineSpeeds throttle)
         {
-            switch (engineSpeed)
+            switch (throttle)
             {
                 case EngineSpeeds.Fwd_Hi: return 3;
                 case EngineSpeeds.Fwd_Med: return 2;
@@ -1299,7 +1299,7 @@ namespace Oxide.Plugins
             }
         }
 
-        private static EngineSpeeds EngineSpeedFromNumber(int speedNumber)
+        private static EngineSpeeds EngineThrottleFromNumber(int speedNumber)
         {
             switch (speedNumber)
             {
@@ -1313,10 +1313,10 @@ namespace Oxide.Plugins
             }
         }
 
-        private static EngineSpeeds DetermineNextVelocity(EngineSpeeds throttleSpeed, SpeedInstruction? desiredSpeed, DirectionInstruction? directionInstruction)
+        private static EngineSpeeds DetermineNextThrottle(EngineSpeeds currentThrottle, SpeedInstruction? desiredSpeed, DirectionInstruction? directionInstruction)
         {
             // -3 to 3
-            var signedSpeed = EngineSpeedToNumber(throttleSpeed);
+            var signedSpeed = EngineThrottleToNumber(currentThrottle);
 
             // 0, 1, 2, 3
             var unsignedSpeed = Math.Abs(signedSpeed);
@@ -1340,7 +1340,7 @@ namespace Oxide.Plugins
             else if (desiredSpeed == SpeedInstruction.Zero)
                 unsignedSpeed = 0;
 
-            return EngineSpeedFromNumber(sign * unsignedSpeed);
+            return EngineThrottleFromNumber(sign * unsignedSpeed);
         }
 
         private static TrackSelection DetermineNextTrackSelection(TrackSelection trackSelection, TrackSelectionInstruction? trackSelectionInstruction)
@@ -1486,7 +1486,7 @@ namespace Oxide.Plugins
             }
 
             private SpeedInstruction? _departureSpeedInstruction;
-            public SpeedInstruction? GetDepartureSpeedInstruction()
+            public SpeedInstruction GetDepartureSpeedInstruction()
             {
                 if (_departureSpeedInstruction == null && !string.IsNullOrWhiteSpace(Speed))
                 {
@@ -2221,12 +2221,147 @@ namespace Oxide.Plugins
 
         #endregion
 
+        #region Workcart State
+
+        private static float GetThrottleFraction(EngineSpeeds throttle)
+        {
+            switch (throttle)
+            {
+                case EngineSpeeds.Rev_Hi: return -1;
+                case EngineSpeeds.Rev_Med: return -0.5f;
+                case EngineSpeeds.Rev_Lo: return -0.2f;
+                case EngineSpeeds.Fwd_Lo: return 0.2f;
+                case EngineSpeeds.Fwd_Med: return 0.5f;
+                case EngineSpeeds.Fwd_Hi: return 1;
+                default: return 0;
+            }
+        }
+
+        private abstract class WorkcartState
+        {
+            public EngineSpeeds NextThrottle;
+
+            protected TrainController _controller;
+
+            public abstract void Enter();
+            public abstract void Exit();
+
+            public WorkcartState(TrainController controller, EngineSpeeds nextThrottle)
+            {
+                _controller = controller;
+                NextThrottle = nextThrottle;
+            }
+        }
+
+        private class BrakingState : WorkcartState
+        {
+            public bool IsStopping => _stopDuration != null;
+
+            private float? _stopDuration;
+            private EngineSpeeds _targetSpeed => IsStopping ? EngineSpeeds.Zero : NextThrottle;
+
+            public BrakingState(TrainController controller, EngineSpeeds nextThrottle, float? stopDuration = null) : base(controller, nextThrottle)
+            {
+                _stopDuration = stopDuration;
+            }
+
+            public override void Enter()
+            {
+                var brakeThrottle = DetermineNextThrottle(_controller.DepartureThrottle, SpeedInstruction.Lo, DirectionInstruction.Invert);
+                _controller.SetThrottle(brakeThrottle);
+                _controller.InvokeRepeatingFixedTime(BrakeUpdate);
+            }
+
+            public override void Exit()
+            {
+                _controller.CancelInvokeFixedTime(BrakeUpdate);
+                _controller.SetThrottle(NextThrottle);
+            }
+
+            private bool IsNearSpeed(EngineSpeeds desiredThrottle, float leeway = 0.1f)
+            {
+                var workcart = _controller.Workcart;
+
+                var currentSpeed = Vector3.Dot(_controller.Transform.forward, workcart.GetLocalVelocity());
+                var desiredSpeed = workcart.maxSpeed * GetThrottleFraction(desiredThrottle);
+
+                // If desiring a negative speed, current speed is expected to increase (e.g., -10 to -5).
+                // If desiring positive speed, current speed is expected to decrease (e.g., 10 to 5).
+                // If desiring zero speed, the direction depends on the throttle being applied (e.g., if positive, -10 to -5).
+                return desiredSpeed < 0 || (desiredSpeed == 0 && GetThrottleFraction(workcart.CurThrottleSetting) > 0)
+                    ? currentSpeed + leeway >= desiredSpeed
+                    : currentSpeed - leeway <= desiredSpeed;
+            }
+
+            private void BrakeUpdate()
+            {
+                if (IsNearSpeed(_targetSpeed))
+                {
+                    if (IsStopping)
+                        _controller.SwitchState(new StoppedState(_controller, NextThrottle, (float)_stopDuration));
+                    else
+                        _controller.SwitchState(null);
+                }
+            }
+        }
+
+        private class StoppedState : WorkcartState
+        {
+            private float _stopDuration;
+
+            public StoppedState(TrainController controller, EngineSpeeds departureVelocity, float duration) : base(controller, departureVelocity)
+            {
+                _stopDuration = duration;
+            }
+
+            public override void Enter()
+            {
+                _controller.SetThrottle(EngineSpeeds.Zero);
+                _controller.Invoke(DepartFromStop, _stopDuration);
+            }
+
+            public override void Exit()
+            {
+                _controller.CancelInvoke(DepartFromStop);
+                _controller.SetThrottle(NextThrottle);
+            }
+
+            private void DepartFromStop()
+            {
+                _controller.SwitchState(null);
+            }
+        }
+
+        private class ChillingState : WorkcartState
+        {
+            private const float ChillDuration = 3f;
+
+            public ChillingState(TrainController controller, EngineSpeeds nextThrottle) : base(controller, nextThrottle) {}
+
+            public override void Enter()
+            {
+                _controller.SetThrottle(EngineSpeeds.Zero);
+                _controller.Invoke(StopChilling, ChillDuration);
+            }
+
+            public override void Exit()
+            {
+                _controller.CancelInvoke(StopChilling);
+                _controller.SetThrottle(NextThrottle);
+            }
+
+            private void StopChilling()
+            {
+                _controller.SwitchState(null);
+            }
+        }
+
+        #endregion
+
         #region Train Controller
 
         private class TrainController : FacepunchBehaviour
         {
-            private const float ChillDuration = 3f;
-
             public static TrainController GetForWorkcart(TrainEngine workcart) =>
                 workcart.GetComponent<TrainController>();
 
@@ -2254,36 +2389,33 @@ namespace Oxide.Plugins
             }
 
             public NPCShopKeeper Conductor { get; private set; }
-            private TrainEngine _workcart;
-            private Transform _transform;
-            private ProtectionProperties _originalProtection;
+            public TrainEngine Workcart { get; private set; }
+            public Transform Transform { get; private set; }
 
+            private ProtectionProperties _originalProtection;
             private MapMarkerGenericRadius _genericMarker;
             private VendingMachineMapMarker _vendingMarker;
 
-            private EngineSpeeds _targetVelocity;
-            private EngineSpeeds _departureVelocity;
-            private float _stopDuration;
-
+            private WorkcartState _workcartState;
             private WorkcartData _workcartData;
 
             public bool IsDestroying => IsInvoking(DestroyCinematically);
-            private bool IsChilling => IsInvoking(EndChilling);
-            private bool IsBraking => IsInvokingFixedTime(BrakeUpdate);
-            private bool IsStopping => IsBraking && _targetVelocity == EngineSpeeds.Zero;
-            private bool IsWaitingAtStop => IsInvoking(DepartFromStop);
+
+            // Desired velocity regardless of circumstances like stopping/braking/chilling.
+            public EngineSpeeds DepartureThrottle =>
+                _workcartState?.NextThrottle ?? Workcart.CurThrottleSetting;
 
             private void Awake()
             {
-                _workcart = GetComponent<TrainEngine>();
-                if (_workcart == null)
+                Workcart = GetComponent<TrainEngine>();
+                if (Workcart == null)
                     return;
 
-                _transform = _workcart.transform;
-                _originalProtection = _workcart.baseProtection;
-                _workcart.baseProtection = _pluginInstance._immortalProtection;
+                Transform = Workcart.transform;
+                _originalProtection = Workcart.baseProtection;
+                Workcart.baseProtection = _pluginInstance._immortalProtection;
 
-                _workcart.SetHealth(_workcart.MaxHealth());
+                Workcart.SetHealth(Workcart.MaxHealth());
 
                 AddConductor();
                 MaybeAddMapMarkers();
@@ -2294,7 +2426,7 @@ namespace Oxide.Plugins
             {
                 _workcartData = workcartData;
 
-                _workcart.engineController.TryStartEngine(Conductor);
+                Workcart.engineController.TryStartEngine(Conductor);
 
                 // Delay disabling hazard checks since starting the engine does not immediately update entity flags.
                 Invoke(DisableHazardChecks, 1f);
@@ -2309,8 +2441,8 @@ namespace Oxide.Plugins
 
             public void UpdateWorkcartData()
             {
-                _workcartData.Throttle = IntendedDepartureVelocity;
-                _workcartData.TrackSelection = _workcart.curTrackSelection;
+                _workcartData.Throttle = DepartureThrottle;
+                _workcartData.TrackSelection = Workcart.curTrackSelection;
             }
 
             public void HandleConductorTrigger(TriggerData triggerData)
@@ -2326,6 +2458,13 @@ namespace Oxide.Plugins
                 }, UnityEngine.Random.Range(1, 2f));
             }
 
+            public void SwitchState(WorkcartState nextState)
+            {
+                _workcartState?.Exit();
+                _workcartState = nextState;
+                nextState?.Enter();
+            }
+
             public void HandleWorkcartTrigger(TriggerData triggerData)
             {
                 if (!triggerData.MatchesRoute(_workcartData.Route))
@@ -2333,40 +2472,64 @@ namespace Oxide.Plugins
 
                 if (triggerData.Destroy)
                 {
-                    Invoke(() => _workcart.Kill(BaseNetworkable.DestroyMode.Gib), 0);
+                    Invoke(() => Workcart.Kill(BaseNetworkable.DestroyMode.Gib), 0);
                     return;
                 }
 
-                var intendedVelocity = IntendedCurrentVelocity;
+                var speedInstruction = triggerData.GetSpeedInstruction();
+                var directionInstruction = triggerData.GetDirectionInstruction();
+                var departureSpeedInstruction = triggerData.GetDepartureSpeedInstruction();
 
-                // These are canceled after determing next current intended velocity, since that computation logic takes these into account.
-                CancelWaitingAtStop();
-                CancelChilling();
+                var currentDepartureThrottle = DepartureThrottle;
+                var newDepartureThrottle = DetermineNextThrottle(currentDepartureThrottle, departureSpeedInstruction, directionInstruction);
 
-                var triggerSpeed = triggerData.GetSpeedInstruction();
-                var triggerDirection = triggerData.GetDirectionInstruction();
-
-                _workcart.SetTrackSelection(DetermineNextTrackSelection(_workcart.curTrackSelection, triggerData.GetTrackSelectionInstruction()));
-                _departureVelocity = DetermineNextVelocity(intendedVelocity, triggerData.GetDepartureSpeedInstruction(), triggerDirection);
-                _stopDuration = triggerData.GetStopDuration();
-
-                var nextVelocity = DetermineNextVelocity(intendedVelocity, triggerSpeed, triggerDirection);
-
-                // Only cancel braking if the trigger specifies speed.
-                // Must do this after computing the next velocity.
-                if (triggerSpeed != null && IsBraking)
-                    CancelBraking();
+                Workcart.SetTrackSelection(DetermineNextTrackSelection(Workcart.curTrackSelection, triggerData.GetTrackSelectionInstruction()));
 
                 if (triggerData.Brake)
                 {
-                    StartBrakingUntilVelocity(intendedVelocity, nextVelocity);
+                    if (speedInstruction == SpeedInstruction.Zero)
+                    {
+                        SwitchState(new BrakingState(this, newDepartureThrottle, triggerData.GetStopDuration()));
+                        return;
+                    }
+
+                    var brakeUntilVelocity = DetermineNextThrottle(currentDepartureThrottle, speedInstruction, directionInstruction);
+                    SwitchState(new BrakingState(this, brakeUntilVelocity));
                     return;
                 }
 
-                SetThrottle(nextVelocity);
+                if (speedInstruction == SpeedInstruction.Zero)
+                {
+                    // Trigger with speed Zero, but no braking.
+                    SwitchState(new StoppedState(this, newDepartureThrottle, triggerData.GetStopDuration()));
+                    return;
+                }
 
-                if (nextVelocity == EngineSpeeds.Zero)
-                    BeginWaitingAtStop(triggerData.GetStopDuration());
+                var nextThrottle = DetermineNextThrottle(DepartureThrottle, speedInstruction, directionInstruction);
+
+                var stoppedState = _workcartState as StoppedState;
+                if (stoppedState != null)
+                {
+                    // Update departure throttle.
+                    stoppedState.NextThrottle = DetermineNextThrottle(DepartureThrottle, speedInstruction, directionInstruction);
+                }
+
+                var chillingState = _workcartState as ChillingState;
+                if (chillingState != null)
+                {
+                    // Update post-chill throttle.
+                    chillingState.NextThrottle = DetermineNextThrottle(DepartureThrottle, speedInstruction, directionInstruction);
+                    return;
+                }
+
+                var brakingState = _workcartState as BrakingState;
+                if (brakingState != null)
+                {
+                    brakingState.NextThrottle = nextThrottle;
+                    return;
+                }
+
+                SetThrottle(nextThrottle);
             }
 
             public void ResendGenericMarker()
@@ -2375,125 +2538,34 @@ namespace Oxide.Plugins
                     _genericMarker.SendUpdate();
             }
 
-            private void BeginWaitingAtStop(float stopDuration) => Invoke(DepartFromStop, stopDuration);
+            public void StartChilling()
+            {
+                SwitchState(new ChillingState(this, DepartureThrottle));
+            }
 
             public void DepartEarlyIfStoppedOrStopping()
             {
-                if (IsStopping || IsWaitingAtStop)
-                {
-                    CancelWaitingAtStop();
-                    CancelBraking();
-                    DepartFromStop();
-                }
+                SwitchState(null);
             }
 
-            private void DepartFromStop() => SetThrottle(_departureVelocity);
-            private void CancelWaitingAtStop() => CancelInvoke(DepartFromStop);
-
-            private void SetThrottle(EngineSpeeds engineSpeed)
+            public void SetThrottle(EngineSpeeds engineSpeed)
             {
-                _workcart.SetThrottle(engineSpeed);
+                Workcart.SetThrottle(engineSpeed);
             }
 
             private void SetTrackSelection(TrackSelection trackSelection)
             {
-                _workcart.SetTrackSelection(trackSelection);
+                Workcart.SetTrackSelection(trackSelection);
             }
 
             public void ScheduleDestruction() => Invoke(DestroyCinematically, 0);
-            private void DestroyCinematically() => DestroyWorkcart(_workcart);
-
-            private void StartBrakingUntilVelocity(EngineSpeeds currentVelocity, EngineSpeeds desiredVelocity)
-            {
-                SetThrottle(DetermineNextVelocity(currentVelocity, SpeedInstruction.Lo, DirectionInstruction.Invert));
-                CancelBraking();
-                _targetVelocity = desiredVelocity;
-                InvokeRepeatingFixedTime(BrakeUpdate);
-            }
-
-            private void CancelBraking() => CancelInvokeFixedTime(BrakeUpdate);
-
-            private void BrakeUpdate()
-            {
-                if (IsNearSpeed(_targetVelocity))
-                {
-                    SetThrottle(_targetVelocity);
-                    if (_targetVelocity == EngineSpeeds.Zero)
-                        BeginWaitingAtStop(_stopDuration);
-
-                    CancelBraking();
-                }
-            }
-
-            public void StartChilling()
-            {
-                if (IsBraking)
-                    return;
-
-                if (!IsChilling)
-                {
-                    _targetVelocity = IntendedCurrentVelocity;
-                    if (!IsBraking)
-                        _targetVelocity = _workcart.CurThrottleSetting;
-                    else if (_targetVelocity == EngineSpeeds.Zero)
-                        _targetVelocity = _departureVelocity;
-
-                    SetThrottle(EngineSpeeds.Zero);
-                }
-
-                CancelChilling();
-                Invoke(EndChilling, ChillDuration);
-            }
-
-            private void EndChilling() => SetThrottle(_targetVelocity);
-            private void CancelChilling() => CancelInvoke(EndChilling);
-
-            public EngineSpeeds IntendedCurrentVelocity =>
-                IsStopping || IsWaitingAtStop
-                    ? EngineSpeeds.Zero
-                    : IsChilling || IsBraking
-                    ? _targetVelocity
-                    : _workcart.CurThrottleSetting;
-
-            private EngineSpeeds IntendedDepartureVelocity =>
-                IsStopping || IsWaitingAtStop
-                    ? _departureVelocity
-                    : IsChilling || IsBraking
-                    ? _targetVelocity
-                    : _workcart.CurThrottleSetting;
-
-            private float GetThrottleFraction(EngineSpeeds throttle)
-            {
-                switch (throttle)
-                {
-                    case EngineSpeeds.Rev_Hi: return -1;
-                    case EngineSpeeds.Rev_Med: return -0.5f;
-                    case EngineSpeeds.Rev_Lo: return -0.2f;
-                    case EngineSpeeds.Fwd_Lo: return 0.2f;
-                    case EngineSpeeds.Fwd_Med: return 0.5f;
-                    case EngineSpeeds.Fwd_Hi: return 1;
-                    default: return 0;
-                }
-            }
-
-            private bool IsNearSpeed(EngineSpeeds desiredThrottle, float leeway = 0.1f)
-            {
-                var currentSpeed = Vector3.Dot(_transform.forward, _workcart.GetLocalVelocity());
-                var desiredSpeed = _workcart.maxSpeed * GetThrottleFraction(desiredThrottle);
-
-                // If desiring a negative speed, current speed is expected to increase (e.g., -10 to -5).
-                // If desiring positive speed, current speed is expected to decrease (e.g., 10 to 5).
-                // If desiring zero speed, the direction depends on the throttle being applied (e.g., if positive, -10 to -5).
-                return desiredSpeed < 0 || (desiredSpeed == 0 && GetThrottleFraction(_workcart.CurThrottleSetting) > 0)
-                    ? currentSpeed + leeway >= desiredSpeed
-                    : currentSpeed - leeway <= desiredSpeed;
-            }
+            private void DestroyCinematically() => DestroyWorkcart(Workcart);
 
             private void AddConductor()
             {
-                _workcart.DismountAllPlayers();
+                Workcart.DismountAllPlayers();
 
-                Conductor = GameManager.server.CreateEntity(ShopkeeperPrefab, _transform.position) as NPCShopKeeper;
+                Conductor = GameManager.server.CreateEntity(ShopkeeperPrefab, Transform.position) as NPCShopKeeper;
                 if (Conductor == null)
                     return;
 
@@ -2514,7 +2586,7 @@ namespace Oxide.Plugins
 
             private BaseMountable GetDriverSeat()
             {
-                foreach (var mountPoint in _workcart.mountPoints)
+                foreach (var mountPoint in Workcart.mountPoints)
                 {
                     if (mountPoint.isDriver)
                         return mountPoint.mountable;
@@ -2526,7 +2598,7 @@ namespace Oxide.Plugins
             {
                 if (_pluginConfig.GenericMapMarker.Enabled)
                 {
-                    _genericMarker = GameManager.server.CreateEntity(GenericMapMarkerPrefab, _transform.position) as MapMarkerGenericRadius;
+                    _genericMarker = GameManager.server.CreateEntity(GenericMapMarkerPrefab, Transform.position) as MapMarkerGenericRadius;
                     if (_genericMarker != null)
                     {
                         _genericMarker.EnableSaving(false);
@@ -2544,7 +2616,7 @@ namespace Oxide.Plugins
 
                 if (_pluginConfig.VendingMapMarker.Enabled)
                 {
-                    _vendingMarker = GameManager.server.CreateEntity(VendingMapMarkerPrefab, _transform.position) as VendingMachineMapMarker;
+                    _vendingMarker = GameManager.server.CreateEntity(VendingMapMarkerPrefab, Transform.position) as VendingMachineMapMarker;
                     if (_vendingMarker != null)
                     {
                         _vendingMarker.markerShopName = _pluginConfig.VendingMapMarker.Name;
@@ -2568,14 +2640,14 @@ namespace Oxide.Plugins
 
                     if (_genericMarker != null)
                     {
-                        _genericMarker.transform.position = _transform.position;
+                        _genericMarker.transform.position = Transform.position;
                         _genericMarker.InvalidateNetworkCache();
                         _genericMarker.SendNetworkUpdate_Position();
                     }
 
                     if (_vendingMarker != null)
                     {
-                        _vendingMarker.transform.position = _transform.position;
+                        _vendingMarker.transform.position = Transform.position;
                         _vendingMarker.InvalidateNetworkCache();
                         _vendingMarker.SendNetworkUpdate_Position();
                     }
@@ -2600,25 +2672,25 @@ namespace Oxide.Plugins
 
             private void DisableHazardChecks()
             {
-                _workcart.SetFlag(TrainEngine.Flag_HazardAhead, false);
-                _workcart.CancelInvoke(_workcart.CheckForHazards);
+                Workcart.SetFlag(TrainEngine.Flag_HazardAhead, false);
+                Workcart.CancelInvoke(Workcart.CheckForHazards);
             }
 
             private void EnableHazardChecks()
             {
-                if (_workcart.IsOn() && !_workcart.IsInvoking(_workcart.CheckForHazards))
-                    _workcart.InvokeRandomized(_workcart.CheckForHazards, 0f, 1f, 0.1f);
+                if (Workcart.IsOn() && !Workcart.IsInvoking(Workcart.CheckForHazards))
+                    Workcart.InvokeRandomized(Workcart.CheckForHazards, 0f, 1f, 0.1f);
             }
 
             private void EnableUnlimitedFuel()
             {
-                _workcart.fuelSystem.cachedHasFuel = true;
-                _workcart.fuelSystem.nextFuelCheckTime = float.MaxValue;
+                Workcart.fuelSystem.cachedHasFuel = true;
+                Workcart.fuelSystem.nextFuelCheckTime = float.MaxValue;
             }
 
             private void DisableUnlimitedFuel()
             {
-                _workcart.fuelSystem.nextFuelCheckTime = 0;
+                Workcart.fuelSystem.nextFuelCheckTime = 0;
             }
 
             private void OnDestroy()
@@ -2633,7 +2705,7 @@ namespace Oxide.Plugins
                     _vendingMarker.Kill();
 
                 if (_originalProtection != null)
-                    _workcart.baseProtection = _originalProtection;
+                    Workcart.baseProtection = _originalProtection;
 
                 DisableUnlimitedFuel();
                 EnableHazardChecks();
