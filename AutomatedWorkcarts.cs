@@ -42,7 +42,6 @@ namespace Oxide.Plugins
         private WorkcartTriggerManager _triggerManager = new WorkcartTriggerManager();
         private AutomatedWorkcartManager _workcartManager = new AutomatedWorkcartManager();
 
-        private ProtectionProperties _immortalProtection;
         private Coroutine _startupCoroutine;
 
         #endregion
@@ -67,10 +66,6 @@ namespace Oxide.Plugins
             _tunnelData.MigrateTriggers();
             _mapData = StoredMapData.Load();
 
-            _immortalProtection = ScriptableObject.CreateInstance<ProtectionProperties>();
-            _immortalProtection.name = "AutomatedWorkcartsProtection";
-            _immortalProtection.Add(1);
-
             _startupCoroutine = ServerMgr.Instance.StartCoroutine(DoStartupRoutine());
         }
 
@@ -82,8 +77,6 @@ namespace Oxide.Plugins
             OnServerSave();
             _triggerManager.DestroyAll();
             TrainController.DestroyAll();
-
-            UnityEngine.Object.Destroy(_immortalProtection);
 
             _mapData = null;
             _pluginData = null;
@@ -120,6 +113,17 @@ namespace Oxide.Plugins
                 return;
 
             _workcartManager.Unregister(workcart);
+        }
+
+        private bool? OnEntityTakeDamage(TrainEngine workcart)
+        {
+            if (IsWorkcartAutomated(workcart))
+            {
+                // Return true (standard) to cancel default behavior (prevent damage).
+                return true;
+            }
+
+            return null;
         }
 
         private void OnEntityEnter(WorkcartTrigger trigger, TrainEngine workcart)
@@ -2399,7 +2403,6 @@ namespace Oxide.Plugins
             public TrainEngine Workcart { get; private set; }
             public Transform Transform { get; private set; }
 
-            private ProtectionProperties _originalProtection;
             private MapMarkerGenericRadius _genericMarker;
             private VendingMachineMapMarker _vendingMarker;
 
@@ -2419,9 +2422,6 @@ namespace Oxide.Plugins
                     return;
 
                 Transform = Workcart.transform;
-                _originalProtection = Workcart.baseProtection;
-                Workcart.baseProtection = _pluginInstance._immortalProtection;
-
                 Workcart.SetHealth(Workcart.MaxHealth());
 
                 AddConductor();
@@ -2695,9 +2695,6 @@ namespace Oxide.Plugins
 
                 if (_vendingMarker != null)
                     _vendingMarker.Kill();
-
-                if (_originalProtection != null)
-                    Workcart.baseProtection = _originalProtection;
 
                 DisableUnlimitedFuel();
                 EnableHazardChecks();
