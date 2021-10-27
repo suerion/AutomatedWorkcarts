@@ -3485,6 +3485,64 @@ namespace Oxide.Plugins
                 [Lang.InfoTriggerDepartureDirection] = "Departure direction: {0}",
                 [Lang.InfoTriggerTrackSelection] = "Track selection: {0}",
             }, this, "en");
+            //Adding translation in portuguese brazil
+            lang.RegisterMessages(new Dictionary<string, string>
+            {
+                [Lang.ErrorNoPermission] = "Você não tem permissão para fazer isso.",
+                [Lang.ErrorNoTriggers] = "Não há gatilhos de carrinho de trabalho neste mapa.",
+                [Lang.ErrorTriggerNotFound] = "Erro: Trigger id #<color=#fd4>{0}{1}</color> não encontrado.",
+                [Lang.ErrorNoTrackFound] = "Erro: nenhuma trilha encontrada nas proximidades.",
+                [Lang.ErrorNoWorkcartFound] = "Erro: Nenhum carrinho de trabalho encontrado.",
+                [Lang.ErrorAutomateBlocked] = "Erro: outro plug-in bloqueado automatizando esse carrinho de trabalho.",
+                [Lang.ErrorUnsupportedTunnel] = "Erro: não é um túnel ferroviário compatível.",
+                [Lang.ErrorTunnelTypeDisabled] = "Erro: o tipo de túnel <color=#fd4>{0}</color> está atualmente desativado.",
+                [Lang.ErrorMapTriggersDisabled] = "Erro: os gatilhos do mapa estão desativados.",
+                [Lang.ErrorMaxConductors] = "Erro: já existem <color=#fd4>{0}</color> de <color=#fd4>{1}</color>condutores.",
+                [Lang.ErrorWorkcartOwned] = "Erro: esse carrinho de trabalho tem um proprietário.",
+                [Lang.ErrorNoAutomatedWorkcarts] = "Erro: não há carrinhos de trabalho automatizados.",
+
+                [Lang.ToggleOnSuccess] = "Esse carrinho de trabalho agora é automatizado.",
+                [Lang.ToggleOnWithRouteSuccess] = "Esse carrinho de trabalho agora é automatizado com rota <color=#fd4>@{0}</color>.",
+                [Lang.ToggleOffSuccess] = "Esse carrinho de trabalho não é mais automatizado.",
+                [Lang.ResetAllSuccess] = "Todos os {0} condutores foram removidos.",
+                [Lang.ShowTriggersSuccess] = "Mostrando todos os gatilhos para <color=#fd4>{0}</color>.",
+                [Lang.ShowTriggersWithRouteSuccess] = "Mostrando todos os gatilhos para a rota <color=#fd4>@{0}</color> para <color=#fd4>{1}</color>",
+
+                [Lang.AddTriggerSyntax] = "Syntax: <color=#fd4>{0} <option1> <option2> ...</color>\n{1}",
+                [Lang.AddTriggerSuccess] = "Gatilho adicionado com sucesso #<color=#fd4>{0}{1}</color>.",
+                [Lang.UpdateTriggerSyntax] = "Syntax: <color=#fd4>{0} <id> <option1> <option2> ...</color>\n{1}",
+                [Lang.UpdateTriggerSuccess] = "Gatilho atualizado com sucesso #<color=#fd4>{0}{1}</color>",
+                [Lang.MoveTriggerSuccess] = "Gatilho movido com sucesso #<color=#fd4>{0}{1}</color>",
+                [Lang.SimpleTriggerSyntax] = "Syntax: <color=#fd4>{0} <id></color>",
+                [Lang.RemoveTriggerSuccess] = "Trigger #<color=#fd4>{0}{1}</color> removido com sucesso.",
+
+                [Lang.InfoConductorCountLimited] = "Condutores totais: <color=#fd4>{0}/{1}</color>.",
+                [Lang.InfoConductorCountUnlimited] = "Condutores totais: <color=#fd4>{0}</color>.",
+
+                [Lang.HelpSpeedOptions] = "Velocidades: {0}",
+                [Lang.HelpDirectionOptions] = "Direções: {0}",
+                [Lang.HelpTrackSelectionOptions] = "Seleção de faixa: {0}",
+                [Lang.HelpOtherOptions] = "Outras opções: <color=#fd4>Conductor</color> | <color=#fd4>Brake</color> | <color=#fd4>Destroy</color> | <color=#fd4>@ROUTE_NAME</color> | <color=#fd4>Enabled</color> | <color=#fd4>Disabled</color>",
+
+                [Lang.InfoTrigger] = "Acionador de carrinho de trabalho #{0}{1}",
+                [Lang.InfoTriggerMapPrefix] = "M",
+                [Lang.InfoTriggerTunnelPrefix] = "T",
+
+                [Lang.InfoTriggerrDisabled] = "DESATIVADO",
+                [Lang.InfoTriggerMap] = "Específico do mapa",
+                [Lang.InfoTriggerRoute] = "Rota: @{0}",
+                [Lang.InfoTriggerTunnel] = "Tipo de túnel: {0} (x{1})",
+                [Lang.InfoTriggerAddConductor] = "Adiciona Condutor",
+                [Lang.InfoTriggerDestroy] = "Destrói o carrinho de trabalho",
+                [Lang.InfoTriggerStopDuration] = "Duração da parada: {0}s",
+
+                [Lang.InfoTriggerSpeed] = "Velocidade: {0}",
+                [Lang.InfoTriggerBrakeToSpeed] = "Freie para aumentar a velocidade: {0}",
+                [Lang.InfoTriggerDepartureSpeed] = "Velocidade de partida: {0}",
+                [Lang.InfoTriggerDirection] = "Direção: {0}",
+                [Lang.InfoTriggerDepartureDirection] = "Direção de partida: {0}",
+                [Lang.InfoTriggerTrackSelection] = "Seleção de faixa: {0}",
+            }, this, "pt-BR");
         }
 
         #endregion
