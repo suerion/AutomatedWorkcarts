@@ -17,7 +17,7 @@ using static TrainTrackSpline;
 
 namespace Oxide.Plugins
 {
-    [Info("Automated Workcarts", "WhiteThunder", "0.25.0")]
+    [Info("Automated Workcarts", "WhiteThunder", "0.25.1")]
     [Description("Automates workcarts with NPC conductors.")]
     internal class AutomatedWorkcarts : CovalencePlugin
     {
@@ -2676,13 +2676,14 @@ namespace Oxide.Plugins
 
             private void EnableUnlimitedFuel()
             {
-                Workcart.fuelSystem.cachedHasFuel = true;
-                Workcart.fuelSystem.nextFuelCheckTime = float.MaxValue;
+                var fuelSystem = Workcart.GetFuelSystem();
+                fuelSystem.cachedHasFuel = true;
+                fuelSystem.nextFuelCheckTime = float.MaxValue;
             }
 
             private void DisableUnlimitedFuel()
             {
-                Workcart.fuelSystem.nextFuelCheckTime = 0;
+                Workcart.GetFuelSystem().nextFuelCheckTime = 0;
             }
 
             private void OnDestroy()
