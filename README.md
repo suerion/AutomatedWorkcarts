@@ -5,8 +5,6 @@
 - Provides default triggers for underground tunnels
 - Optional map markers for automated workcarts
 
-**Note: This plugin is early access. Features are subject to change. Please provide feedback in the plugin Help section to help guide development.**
-
 ## How it works
 
 A workcart can be automated one of two ways:
