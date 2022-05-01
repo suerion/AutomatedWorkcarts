@@ -294,58 +294,6 @@ The best practice is to have separate, independent tracks for player vs automate
 
 ## Localization
 
-```json
-{
-  "Error.NoPermission": "You don't have permission to do that.",
-  "Error.NoTriggers": "There are no workcart triggers on this map.",
-  "Error.TriggerNotFound": "Error: Trigger id #<color=#fd4>{0}{1}</color> not found.",
-  "Error.ErrorNoTrackFound": "Error: No track found nearby.",
-  "Error.NoWorkcartFound": "Error: No workcart found.",
-  "Error.AutomateBlocked": "Error: Another plugin blocked automating that workcart.",
-  "Error.UnsupportedTunnel": "Error: Not a supported train tunnel.",
-  "Error.TunnelTypeDisabled": "Error: Tunnel type <color=#fd4>{0}</color> is currently disabled.",
-  "Error.MapTriggersDisabled": "Error: Map triggers are disabled.",
-  "Error.MaxConductors": "Error: There are already <color=#fd4>{0}</color> out of <color=#fd4>{1}</color> conductors.",
-  "Error.WorkcartOwned": "Error: That workcart has an owner.",
-  "Error.NoAutomatedWorkcarts": "Error: There are no automated workcarts.",
-  "Toggle.Success.On": "That workcart is now automated.",
-  "Toggle.Success.On.WithRoute": "That workcart is now automated with route <color=#fd4>@{0}</color>.",
-  "Toggle.Success.Off": "That workcart is no longer automated.",
-  "ResetAll.Success": "All {0} conductors have been removed.",
-  "ShowTriggers.Success": "Showing all triggers for <color=#fd4>{0}</color>.",
-  "ShowTriggers.WithRoute.Success": "Showing all triggers for route <color=#fd4>@{0}</color> for <color=#fd4>{1}</color>",
-  "AddTrigger.Syntax": "Syntax: <color=#fd4>{0} <option1> <option2> ...</color>\n{1}",
-  "AddTrigger.Success": "Successfully added trigger #<color=#fd4>{0}{1}</color>.",
-  "UpdateTrigger.Syntax": "Syntax: <color=#fd4>{0} <id> <option1> <option2> ...</color>\n{1}",
-  "UpdateTrigger.Success": "Successfully updated trigger #<color=#fd4>{0}{1}</color>",
-  "MoveTrigger.Success": "Successfully moved trigger #<color=#fd4>{0}{1}</color>",
-  "Trigger.SimpleSyntax": "Syntax: <color=#fd4>{0} <id></color>",
-  "RemoveTrigger.Success": "Trigger #<color=#fd4>{0}{1}</color> successfully removed.",
-  "Info.ConductorCount.Limited": "Total conductors: <color=#fd4>{0}/{1}</color>.",
-  "Info.ConductorCount.Unlimited": "Total conductors: <color=#fd4>{0}</color>.",
-  "Help.SpeedOptions": "Speeds: {0}",
-  "Help.DirectionOptions": "Directions: {0}",
-  "Help.TrackSelectionOptions": "Track selection: {0}",
-  "Help.OtherOptions": "Other options: <color=#fd4>Conductor</color> | <color=#fd4>Brake</color> | <color=#fd4>Destroy</color> | <color=#fd4>@ROUTE_NAME</color> | <color=#fd4>Enabled</color> | <color=#fd4>Disabled</color>",
-  "Info.Trigger": "Workcart Trigger #{0}{1}",
-  "Info.Trigger.Prefix.Map": "M",
-  "Info.Trigger.Prefix.Tunnel": "T",
-  "Info.Trigger.Disabled": "DISABLED",
-  "Info.Trigger.Map": "Map-specific",
-  "Info.Trigger.Route": "Route: @{0}",
-  "Info.Trigger.Tunnel": "Tunnel type: {0} (x{1})",
-  "Info.Trigger.Conductor": "Adds Conductor",
-  "Info.Trigger.Destroy": "Destroys workcart",
-  "Info.Trigger.StopDuration": "Stop duration: {0}s",
-  "Info.Trigger.Speed": "Speed: {0}",
-  "Info.Trigger.BrakeToSpeed": "Brake to speed: {0}",
-  "Info.Trigger.DepartureSpeed": "Departure speed: {0}",
-  "Info.Trigger.Direction": "Direction: {0}",
-  "Info.Trigger.DepartureDirection": "Departure direction: {0}",
-  "Info.Trigger.TrackSelection": "Track selection: {0}"
-}
-```
-
 ## Developer API
 
 #### API_AutomateWorkcart
