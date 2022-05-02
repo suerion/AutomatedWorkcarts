@@ -131,6 +131,8 @@ To see the triggers visually, grant the `automatedworkcarts.managetriggers` perm
 - `aw.removetrigger <id>` -- Removes the specified trigger.
 - `aw.enabletrigger <id>` -- Enables the specified trigger. This is identical to `aw.updatetrigger <id> enabled`.
 - `aw.disabletrigger <id>` -- Disables the specified trigger. This is identical to `aw.updatetrigger <id> disabled`. Disabled triggers are ignored by workcarts and are colored gray.
+- `aw.addtriggercommand <id> <command>` -- Adds the specified command to the trigger, which will be executed whenever a workcart passes through the trigger. You can use the magic variable `$id` in the command which will be replaced by the workcart's Net ID.
+- `aw.removetriggercommand <id> <number>` -- Removes the specified command from the trigger. The command number will be 1, 2, 3, etc. and will be visible on the trigger info when using `aw.showtriggers`.
 
 Tip: For the commands that update, move or remove triggers, you can skip the `<id>` argument if you are aiming at a nearby trigger.
 
@@ -146,6 +148,8 @@ The following command aliases are available:
 - `aw.removetrigger` -> `awt.remove`
 - `aw.enabletrigger` -> `awt.enable`
 - `aw.disabletrigger` -> `awt.disable`
+- `aw.addtriggercommand` -> `awt.addcommand`
+- `aw.removetriggercommand` -> `awt.removecommand`
 
 ### Command examples
 

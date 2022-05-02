@@ -11,6 +11,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
+using System.Text.RegularExpressions;
 using UnityEngine;
 using static TrainEngine;
 using static TrainTrackSpline;
@@ -38,6 +39,9 @@ namespace Oxide.Plugins
         private const string ShopkeeperPrefab = "assets/prefabs/npc/bandit/shopkeepers/bandit_shopkeeper.prefab";
         private const string GenericMapMarkerPrefab = "assets/prefabs/tools/map/genericradiusmarker.prefab";
         private const string VendingMapMarkerPrefab = "assets/prefabs/deployable/vendingmachine/vending_mapmarker.prefab";
+        private const string IdPlaceholder = "$id";
+
+        private static readonly Regex IdRegex = new Regex("\\$id", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
         private WorkcartTriggerManager _triggerManager = new WorkcartTriggerManager();
         private AutomatedWorkcartManager _workcartManager = new AutomatedWorkcartManager();
@@ -570,6 +574,58 @@ namespace Oxide.Plugins
             var basePlayer = player.Object as BasePlayer;
             _triggerManager.ShowAllRepeatedly(basePlayer);
             ReplyToPlayer(player, Lang.RemoveTriggerSuccess, GetTriggerPrefix(player, triggerData), triggerData.Id);
+        }
+
+        [Command("aw.addtriggercommand", "awt.addcommand")]
+        private void CommandAddCommand(IPlayer player, string cmd, string[] args)
+        {
+            TriggerData triggerData;
+            string[] optionArgs;
+
+            if (!VerifyCanModifyTrigger(player, cmd, args, Lang.AddCommandSyntax, out triggerData, out optionArgs))
+                return;
+
+            if (optionArgs.Length < 1)
+            {
+                ReplyToPlayer(player, Lang.AddCommandSyntax, cmd);
+                return;
+            }
+
+            var quotedCommands = optionArgs.Select(command => command.Contains(" ") ? $"\"{command}\"" : command).ToArray();
+            _triggerManager.AddTriggerCommand(triggerData, string.Join(" ", quotedCommands));
+
+            var basePlayer = player.Object as BasePlayer;
+            _triggerManager.ShowAllRepeatedly(basePlayer);
+            ReplyToPlayer(player, Lang.UpdateTriggerSuccess, GetTriggerPrefix(player, triggerData), triggerData.Id);
+        }
+
+        [Command("aw.removetriggercommand", "awt.removecommand")]
+        private void CommandRemoveCommand(IPlayer player, string cmd, string[] args)
+        {
+            TriggerData triggerData;
+            string[] optionArgs;
+
+            if (!VerifyCanModifyTrigger(player, cmd, args, Lang.RemoveCommandSyntax, out triggerData, out optionArgs))
+                return;
+
+            int commandIndex;
+            if (optionArgs.Length < 1 || !int.TryParse(optionArgs[0], out commandIndex))
+            {
+                ReplyToPlayer(player, Lang.RemoveCommandSyntax, cmd);
+                return;
+            }
+
+            if (commandIndex < 1 || commandIndex > triggerData.Commands.Count)
+            {
+                ReplyToPlayer(player, Lang.RemoveCommandErrorIndex, commandIndex);
+                return;
+            }
+
+            _triggerManager.RemoveTriggerCommand(triggerData, commandIndex - 1);
+
+            var basePlayer = player.Object as BasePlayer;
+            _triggerManager.ShowAllRepeatedly(basePlayer);
+            ReplyToPlayer(player, Lang.UpdateTriggerSuccess, GetTriggerPrefix(player, triggerData), triggerData.Id);
         }
 
         [Command("aw.showtriggers", "awt.show")]
@@ -1421,6 +1477,9 @@ namespace Oxide.Plugins
             [JsonProperty("DepartureSpeed", DefaultValueHandling = DefaultValueHandling.Ignore)]
             public string DepartureSpeed;
 
+            [JsonProperty("Commands", DefaultValueHandling = DefaultValueHandling.Ignore)]
+            public List<string> Commands;
+
             [JsonIgnore]
             public WorkcartTriggerType TriggerType => TunnelType != null ? WorkcartTriggerType.Tunnel : WorkcartTriggerType.Map;
 
@@ -1536,6 +1595,7 @@ namespace Oxide.Plugins
                 Direction = triggerData.Direction;
                 TrackSelection = triggerData.TrackSelection;
                 StopDuration = triggerData.StopDuration;
+                Commands = triggerData.Commands;
             }
 
             public TriggerData Clone()
@@ -1935,6 +1995,21 @@ namespace Oxide.Plugins
                 SaveTrigger(triggerData);
             }
 
+            public void AddTriggerCommand(TriggerData triggerData, string command)
+            {
+                if (triggerData.Commands.Contains(command, StringComparer.InvariantCultureIgnoreCase))
+                    return;
+
+                triggerData.Commands.Add(command);
+                SaveTrigger(triggerData);
+            }
+
+            public void RemoveTriggerCommand(TriggerData triggerData, int index)
+            {
+                triggerData.Commands.RemoveAt(index);
+                SaveTrigger(triggerData);
+            }
+
             private void DestroyTriggerController(BaseTriggerController triggerController)
             {
                 UnregisterTriggerFromSpline(triggerController);
@@ -2129,6 +2204,17 @@ namespace Oxide.Plugins
                     var departureSpeedInstruction = triggerData.GetDepartureSpeedInstruction();
                     if (speedInstruction == SpeedInstruction.Zero)
                         infoLines.Add(_pluginInstance.GetMessage(player, Lang.InfoTriggerDepartureSpeed, departureSpeedInstruction));
+                }
+
+                if (triggerData.Commands != null && triggerData.Commands.Count > 0)
+                {
+                    var commandList = "";
+                    for (var i = 0; i < triggerData.Commands.Count; i++)
+                    {
+                        commandList += $"\n({i+1}): {triggerData.Commands[i]}";
+                    }
+
+                    infoLines.Add(_pluginInstance.GetMessage(player, Lang.InfoTriggerCommands, commandList));
                 }
 
                 var textPosition = trigger.WorldPosition + new Vector3(0, 1.5f + infoLines.Count * 0.1f, 0);
@@ -2403,6 +2489,7 @@ namespace Oxide.Plugins
             public TrainEngine Workcart { get; private set; }
             public Transform Transform { get; private set; }
 
+            private string _netIdString;
             private MapMarkerGenericRadius _genericMarker;
             private VendingMachineMapMarker _vendingMarker;
 
@@ -2418,11 +2505,12 @@ namespace Oxide.Plugins
             private void Awake()
             {
                 Workcart = GetComponent<TrainEngine>();
-                if (Workcart == null)
+                if (Workcart == null || Workcart.IsDestroyed)
                     return;
 
                 Transform = Workcart.transform;
                 Workcart.SetHealth(Workcart.MaxHealth());
+                _netIdString = Workcart.net.ID.ToString();
 
                 AddConductor();
                 MaybeAddMapMarkers();
@@ -2476,6 +2564,18 @@ namespace Oxide.Plugins
             {
                 if (!triggerData.MatchesRoute(_workcartData.Route))
                     return;
+
+                if (triggerData.Commands != null && triggerData.Commands.Count > 0)
+                {
+                    foreach (var command in triggerData.Commands)
+                    {
+                        var fullCommand = IdRegex.Replace(command, _netIdString);
+                        if (!string.IsNullOrWhiteSpace(fullCommand))
+                        {
+                            _pluginInstance?.server.Command(fullCommand);
+                        }
+                    }
+                }
 
                 if (triggerData.Destroy)
                 {
@@ -3399,6 +3499,10 @@ namespace Oxide.Plugins
             public const string SimpleTriggerSyntax = "Trigger.SimpleSyntax";
             public const string RemoveTriggerSuccess = "RemoveTrigger.Success";
 
+            public const string AddCommandSyntax = "AddCommand.Syntax";
+            public const string RemoveCommandSyntax = "RemoveCommand.Syntax";
+            public const string RemoveCommandErrorIndex = "RemoveCommand.Error.Index";
+
             public const string InfoConductorCountLimited = "Info.ConductorCount.Limited";
             public const string InfoConductorCountUnlimited = "Info.ConductorCount.Unlimited";
 
@@ -3425,6 +3529,7 @@ namespace Oxide.Plugins
             public const string InfoTriggerDirection = "Info.Trigger.Direction";
             public const string InfoTriggerDepartureDirection = "Info.Trigger.DepartureDirection";
             public const string InfoTriggerTrackSelection = "Info.Trigger.TrackSelection";
+            public const string InfoTriggerCommands = "Info.Trigger.Command";
         }
 
         protected override void LoadDefaultMessages()
@@ -3459,6 +3564,10 @@ namespace Oxide.Plugins
                 [Lang.SimpleTriggerSyntax] = "Syntax: <color=#fd4>{0} <id></color>",
                 [Lang.RemoveTriggerSuccess] = "Trigger #<color=#fd4>{0}{1}</color> successfully removed.",
 
+                [Lang.AddCommandSyntax] = "Syntax: <color=#fd4>{0} <id> <command></color>",
+                [Lang.RemoveCommandSyntax] = "Syntax: <color=#fd4>{0} <id> <number></color>",
+                [Lang.RemoveCommandErrorIndex] = "Error: Invalid command index <color=#fd4>{0}</color>.",
+
                 [Lang.InfoConductorCountLimited] = "Total conductors: <color=#fd4>{0}/{1}</color>.",
                 [Lang.InfoConductorCountUnlimited] = "Total conductors: <color=#fd4>{0}</color>.",
 
@@ -3485,8 +3594,10 @@ namespace Oxide.Plugins
                 [Lang.InfoTriggerDirection] = "Direction: {0}",
                 [Lang.InfoTriggerDepartureDirection] = "Departure direction: {0}",
                 [Lang.InfoTriggerTrackSelection] = "Track selection: {0}",
+                [Lang.InfoTriggerCommands] = "Commands: {0}",
             }, this, "en");
-            //Adding translation in portuguese brazil
+
+            // Brazilian Portuguese
             lang.RegisterMessages(new Dictionary<string, string>
             {
                 [Lang.ErrorNoPermission] = "Você não tem permissão para fazer isso.",
@@ -3517,13 +3628,17 @@ namespace Oxide.Plugins
                 [Lang.SimpleTriggerSyntax] = "Syntax: <color=#fd4>{0} <id></color>",
                 [Lang.RemoveTriggerSuccess] = "Trigger #<color=#fd4>{0}{1}</color> removido com sucesso.",
 
+                [Lang.AddCommandSyntax] = "Syntax: <color=#fd4>{0} <id> <comando></color>",
+                [Lang.RemoveCommandSyntax] = "Syntax: <color=#fd4>{0} <id> <número></color>",
+                [Lang.RemoveCommandErrorIndex] = "Erro: índice de comando inválido <color=#fd4>{0}</color>.",
+
                 [Lang.InfoConductorCountLimited] = "Condutores totais: <color=#fd4>{0}/{1}</color>.",
                 [Lang.InfoConductorCountUnlimited] = "Condutores totais: <color=#fd4>{0}</color>.",
 
                 [Lang.HelpSpeedOptions] = "Velocidades: {0}",
                 [Lang.HelpDirectionOptions] = "Direções: {0}",
                 [Lang.HelpTrackSelectionOptions] = "Seleção de faixa: {0}",
-                [Lang.HelpOtherOptions] = "Outras opções: <color=#fd4>Conductor</color> | <color=#fd4>Brake</color> | <color=#fd4>Destroy</color> | <color=#fd4>@ROUTE_NAME</color> | <color=#fd4>Enabled</color> | <color=#fd4>Disabled</color>",
+                [Lang.HelpOtherOptions] = "Outras opções: <color=#fd4>Conductor</color> | <color=#fd4>Brake</color> | <color=#fd4>Destroy</color> | <color=#fd4>@ROUTE_NAME</color> | <color=#fd4>!EVENT_NAME</color> | <color=#fd4>Enabled</color> | <color=#fd4>Disabled</color>",
 
                 [Lang.InfoTrigger] = "Acionador de carrinho de trabalho #{0}{1}",
                 [Lang.InfoTriggerMapPrefix] = "M",
@@ -3543,6 +3658,7 @@ namespace Oxide.Plugins
                 [Lang.InfoTriggerDirection] = "Direção: {0}",
                 [Lang.InfoTriggerDepartureDirection] = "Direção de partida: {0}",
                 [Lang.InfoTriggerTrackSelection] = "Seleção de faixa: {0}",
+                [Lang.InfoTriggerCommands] = "Eventos: {0}",
             }, this, "pt-BR");
         }
 
