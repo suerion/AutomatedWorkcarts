@@ -175,7 +175,7 @@ namespace Oxide.Plugins
                 {
                     forwardController.DepartEarlyIfStoppedOrStopping();
                 }
-                else if (Math.Abs(EngineThrottleToNumber(forwardWorkcart.CurThrottleSetting)) < Math.Abs(EngineThrottleToNumber(backwardWorkcart.CurThrottleSetting)))
+                else if (_pluginConfig.BulldozeOffendingWorkcarts && Math.Abs(EngineThrottleToNumber(forwardWorkcart.CurThrottleSetting)) < Math.Abs(EngineThrottleToNumber(backwardWorkcart.CurThrottleSetting)))
                 {
                     // Destroy the forward workcart if it's not automated and going too slow.
                     LogWarning($"Destroying non-automated workcart due to insufficient speed.");
