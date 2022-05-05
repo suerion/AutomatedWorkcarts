@@ -2,27 +2,40 @@
 
 - Automates workcarts with NPC conductors
 - Uses configurable triggers to instruct conductors how to navigate
+- Optionally spawns workcarts at trigger locations
 - Provides default triggers for underground tunnels
 - Optional map markers for automated workcarts
+
+Note: This plugin is not designed for the procedurally generated aboveground rail network, nor is it designed for the new train carriages. Further development will go into this plugin when Facepunch finalizes the aboveground rail network by doubling the tracks and adding designated stopping locations.
 
 ## How it works
 
 A workcart can be automated one of two ways:
+
 - By running the `aw.toggle` command while looking at the workcart.
 - By placing a trigger on the workcart spawn position, so that it will receive a conductor when it spawns.
 
 Automating a workcart dismounts the current driver if present, and adds a conductor NPC.
+
 - The conductor and workcart are invincible, and the workcart does not require fuel.
 - If the workcart was automated using the `aw.toggle` command, the conductor will start driving based on the `DefaultSpeed` and `DefaultTrackSelection` in the plugin configuration.
 - If the workcart was automated using a trigger, it will use the trigger options, falling back to the plugin configuration for anything not specified by the trigger.
 
-The main purpose of triggers, aside from determining which workcarts will be automated, is to instruct conductors how to navigate the tracks. Each trigger has several properties, including direction (e., `Fwd`, `Rev`, `Invert`), speed (e.g, `Hi`, `Med`, `Lo`, `Zero`), track selection (e.g., `Default`, `Left`, `Right`), stop duration (in seconds), and departure speed/direction. When a workcart passes through a trigger while a conductor is present, the workcart's instructions will change based on the trigger properties. For example, if a workcart is currently following the instructions `Fwd` + `Hi` + `Left`, and then passes through a trigger that specifies only track selection `Right`, the workcart instructions will change to `Fwd` + `Hi` + `Right`, causing the workcart to turn right at every intersection it comes to, until it passes through a trigger that instructs otherwise.
+### How triggers work
+
+Triggers can be used to achieve multiple goals:
+
+- To spawn workcarts
+- To turn workcarts into automated workcarts
+- To instruct automated workcarts how to navigate the tracks
+
+Each trigger can have multiple properties, including direction (e., `Fwd`, `Rev`, `Invert`), speed (e.g, `Hi`, `Med`, `Lo`, `Zero`), track selection (e.g., `Default`, `Left`, `Right`), stop duration (in seconds), and departure speed/direction. When an automated workcart passes through a trigger, its instructions will change based on the trigger properties. For example, if a workcart is currently following the instructions `Fwd` + `Hi` + `Left`, and then passes through a trigger that specifies only track selection `Right`, the workcart instructions will change to `Fwd` + `Hi` + `Right`, causing the workcart to turn right at every intersection it comes to, until it passes through a trigger that instructs otherwise.
 
 ### Trigger types
 
 #### Map specific triggers
 
-- Can be placed anywhere on train tracks, even in underground tunnels.
+- Can be placed anywhere on train tracks, above or below ground.
 - Only apply to the map they were placed on.
 - Enabled via the `EnableMapTriggers` configuration option.
 - Added with the `aw.addtrigger` or `awt.add` command.
@@ -31,7 +44,7 @@ The main purpose of triggers, aside from determining which workcarts will be aut
 
 #### Tunnel triggers
 
-- Can be placed only in the vanilla train tunnels (usually underground).
+- Can be placed only in the vanilla train tunnels.
 - Automatically replicate at all tunnels of the same type.
 - Enabled via the `EnableTunnelTriggers` -> `*` options.
 - Added with the `aw.addtunneltrigger` or `awt.addt` command.
@@ -76,6 +89,8 @@ To see the triggers visually, grant the `automatedworkcarts.managetriggers` perm
 
 ### How to: Automate aboveground workcarts
 
+Note: This section was originally written assuming you are using a custom map to add aboveground rails, not the new procedurally generated aboveground rail network.
+
 1. If you are a map developer, please see the "Tips for map developers" section below. Designing the tracks sensibly will simplify setting up automated routes.
 2. Carefully examine the tracks on your map to determine the route(s) you would like workcarts to use.
 3. Make sure `EnableMapTriggers` is set to `true` in the plugin configuration. This option is enabled by default if installing the plugin from scratch.
@@ -111,9 +126,10 @@ To see the triggers visually, grant the `automatedworkcarts.managetriggers` perm
   - Direction options: `Fwd` | `Rev` | `Invert`.
   - Track selection options: `Default` | `Left` | `Right` | `Swap`.
   - Other options:
+    - `Spawn` -- Spawns a workcart at this trigger. Each trigger can spawn at most one workcart. The workcart will despawn when the trigger is removed, when the trigger is disabled, when this property is removed from the trigger, or when the plugin reloads. If the workcart is destroyed, the workcart will attempt to respawn within 30 seconds.
     - `Conductor` -- Adds a conductor to the workcart if not already present. Recommended to place on some or all workcart spawn locations, depending on how many workcarts you want to automate.
       - Note: Owned workcarts cannot receive conductors. Vanilla workcarts don't have owners, but most plugins that spawn vehicles for players will assign ownership.
-    - `Brake` -- Instructs the workcart to brake until it reaches the designated speed. For example, if the workcart is going `Fwd_Hi` and enters a `Brake Med` trigger, it will temporarily go `Rev_Lo` until it slows down enough, then it will go `Fwd Med`.
+    - `Brake` -- Instructs the workcart to brake until it reaches the designated speed. For example, if the workcart is going `Fwd_Hi` and enters a `Brake Med` trigger, it will temporarily go `Rev_Lo` until it slows down enough, then it will go `Fwd_Med`.
     - `Destroy` -- Destroys the workcart. This is intended for lazy track designs. You should not need this if you design your routes thoughtfully.
     - `@<route_name>` -- Instructs the workcart to ignore this trigger if it's not assigned this route (replace `<route_name>` with the name you want).
       - If the trigger has the `Conductor` property and the workcart does not already have a conductor, it will be assigned this route.
@@ -128,6 +144,7 @@ To see the triggers visually, grant the `automatedworkcarts.managetriggers` perm
   - Options are the same as for `aw.addtrigger`.
   - This is useful for removing properties from a trigger (without having to remove and add it back) since `aw.updatetrigger` does not remove properties.
 - `aw.movetrigger <id>` -- Moves the specified trigger to the track position where the player is aiming.
+- `aw.rotatetrigger <id>` -- Rotates the specified trigger to where the player is facing. This is only useful for `Spawn` triggers since it determines which way the workcart will be facing when spawned.
 - `aw.removetrigger <id>` -- Removes the specified trigger.
 - `aw.enabletrigger <id>` -- Enables the specified trigger. This is identical to `aw.updatetrigger <id> enabled`.
 - `aw.disabletrigger <id>` -- Disables the specified trigger. This is identical to `aw.updatetrigger <id> disabled`. Disabled triggers are ignored by workcarts and are colored gray.
@@ -145,6 +162,7 @@ The following command aliases are available:
 - `aw.updatetrigger` -> `awt.update`
 - `aw.replacetrigger` -> `awt.replace`
 - `aw.movetrigger` -> `awt.move`
+- `aw.rotatetrigger` -> `awt.rotate`
 - `aw.removetrigger` -> `awt.remove`
 - `aw.enabletrigger` -> `awt.enable`
 - `aw.disabletrigger` -> `awt.disable`
@@ -256,10 +274,6 @@ Default configuration:
 - `TriggerDisplayDistance ` -- Determines how close you must be to a trigger to see it when viewing triggers.
 
 ## FAQ
-
-#### How can I get workcarts to spawn on custom maps?
-
-Use a free plugin called Workcart Spawner from another website (not allowed to post a link here).
 
 #### Will this plugin cause lag?
 

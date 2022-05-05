@@ -36,6 +36,8 @@ namespace Oxide.Plugins
         private const string PermissionToggle = "automatedworkcarts.toggle";
         private const string PermissionManageTriggers = "automatedworkcarts.managetriggers";
 
+        private const string WorkcartPrefab = "assets/content/vehicles/workcart/workcart.entity.prefab";
+        private const string AboveGroundWorkcartPrefab = "assets/content/vehicles/workcart/workcart_aboveground.entity.prefab";
         private const string ShopkeeperPrefab = "assets/prefabs/npc/bandit/shopkeepers/bandit_shopkeeper.prefab";
         private const string GenericMapMarkerPrefab = "assets/prefabs/tools/map/genericradiusmarker.prefab";
         private const string VendingMapMarkerPrefab = "assets/prefabs/deployable/vendingmachine/vending_mapmarker.prefab";
@@ -576,6 +578,31 @@ namespace Oxide.Plugins
             ReplyToPlayer(player, Lang.RemoveTriggerSuccess, GetTriggerPrefix(player, triggerData), triggerData.Id);
         }
 
+        [Command("aw.rotatetrigger", "awt.rotate")]
+        private void CommandSetTriggerRotation(IPlayer player, string cmd, string[] args)
+        {
+            TriggerData triggerData;
+            string[] optionArgs;
+
+            if (!VerifyCanModifyTrigger(player, cmd, args, Lang.SimpleTriggerSyntax, out triggerData, out optionArgs))
+                return;
+
+            var basePlayer = player.Object as BasePlayer;
+            var playerPosition = basePlayer.transform.position;
+
+            var triggerInstance = _triggerManager.FindNearestTrigger(playerPosition, triggerData);
+            var rotation = Quaternion.LookRotation(playerPosition - triggerInstance.WorldPosition);
+            var tunnelTriggerInstance = triggerInstance as TunnelTriggerInstance;
+            if (tunnelTriggerInstance != null)
+            {
+                rotation *= Quaternion.Inverse(tunnelTriggerInstance.DungeonCellWrapper.Rotation);
+            }
+            _triggerManager.RotateTrigger(triggerData, (rotation.eulerAngles.y + 180) % 360);
+
+            _triggerManager.ShowAllRepeatedly(basePlayer);
+            ReplyToPlayer(player, Lang.RotateTriggerSuccess, GetTriggerPrefix(player, triggerData), triggerData.Id);
+        }
+
         [Command("aw.addtriggercommand", "awt.addcommand")]
         private void CommandAddCommand(IPlayer player, string cmd, string[] args)
         {
@@ -835,25 +862,31 @@ namespace Oxide.Plugins
                 return true;
             }
 
-            if (argLower == "brake")
+            if (argLower.StartsWith("brake"))
             {
                 triggerData.Brake = true;
                 return true;
             }
 
-            if (argLower == "destroy")
+            if (argLower.StartsWith("destroy"))
             {
                 triggerData.Destroy = true;
                 return true;
             }
 
-            if (argLower == "enabled")
+            if (argLower.StartsWith("spawn"))
+            {
+                triggerData.Spawner = true;
+                return true;
+            }
+
+            if (argLower.StartsWith("enable"))
             {
                 triggerData.Enabled = true;
                 return true;
             }
 
-            if (argLower == "disabled")
+            if (argLower.StartsWith("disable"))
             {
                 triggerData.Enabled = false;
                 return true;
@@ -1304,11 +1337,9 @@ namespace Oxide.Plugins
                     _boundingBox = new OBB(Position + new Vector3(0, dimensions.y / 2, 0), dimensions, Rotation);
             }
 
-            // World position to local position.
             public Vector3 InverseTransformPoint(Vector3 worldPosition) =>
                 Quaternion.Inverse(Rotation) * (worldPosition - Position);
 
-            // Local position to world position.
             public Vector3 TransformPoint(Vector3 localPosition) =>
                 Position + Rotation * localPosition;
 
@@ -1477,8 +1508,14 @@ namespace Oxide.Plugins
             [JsonProperty("DepartureSpeed", DefaultValueHandling = DefaultValueHandling.Ignore)]
             public string DepartureSpeed;
 
+            [JsonProperty("Spawner", DefaultValueHandling = DefaultValueHandling.Ignore)]
+            public bool Spawner;
+
             [JsonProperty("Commands", DefaultValueHandling = DefaultValueHandling.Ignore)]
             public List<string> Commands;
+
+            [JsonProperty("RotationAngle", DefaultValueHandling = DefaultValueHandling.Ignore)]
+            public float RotationAngle;
 
             [JsonIgnore]
             public WorkcartTriggerType TriggerType => TunnelType != null ? WorkcartTriggerType.Tunnel : WorkcartTriggerType.Map;
@@ -1595,6 +1632,7 @@ namespace Oxide.Plugins
                 Direction = triggerData.Direction;
                 TrackSelection = triggerData.TrackSelection;
                 StopDuration = triggerData.StopDuration;
+                Spawner = triggerData.Spawner;
                 Commands = triggerData.Commands;
             }
 
@@ -1612,6 +1650,9 @@ namespace Oxide.Plugins
 
                 if (Destroy)
                     return Color.red;
+
+                if (Spawner)
+                    return new Color(0, 1, 0.75f);
 
                 if (AddConductor)
                     return Color.cyan;
@@ -1662,17 +1703,45 @@ namespace Oxide.Plugins
 
         #endregion
 
+        #region Spawned Workcart Tracker
+
+        private class SpawnedWorkcartTracker : FacepunchBehaviour
+        {
+            public static void AddToWorkcart(TrainEngine workcart, BaseTriggerInstance triggerInstance)
+            {
+                var component = workcart.gameObject.AddComponent<SpawnedWorkcartTracker>();
+                component._workcart = workcart;
+                component._triggerInstance = triggerInstance;
+            }
+
+            private TrainEngine _workcart;
+            private BaseTriggerInstance _triggerInstance;
+
+            private void OnDestroy()
+            {
+                _triggerInstance.HandleWorkcartKilled(_workcart);
+            }
+        }
+
+        #endregion
+
         #region Trigger Instances
 
         private abstract class BaseTriggerInstance
         {
+            private const int MaxSpawnedWorkcarts = 1;
+            private const float TimeBetweenSpawns = 30;
+
             public TriggerData TriggerData { get; protected set; }
             public TrainTrackSpline Spline { get; private set; }
             public float DistanceOnSpline { get; private set; }
 
             public abstract Vector3 WorldPosition { get; }
+            public abstract Quaternion WorldRotation { get; }
 
             private GameObject _gameObject;
+            private WorkcartTrigger _workcartTrigger;
+            private List<TrainEngine> _spawnedWorkcarts;
 
             protected BaseTriggerInstance(TriggerData triggerData)
             {
@@ -1682,38 +1751,29 @@ namespace Oxide.Plugins
             public void CreateTrigger()
             {
                 _gameObject = new GameObject();
-                UpdatePosition();
+                OnMove();
 
                 var sphereCollider = _gameObject.AddComponent<SphereCollider>();
                 sphereCollider.isTrigger = true;
                 sphereCollider.radius = 1;
                 sphereCollider.gameObject.layer = 6;
 
-                var trigger = _gameObject.AddComponent<WorkcartTrigger>();
-                trigger.TriggerData = TriggerData;
-                trigger.interestLayers = Layers.Mask.Vehicle_World;
+                _workcartTrigger = _gameObject.AddComponent<WorkcartTrigger>();
+                _workcartTrigger.TriggerData = TriggerData;
+                _workcartTrigger.interestLayers = Layers.Mask.Vehicle_World;
+
+                if (TriggerData.Spawner)
+                {
+                    StartSpawningWorkcarts();
+                }
             }
 
-            public void Enable()
-            {
-                if (_gameObject != null)
-                    _gameObject.SetActive(true);
-                else
-                    CreateTrigger();
-            }
-
-            public void Disable()
-            {
-                if (_gameObject != null)
-                    _gameObject.SetActive(false);
-            }
-
-            public void UpdatePosition()
+            public void OnMove()
             {
                 if (_gameObject == null)
                     return;
 
-                _gameObject.transform.position = WorldPosition;
+                _gameObject.transform.SetPositionAndRotation(WorldPosition, WorldRotation);
 
                 TrainTrackSpline spline;
                 float distanceOnSpline;
@@ -1729,15 +1789,149 @@ namespace Oxide.Plugins
                 }
             }
 
+            public void OnRotate()
+            {
+                if (_gameObject == null)
+                    return;
+
+                _gameObject.transform.rotation = WorldRotation;
+            }
+
+            public void OnEnabledToggled()
+            {
+                if (TriggerData.Enabled)
+                {
+                    Enable();
+                }
+                else
+                {
+                    Disable();
+                }
+            }
+
+            public void OnSpawnerToggled()
+            {
+                if (TriggerData.Spawner)
+                {
+                    if (TriggerData.Enabled)
+                    {
+                        StartSpawningWorkcarts();
+                    }
+                }
+                else
+                {
+                    KillWorkcarts();
+                    StopSpawningWorkcarts();
+                }
+            }
+
+            public void HandleWorkcartKilled(TrainEngine workcart)
+            {
+                _spawnedWorkcarts.Remove(workcart);
+            }
+
             public void Destroy()
             {
                 UnityEngine.Object.Destroy(_gameObject);
+                KillWorkcarts();
+            }
+
+            private void Enable()
+            {
+                if (_gameObject != null)
+                {
+                    _gameObject.SetActive(true);
+                    if (TriggerData.Spawner)
+                    {
+                        StartSpawningWorkcarts();
+                    }
+                }
+                else
+                {
+                    CreateTrigger();
+                }
+            }
+
+            private void Disable()
+            {
+                if (_gameObject != null)
+                {
+                    _gameObject.SetActive(false);
+                }
+
+                KillWorkcarts();
+                StopSpawningWorkcarts();
+            }
+
+            private void StartSpawningWorkcarts()
+            {
+                if (_spawnedWorkcarts == null)
+                {
+                    _spawnedWorkcarts = new List<TrainEngine>(MaxSpawnedWorkcarts);
+                }
+
+                _workcartTrigger.InvokeRepeating(SpawnWorkcart, UnityEngine.Random.Range(0f, 1f), TimeBetweenSpawns);
+            }
+
+            private void StopSpawningWorkcarts()
+            {
+                _workcartTrigger.CancelInvoke(SpawnWorkcart);
+            }
+
+            private void SpawnWorkcart()
+            {
+                if (_spawnedWorkcarts.Count >= MaxSpawnedWorkcarts)
+                    return;
+
+                if (Spline == null)
+                    return;
+
+                var worldPosition = WorldPosition;
+                var terrainHeight = TerrainMeta.HeightMap.GetHeight(worldPosition);
+                var prefab = worldPosition.y - terrainHeight > -1
+                    ? AboveGroundWorkcartPrefab
+                    : WorkcartPrefab;
+
+                var workcart = GameManager.server.CreateEntity(prefab, worldPosition, WorldRotation) as TrainEngine;
+                workcart.EnableSaving(false);
+                workcart.Spawn();
+
+                workcart.Invoke(() =>
+                {
+                    foreach (var child in workcart.children)
+                    {
+                        if (child is BasePlayer)
+                            continue;
+
+                        child.EnableSaving(false);
+                    }
+                }, 0);
+
+                _spawnedWorkcarts.Add(workcart);
+                SpawnedWorkcartTracker.AddToWorkcart(workcart, this);
+            }
+
+            private void KillWorkcarts()
+            {
+                if (_spawnedWorkcarts == null)
+                    return;
+
+                for (var i = _spawnedWorkcarts.Count - 1; i >= 0; i--)
+                {
+                    var workcart = _spawnedWorkcarts[i];
+                    if (workcart != null && !workcart.IsDestroyed)
+                    {
+                        workcart.Kill();
+                    }
+                    _spawnedWorkcarts.RemoveAt(i);
+                }
             }
         }
 
         private class MapTriggerInstance : BaseTriggerInstance
         {
             public override Vector3 WorldPosition => TriggerData.Position;
+            public override Quaternion WorldRotation => Quaternion.Euler(0, TriggerData.RotationAngle, 0);
 
             public MapTriggerInstance(TriggerData triggerData) : base(triggerData) {}
         }
@@ -1747,6 +1941,7 @@ namespace Oxide.Plugins
             public DungeonCellWrapper DungeonCellWrapper { get; private set; }
 
             public override Vector3 WorldPosition => DungeonCellWrapper.TransformPoint(TriggerData.Position);
+            public override Quaternion WorldRotation => DungeonCellWrapper.Rotation * Quaternion.Euler(0, TriggerData.RotationAngle, 0);
 
             public TunnelTriggerInstance(TriggerData triggerData, DungeonCellWrapper dungeonCellWrapper) : base(triggerData)
             {
@@ -1773,17 +1968,32 @@ namespace Oxide.Plugins
             public void OnMove()
             {
                 foreach (var triggerInstance in TriggerInstanceList)
-                    triggerInstance.UpdatePosition();
+                {
+                    triggerInstance.OnMove();
+                }
             }
 
-            public void OnEnableDisable()
+            public void OnRotate()
             {
                 foreach (var triggerInstance in TriggerInstanceList)
                 {
-                    if (TriggerData.Enabled)
-                        triggerInstance.Enable();
-                    else
-                        triggerInstance.Disable();
+                    triggerInstance.OnRotate();
+                }
+            }
+
+            public void OnEnabledToggled()
+            {
+                foreach (var triggerInstance in TriggerInstanceList)
+                {
+                    triggerInstance.OnEnabledToggled();
+                }
+            }
+
+            public void OnSpawnerToggled()
+            {
+                foreach (var triggerInstance in TriggerInstanceList)
+                {
+                    triggerInstance.OnSpawnerToggled();
                 }
             }
 
@@ -1793,7 +2003,27 @@ namespace Oxide.Plugins
                     return;
 
                 foreach (var triggerInstance in TriggerInstanceList)
+                {
                     triggerInstance.Destroy();
+                }
+            }
+
+            public BaseTriggerInstance FindNearest(Vector3 position, float maxDistanceSquared, out float closestDistanceSquared)
+            {
+                BaseTriggerInstance closestTrigger = null;
+                closestDistanceSquared = float.MaxValue;
+
+                foreach (var triggerInstance in TriggerInstanceList)
+                {
+                    var distanceSquared = (position - triggerInstance.WorldPosition).sqrMagnitude;
+                    if (distanceSquared < closestDistanceSquared && distanceSquared <= maxDistanceSquared)
+                    {
+                        closestTrigger = triggerInstance;
+                        closestDistanceSquared = distanceSquared;
+                    }
+                }
+
+                return closestTrigger;
             }
         }
 
@@ -1966,17 +2196,28 @@ namespace Oxide.Plugins
                     return;
 
                 var enabledChanged = triggerData.Enabled != newTriggerData.Enabled;
+                var spawnerChanged = triggerData.Spawner != newTriggerData.Spawner;
+
                 triggerData.CopyFrom(newTriggerData);
                 triggerData.InvalidateCache();
 
                 if (enabledChanged)
                 {
-                    triggerController.OnEnableDisable();
+                    triggerController.OnEnabledToggled();
 
                     if (triggerData.Enabled)
+                    {
                         RegisterTriggerWithSpline(triggerController);
+                    }
                     else
+                    {
                         UnregisterTriggerFromSpline(triggerController);
+                    }
+                }
+
+                if (spawnerChanged)
+                {
+                    triggerController.OnSpawnerToggled();
                 }
 
                 SaveTrigger(triggerData);
@@ -1992,6 +2233,17 @@ namespace Oxide.Plugins
                 triggerData.Position = position;
                 triggerController.OnMove();
                 RegisterTriggerWithSpline(triggerController);
+                SaveTrigger(triggerData);
+            }
+
+            public void RotateTrigger(TriggerData triggerData, float rotationAngle)
+            {
+                var triggerController = GetTriggerController(triggerData);
+                if (triggerController == null)
+                    return;
+
+                triggerData.RotationAngle = rotationAngle;
+                triggerController.OnRotate();
                 SaveTrigger(triggerData);
             }
 
@@ -2176,6 +2428,15 @@ namespace Oxide.Plugins
                 }
                 else
                 {
+                    if (triggerData.Spawner)
+                    {
+                        infoLines.Add(_pluginInstance.GetMessage(player, Lang.InfoTriggerSpawner));
+                        var worldRotation = trigger.WorldRotation;
+                        var arrowBack = spherePosition + Vector3.up + worldRotation * Vector3.back * 1.5f;
+                        var arrowForward = spherePosition + Vector3.up + worldRotation * Vector3.forward * 1.5f;
+                        player.SendConsoleCommand("ddraw.arrow", TriggerDisplayDuration, color, arrowBack, arrowForward, 0.5f);
+                    }
+
                     if (triggerData.AddConductor)
                         infoLines.Add(_pluginInstance.GetMessage(player, Lang.InfoTriggerAddConductor));
 
@@ -2221,25 +2482,30 @@ namespace Oxide.Plugins
                 player.SendConsoleCommand("ddraw.text", TriggerDisplayDuration, color, textPosition, string.Join("\n", infoLines));
             }
 
-            public BaseTriggerInstance FindNearestTrigger(Vector3 position, float maxDistance = 10)
+            public BaseTriggerInstance FindNearestTrigger(Vector3 position, float maxDistanceSquared = 10)
             {
                 BaseTriggerInstance closestTriggerInstance = null;
-                float shortestSqrDistance = float.MaxValue;
+                float closestDistanceSquared = float.MaxValue;
 
                 foreach (var triggerController in _triggerControllers.Values)
                 {
-                    foreach (var triggerInstance in triggerController.TriggerInstanceList)
-                    {
-                        var sqrDistance = (position - triggerInstance.WorldPosition).sqrMagnitude;
-                        if (sqrDistance >= shortestSqrDistance || sqrDistance >= maxDistance)
-                            continue;
+                    float distanceSquared;
+                    var triggerInstance = triggerController.FindNearest(position, maxDistanceSquared, out distanceSquared);
 
-                        shortestSqrDistance = sqrDistance;
+                    if (distanceSquared < closestDistanceSquared && distanceSquared <= maxDistanceSquared)
+                    {
                         closestTriggerInstance = triggerInstance;
+                        closestDistanceSquared = distanceSquared;
                     }
                 }
 
                 return closestTriggerInstance;
+            }
+
+            public BaseTriggerInstance FindNearestTrigger(Vector3 position, TriggerData triggerData, float maxDistanceSquared = float.MaxValue)
+            {
+                float distanceSquared;
+                return GetTriggerController(triggerData)?.FindNearest(position, maxDistanceSquared, out distanceSquared);
             }
 
             public TriggerData FindNearestTriggerWhereAiming(BasePlayer player, float maxDistance = 10)
@@ -2248,7 +2514,7 @@ namespace Oxide.Plugins
                 if (!TryGetTrackPosition(player, out trackPosition))
                     return null;
 
-                return FindNearestTrigger(trackPosition, maxDistance)?.TriggerData;
+                return FindNearestTrigger(trackPosition, maxDistance).TriggerData;
             }
         }
 
@@ -2661,7 +2927,7 @@ namespace Oxide.Plugins
                 if (Conductor == null)
                     return;
 
-                Conductor.enableSaving = false;
+                Conductor.EnableSaving(false);
                 Conductor.Spawn();
 
                 Conductor.CancelInvoke(Conductor.Greeting);
@@ -3494,6 +3760,7 @@ namespace Oxide.Plugins
             public const string AddTriggerSyntax = "AddTrigger.Syntax";
             public const string AddTriggerSuccess = "AddTrigger.Success";
             public const string MoveTriggerSuccess = "MoveTrigger.Success";
+            public const string RotateTriggerSuccess = "RotateTrigger.Success";
             public const string UpdateTriggerSyntax = "UpdateTrigger.Syntax";
             public const string UpdateTriggerSuccess = "UpdateTrigger.Success";
             public const string SimpleTriggerSyntax = "Trigger.SimpleSyntax";
@@ -3509,7 +3776,7 @@ namespace Oxide.Plugins
             public const string HelpSpeedOptions = "Help.SpeedOptions";
             public const string HelpDirectionOptions = "Help.DirectionOptions";
             public const string HelpTrackSelectionOptions = "Help.TrackSelectionOptions";
-            public const string HelpOtherOptions = "Help.OtherOptions";
+            public const string HelpOtherOptions = "Help.OtherOptions2";
 
             public const string InfoTrigger = "Info.Trigger";
             public const string InfoTriggerMapPrefix = "Info.Trigger.Prefix.Map";
@@ -3519,6 +3786,7 @@ namespace Oxide.Plugins
             public const string InfoTriggerMap = "Info.Trigger.Map";
             public const string InfoTriggerRoute = "Info.Trigger.Route";
             public const string InfoTriggerTunnel = "Info.Trigger.Tunnel";
+            public const string InfoTriggerSpawner = "Info.Trigger.Spawner";
             public const string InfoTriggerAddConductor = "Info.Trigger.Conductor";
             public const string InfoTriggerDestroy = "Info.Trigger.Destroy";
             public const string InfoTriggerStopDuration = "Info.Trigger.StopDuration";
@@ -3561,6 +3829,7 @@ namespace Oxide.Plugins
                 [Lang.UpdateTriggerSyntax] = "Syntax: <color=#fd4>{0} <id> <option1> <option2> ...</color>\n{1}",
                 [Lang.UpdateTriggerSuccess] = "Successfully updated trigger #<color=#fd4>{0}{1}</color>",
                 [Lang.MoveTriggerSuccess] = "Successfully moved trigger #<color=#fd4>{0}{1}</color>",
+                [Lang.RotateTriggerSuccess] = "Successfully rotated trigger #<color=#fd4>{0}{1}</color>",
                 [Lang.SimpleTriggerSyntax] = "Syntax: <color=#fd4>{0} <id></color>",
                 [Lang.RemoveTriggerSuccess] = "Trigger #<color=#fd4>{0}{1}</color> successfully removed.",
 
@@ -3574,7 +3843,7 @@ namespace Oxide.Plugins
                 [Lang.HelpSpeedOptions] = "Speeds: {0}",
                 [Lang.HelpDirectionOptions] = "Directions: {0}",
                 [Lang.HelpTrackSelectionOptions] = "Track selection: {0}",
-                [Lang.HelpOtherOptions] = "Other options: <color=#fd4>Conductor</color> | <color=#fd4>Brake</color> | <color=#fd4>Destroy</color> | <color=#fd4>@ROUTE_NAME</color> | <color=#fd4>Enabled</color> | <color=#fd4>Disabled</color>",
+                [Lang.HelpOtherOptions] = "Other options: <color=#fd4>Spawn</color> | <color=#fd4>Conductor</color> | <color=#fd4>Brake</color> | <color=#fd4>Destroy</color> | <color=#fd4>@ROUTE_NAME</color> | <color=#fd4>Enabled</color> | <color=#fd4>Disabled</color>",
 
                 [Lang.InfoTrigger] = "Workcart Trigger #{0}{1}",
                 [Lang.InfoTriggerMapPrefix] = "M",
@@ -3584,6 +3853,7 @@ namespace Oxide.Plugins
                 [Lang.InfoTriggerMap] = "Map-specific",
                 [Lang.InfoTriggerRoute] = "Route: @{0}",
                 [Lang.InfoTriggerTunnel] = "Tunnel type: {0} (x{1})",
+                [Lang.InfoTriggerSpawner] = "Spawns workcart",
                 [Lang.InfoTriggerAddConductor] = "Adds Conductor",
                 [Lang.InfoTriggerDestroy] = "Destroys workcart",
                 [Lang.InfoTriggerStopDuration] = "Stop duration: {0}s",
@@ -3625,6 +3895,7 @@ namespace Oxide.Plugins
                 [Lang.UpdateTriggerSyntax] = "Syntax: <color=#fd4>{0} <id> <option1> <option2> ...</color>\n{1}",
                 [Lang.UpdateTriggerSuccess] = "Gatilho atualizado com sucesso #<color=#fd4>{0}{1}</color>",
                 [Lang.MoveTriggerSuccess] = "Gatilho movido com sucesso #<color=#fd4>{0}{1}</color>",
+                [Lang.RotateTriggerSuccess] = "Gatilho girado com sucesso #<color=#fd4>{0}{1}</color>",
                 [Lang.SimpleTriggerSyntax] = "Syntax: <color=#fd4>{0} <id></color>",
                 [Lang.RemoveTriggerSuccess] = "Trigger #<color=#fd4>{0}{1}</color> removido com sucesso.",
 
@@ -3638,7 +3909,7 @@ namespace Oxide.Plugins
                 [Lang.HelpSpeedOptions] = "Velocidades: {0}",
                 [Lang.HelpDirectionOptions] = "Direções: {0}",
                 [Lang.HelpTrackSelectionOptions] = "Seleção de faixa: {0}",
-                [Lang.HelpOtherOptions] = "Outras opções: <color=#fd4>Conductor</color> | <color=#fd4>Brake</color> | <color=#fd4>Destroy</color> | <color=#fd4>@ROUTE_NAME</color> | <color=#fd4>!EVENT_NAME</color> | <color=#fd4>Enabled</color> | <color=#fd4>Disabled</color>",
+                [Lang.HelpOtherOptions] = "Outras opções: <color=#fd4>Spawn</color> | <color=#fd4>Conductor</color> | <color=#fd4>Brake</color> | <color=#fd4>Destroy</color> | <color=#fd4>@ROUTE_NAME</color> | <color=#fd4>Enabled</color> | <color=#fd4>Disabled</color>",
 
                 [Lang.InfoTrigger] = "Acionador de carrinho de trabalho #{0}{1}",
                 [Lang.InfoTriggerMapPrefix] = "M",
@@ -3648,6 +3919,7 @@ namespace Oxide.Plugins
                 [Lang.InfoTriggerMap] = "Específico do mapa",
                 [Lang.InfoTriggerRoute] = "Rota: @{0}",
                 [Lang.InfoTriggerTunnel] = "Tipo de túnel: {0} (x{1})",
+                [Lang.InfoTriggerSpawner] = "Gera carrinho de trabalho",
                 [Lang.InfoTriggerAddConductor] = "Adiciona Condutor",
                 [Lang.InfoTriggerDestroy] = "Destrói o carrinho de trabalho",
                 [Lang.InfoTriggerStopDuration] = "Duração da parada: {0}s",
