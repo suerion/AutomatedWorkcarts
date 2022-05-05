@@ -17,7 +17,7 @@ using static TrainTrackSpline;
 
 namespace Oxide.Plugins
 {
-    [Info("Automated Workcarts", "WhiteThunder", "0.25.1")]
+    [Info("Automated Workcarts", "WhiteThunder", "0.25.2")]
     [Description("Automates workcarts with NPC conductors.")]
     internal class AutomatedWorkcarts : CovalencePlugin
     {
@@ -1077,7 +1077,7 @@ namespace Oxide.Plugins
 
         private static TrainEngine GetFasterWorkcart(TrainEngine workcart, TrainEngine otherWorkcart)
         {
-            return Math.Abs(workcart.TrackSpeed) >= Math.Abs(otherWorkcart.TrackSpeed)
+            return Math.Abs(workcart.GetTrackSpeed()) >= Math.Abs(otherWorkcart.GetTrackSpeed())
                 ? workcart
                 : otherWorkcart;
         }
@@ -2449,7 +2449,7 @@ namespace Oxide.Plugins
             public void UpdateWorkcartData()
             {
                 _workcartData.Throttle = DepartureThrottle;
-                _workcartData.TrackSelection = Workcart.curTrackSelection;
+                _workcartData.TrackSelection = Workcart.localTrackSelection;
             }
 
             public void HandleConductorTrigger(TriggerData triggerData)
@@ -2489,7 +2489,7 @@ namespace Oxide.Plugins
                 var currentDepartureThrottle = DepartureThrottle;
                 var newDepartureThrottle = DetermineNextThrottle(currentDepartureThrottle, departureSpeedInstruction, directionInstruction);
 
-                Workcart.SetTrackSelection(DetermineNextTrackSelection(Workcart.curTrackSelection, triggerData.GetTrackSelectionInstruction()));
+                Workcart.SetTrackSelection(DetermineNextTrackSelection(Workcart.localTrackSelection, triggerData.GetTrackSelectionInstruction()));
 
                 if (triggerData.Brake)
                 {
