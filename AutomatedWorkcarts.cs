@@ -2514,7 +2514,7 @@ namespace Oxide.Plugins
                 if (!TryGetTrackPosition(player, out trackPosition))
                     return null;
 
-                return FindNearestTrigger(trackPosition, maxDistance).TriggerData;
+                return FindNearestTrigger(trackPosition, maxDistance)?.TriggerData;
             }
         }
 
