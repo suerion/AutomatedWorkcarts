@@ -1893,6 +1893,10 @@ namespace Oxide.Plugins
                     : WorkcartPrefab;
 
                 var workcart = GameManager.server.CreateEntity(prefab, worldPosition, WorldRotation) as TrainEngine;
+
+                // Ensure the workcart does not decay for some time.
+                workcart.lastDecayTick = Time.realtimeSinceStartup;
+
                 workcart.EnableSaving(false);
                 workcart.Spawn();
 
