@@ -325,10 +325,10 @@ Automates the specified workcart. Returns `true` if successful, or if already au
 #### API_StopAutomatingWorkcart
 
 ```csharp
-void API_StopAutomatingWorkcart(TrainEngine workcart, bool immediate = false)
+void API_StopAutomatingWorkcart(TrainEngine workcart)
 ```
 
-Stops automating the specified workcart. Destroys in the same frame if `immediate` is `true`.
+Stops automating the specified workcart.
 
 #### API_IsWorkcartAutomated
 

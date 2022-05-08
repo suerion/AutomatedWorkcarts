@@ -43,10 +43,11 @@ namespace Oxide.Plugins
         private const string VendingMapMarkerPrefab = "assets/prefabs/deployable/vendingmachine/vending_mapmarker.prefab";
         private const string IdPlaceholder = "$id";
 
+        private static readonly object False = false;
         private static readonly Regex IdRegex = new Regex("\\$id", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
         private WorkcartTriggerManager _triggerManager = new WorkcartTriggerManager();
-        private AutomatedWorkcartManager _workcartManager = new AutomatedWorkcartManager();
+        private TrainManager _trainManager = new TrainManager();
 
         private Coroutine _startupCoroutine;
 
@@ -82,7 +83,7 @@ namespace Oxide.Plugins
 
             OnServerSave();
             _triggerManager.DestroyAll();
-            TrainController.DestroyAll();
+            _trainManager.Unload();
 
             _mapData = null;
             _pluginData = null;
@@ -93,7 +94,7 @@ namespace Oxide.Plugins
 
         private void OnServerSave()
         {
-            _workcartManager.UpdateWorkcartData();
+            _trainManager.UpdateWorkcartData();
             _pluginData.Save();
         }
 
@@ -110,31 +111,12 @@ namespace Oxide.Plugins
                 return;
             }
 
-            _workcartManager.ResendAllGenericMarkers();
-        }
-
-        private void OnEntityKill(TrainEngine workcart)
-        {
-            if (workcart == null || workcart.net == null)
-                return;
-
-            _workcartManager.Unregister(workcart);
-        }
-
-        private bool? OnEntityTakeDamage(TrainEngine workcart)
-        {
-            if (IsWorkcartAutomated(workcart))
-            {
-                // Return true (standard) to cancel default behavior (prevent damage).
-                return true;
-            }
-
-            return null;
+            _trainManager.ResendAllGenericMarkers();
         }
 
         private void OnEntityEnter(WorkcartTrigger trigger, TrainEngine workcart)
         {
-            var trainController = TrainController.GetForWorkcart(workcart);
+            var trainController = _trainManager.GetTrainController(workcart);
             if (trainController == null)
             {
                 if (trigger.TriggerData.AddConductor
@@ -142,7 +124,7 @@ namespace Oxide.Plugins
                     && !IsWorkcartOwned(workcart)
                     && CanHaveMoreConductors())
                 {
-                    TryAddTrainController(workcart, trigger.TriggerData);
+                    _trainManager.TryAddTrainController(workcart, trigger.TriggerData);
                 }
 
                 return;
@@ -170,8 +152,8 @@ namespace Oxide.Plugins
                 TrainEngine forwardWorkcart, backwardWorkcart;
                 DetermineWorkcartOrientations(workcart, otherWorkcart, out forwardWorkcart, out backwardWorkcart);
 
-                var forwardController = TrainController.GetForWorkcart(forwardWorkcart);
-                var backController = TrainController.GetForWorkcart(backwardWorkcart);
+                var forwardController = _trainManager.GetTrainController(forwardWorkcart);
+                var backController = _trainManager.GetTrainController(backwardWorkcart);
 
                 // Do nothing if neither workcart is automated.
                 if (forwardController == null && backController == null)
@@ -204,8 +186,8 @@ namespace Oxide.Plugins
             else
             {
                 // Going opposite directions or perpendicular.
-                var controller = TrainController.GetForWorkcart(workcart);
-                var otherController = TrainController.GetForWorkcart(otherWorkcart);
+                var controller = _trainManager.GetTrainController(workcart);
+                var otherController = _trainManager.GetTrainController(otherWorkcart);
 
                 // Do nothing if neither workcart is automated.
                 if (controller == null && otherController == null)
@@ -260,6 +242,14 @@ namespace Oxide.Plugins
             }
         }
 
+        private object OnTrainCarUncouple(TrainCar trainCar, BasePlayer player)
+        {
+            // Disallow uncoupling train cars from automated trains.
+            return _trainManager.IsRegistered(trainCar)
+                ? False
+                : null;
+        }
+
         #endregion
 
         #region Commands
@@ -280,7 +270,7 @@ namespace Oxide.Plugins
                 return;
             }
 
-            var trainController = TrainController.GetForWorkcart(workcart);
+            var trainController = _trainManager.GetTrainController(workcart);
             if (trainController == null)
             {
                 if (IsWorkcartOwned(workcart))
@@ -291,7 +281,7 @@ namespace Oxide.Plugins
 
                 if (!CanHaveMoreConductors())
                 {
-                    ReplyToPlayer(player, Lang.ErrorMaxConductors, _workcartManager.NumWorkcarts, _pluginConfig.MaxConductors);
+                    ReplyToPlayer(player, Lang.ErrorMaxConductors, _trainManager.NumWorkcarts, _pluginConfig.MaxConductors);
                     return;
                 }
 
@@ -304,7 +294,7 @@ namespace Oxide.Plugins
                         workcartData = new WorkcartData { Route = routeName };
                 }
 
-                if (TryAddTrainController(workcart, workcartData: workcartData))
+                if (_trainManager.TryAddTrainController(workcart, workcartData: workcartData))
                 {
                     var baseMessage = workcartData != null
                         ? GetMessage(player, Lang.ToggleOnWithRouteSuccess, workcartData.Route)
@@ -327,7 +317,7 @@ namespace Oxide.Plugins
             }
             else
             {
-                RemoveTrainController(workcart);
+                _trainManager.RemoveTrainController(workcart);
                 player.Reply(GetMessage(player, Lang.ToggleOffSuccess) + " " + GetConductorCountMessage(player));
             }
         }
@@ -339,7 +329,7 @@ namespace Oxide.Plugins
                 && !VerifyPermission(player, PermissionToggle))
                 return;
 
-            var numReset = _workcartManager.ResetAll();
+            var numReset = _trainManager.Unload();
             ReplyToPlayer(player, Lang.ResetAllSuccess, numReset);
         }
 
@@ -701,26 +691,62 @@ namespace Oxide.Plugins
 
         #region API
 
+        [HookMethod("API_AutomateWorkcart")]
         private bool API_AutomateWorkcart(TrainEngine workcart)
         {
-            return IsWorkcartAutomated(workcart)
+            return _trainManager.IsRegistered(workcart)
                 ? true
-                : TryAddTrainController(workcart);
+                : _trainManager.TryAddTrainController(workcart);
         }
 
+        [HookMethod("API_StopAutomatingWorkcart")]
         private void API_StopAutomatingWorkcart(TrainEngine workcart, bool immediate = false)
         {
-            RemoveTrainController(workcart, immediate);
+            _trainManager.RemoveTrainController(workcart);
         }
 
+        [HookMethod("API_IsWorkcartAutomated")]
         private bool API_IsWorkcartAutomated(TrainEngine workcart)
         {
-            return IsWorkcartAutomated(workcart);
+            return _trainManager.IsRegistered(workcart);
         }
 
+        [HookMethod("API_GetAutomatedWorkcarts")]
         private TrainEngine[] API_GetAutomatedWorkcarts()
         {
-            return _workcartManager.GetWorkcarts();
+            return _trainManager.GetWorkcarts();
+        }
+
+        #endregion
+
+        #region Exposed Hooks
+
+        private static class ExposedHooks
+        {
+            public static object OnWorkcartAutomationStart(TrainEngine workcart)
+            {
+                return Interface.CallHook("OnWorkcartAutomationStart", workcart);
+            }
+
+            public static void OnWorkcartAutomationStarted(TrainEngine workcart)
+            {
+                Interface.CallHook("OnWorkcartAutomationStarted", workcart);
+            }
+
+            public static void OnWorkcartAutomationStopped(TrainEngine workcart)
+            {
+                Interface.CallHook("OnWorkcartAutomationStopped", workcart);
+            }
+        }
+
+        #endregion
+
+        #region Dependencies
+
+        private bool IsCargoTrain(TrainEngine workcart)
+        {
+            var result = CargoTrainEvent?.Call("IsTrainSpecial", workcart.net.ID);
+            return result is bool && (bool)result;
         }
 
         #endregion
@@ -940,11 +966,79 @@ namespace Oxide.Plugins
 
         #endregion
 
+        #region Helper Methods - Coupling
+
+        private static void UpdateAllowedCouplings(TrainCar trainCar, bool allowFront, bool allowRear)
+        {
+            var coupling = trainCar.coupling;
+
+            if (allowFront == coupling.frontCoupling.isValid
+                && allowRear == coupling.rearCoupling.isValid)
+            {
+                // No change to couplings needed.
+                return;
+            }
+
+            if (trainCar.frontCoupling == null || trainCar.rearCoupling == null)
+            {
+                // Some train cars do not allow coupling, such as the classic workcart.
+                return;
+            }
+
+            if (!trainCar.IsFullySpawned())
+            {
+                LogError($"Cannot update couplings before spawn.");
+                return;
+            }
+
+            var frontTransform = trainCar.frontCoupling;
+            var rearTransform = trainCar.rearCoupling;
+
+            var frontTarget = coupling.frontCoupling.CoupledTo;
+            var rearTarget = coupling.rearCoupling.CoupledTo;
+
+            if (coupling.frontCoupling.IsCoupled)
+            {
+                coupling.frontCoupling.Uncouple(reflect: true);
+            }
+
+            if (coupling.rearCoupling.IsCoupled)
+            {
+                coupling.rearCoupling.Uncouple(reflect: true);
+            }
+
+            if (!allowFront)
+            {
+                trainCar.frontCoupling = null;
+            }
+
+            if (!allowRear)
+            {
+                trainCar.rearCoupling = null;
+            }
+
+            trainCar.coupling = new TrainCouplingController(trainCar);
+            trainCar.frontCoupling = frontTransform;
+            trainCar.rearCoupling = rearTransform;
+
+            if (allowFront && frontTarget != null)
+            {
+                trainCar.coupling.frontCoupling.TryCouple(frontTarget, reflect: true);
+            }
+
+            if (allowRear && rearTarget != null)
+            {
+                trainCar.coupling.rearCoupling.TryCouple(rearTarget, reflect: true);
+            }
+        }
+
+        #endregion
+
         #region Helper Methods
 
         private IEnumerator DoStartupRoutine()
         {
-            _pluginInstance.TrackStart();
+            TrackStart();
             yield return _triggerManager.CreateAll();
 
             var foundWorkcartIds = new HashSet<uint>();
@@ -963,74 +1057,239 @@ namespace Oxide.Plugins
                         if (workcart != null
                             && !IsWorkcartOwned(workcart)
                             && CanHaveMoreConductors()
-                            && !IsWorkcartAutomated(workcart))
-                            TryAddTrainController(workcart, workcartData: workcartData);
+                            && !_trainManager.IsRegistered(workcart))
+                        {
+                            _trainManager.TryAddTrainController(workcart, workcartData: workcartData);
+                        }
                     });
                 }
             }
 
             _pluginData.TrimToWorkcartIds(foundWorkcartIds);
-            _pluginInstance.TrackEnd();
+            TrackEnd();
         }
 
-        private static bool AutomationWasBlocked(TrainEngine workcart)
+        private bool AutomationWasBlocked(TrainEngine workcart)
         {
-            object hookResult = Interface.CallHook("OnWorkcartAutomationStart", workcart);
+            object hookResult = ExposedHooks.OnWorkcartAutomationStart(workcart);
             if (hookResult is bool && (bool)hookResult == false)
                 return true;
 
-            if (_pluginInstance.CargoTrainEvent?.Call("IsTrainSpecial", workcart.net.ID)?.Equals(true) ?? false)
+            if (IsCargoTrain(workcart))
                 return true;
 
             return false;
         }
 
-        private static bool CanHaveMoreConductors() =>
+        private bool CanHaveMoreConductors() =>
             _pluginConfig.MaxConductors < 0
-            || _pluginInstance._workcartManager.NumWorkcarts < _pluginConfig.MaxConductors;
+            || _trainManager.NumWorkcarts < _pluginConfig.MaxConductors;
 
-        private static bool IsWorkcartOwned(TrainEngine workcart) => workcart.OwnerID != 0;
+        public static void LogInfo(string message) => Interface.Oxide.LogInfo($"[Automated Workcarts] {message}");
+        public static void LogError(string message) => Interface.Oxide.LogError($"[Automated Workcarts] {message}");
+        public static void LogWarning(string message) => Interface.Oxide.LogWarning($"[Automated Workcarts] {message}");
 
-        private static bool IsWorkcartAutomated(TrainEngine workcart) =>
-            TrainController.GetForWorkcart(workcart) != null;
-
-        private static bool TryAddTrainController(TrainEngine workcart, TriggerData triggerData = null, WorkcartData workcartData = null)
+        private static void EnableSavingRecursive(BaseEntity entity, bool enableSaving)
         {
-            if (AutomationWasBlocked(workcart))
-                return false;
+            entity.EnableSaving(enableSaving);
 
-            if (workcartData == null)
+            foreach (var child in entity.children)
             {
-                workcartData = new WorkcartData
+                if (child is BasePlayer)
+                    continue;
+
+                EnableSavingRecursive(child, enableSaving);
+            }
+        }
+
+        private static TrainEngine SpawnWorkcart(string prefabName, Vector3 position, Quaternion rotation, bool allowFrontCoupling = true, bool allowRearCoupling = true)
+        {
+            var workcart = GameManager.server.CreateEntity(prefabName, position, rotation) as TrainEngine;
+
+            // Ensure the workcart does not decay for some time.
+            workcart.lastDecayTick = Time.realtimeSinceStartup;
+
+            workcart.EnableSaving(false);
+            workcart.Spawn();
+
+            if (workcart.IsDestroyed)
+                return null;
+
+            UpdateAllowedCouplings(workcart, allowFrontCoupling, allowRearCoupling);
+
+            workcart.Invoke(() => EnableSavingRecursive(workcart, false), 0);
+
+            return workcart;
+        }
+
+        private static TrainCar SpawnWagon(string prefabName, Vector3 position, Quaternion rotation, bool allowFrontCoupling = true, bool allowRearCoupling = true)
+        {
+            var trainCar = GameManager.server.CreateEntity(prefabName, position, rotation) as TrainCar;
+
+            // Ensure the workcart does not decay for some time.
+            trainCar.lastDecayTick = Time.realtimeSinceStartup;
+
+            // Enable invincibility.
+            trainCar.initialSpawnTime = float.MaxValue;
+
+            trainCar.EnableSaving(false);
+            trainCar.Spawn();
+
+            if (trainCar.IsDestroyed)
+                return null;
+
+            UpdateAllowedCouplings(trainCar, allowFrontCoupling, allowRearCoupling);
+
+            trainCar.Invoke(() => EnableSavingRecursive(trainCar, false), 0);
+
+            return trainCar;
+        }
+
+        private static float GetSplineDistance(TrainTrackSpline spline, Vector3 position)
+        {
+            float distanceOnSpline;
+            spline.GetDistance(position, 1, out distanceOnSpline);
+            return distanceOnSpline;
+        }
+
+        private static TrainCar AddWagon(TrainCar trainCar, string prefabName, TrackSelection trackSelection, bool allowRearCoupling = true)
+        {
+            var rearSpline = trainCar.FrontTrackSection;
+            var position = trainCar.transform.position;
+            var distanceOnSpline = GetSplineDistance(rearSpline, position);
+            var carLength = GetTrainCarLength(trainCar.PrefabName);
+
+            var distanceFromTrainCar = carLength + GetTrainCarLength(prefabName) - 0.6f;
+
+            TrainTrackSpline resultSpline;
+            float distanceOnResultSpline;
+            var askerIsForward = rearSpline.IsForward(trainCar.transform.forward, distanceOnSpline);
+            var isAscending = !askerIsForward;
+            var resultPosition = GetPositionAlongTrack(rearSpline, distanceOnSpline, distanceFromTrainCar, isAscending, askerIsForward, trackSelection, out resultSpline, out distanceOnResultSpline);
+            var resultRotation = GetSplineTangentRotation(resultSpline, distanceOnResultSpline, trainCar.transform.rotation);
+
+            var wagon = SpawnWagon(prefabName, resultPosition, resultRotation, allowFrontCoupling: true, allowRearCoupling: allowRearCoupling);
+            TryCoupleTrainCars(trainCar, wagon);
+
+            return wagon;
+        }
+
+        private static void TryCoupleTrainCars(TrainCar front, TrainCar rear)
+        {
+            front.coupling.rearCoupling.TryCouple(rear.coupling.frontCoupling, reflect: true);
+        }
+
+        private static float GetTrainCarLength(string prefabName)
+        {
+            var prefab = GameManager.server.FindPrefab(prefabName)?.GetComponent<TrainCar>();
+            if (prefab == null)
+                return 0;
+
+            return prefab.WorldSpaceBounds().extents.z;
+        }
+
+        private static TrainTrackSpline.ConnectedTrackInfo GetAdjacentTrackInfo(TrainTrackSpline spline, TrainTrackSpline.TrackSelection selection, bool isAscending = true, bool askerIsForward = true)
+        {
+            var trackOptions = isAscending
+                ? spline.nextTracks
+                : spline.prevTracks;
+
+            if (trackOptions.Count == 0)
+                return null;
+
+            if (trackOptions.Count == 1)
+                return trackOptions[0];
+
+            switch (selection)
+            {
+                case TrainTrackSpline.TrackSelection.Left:
+                    return isAscending == askerIsForward
+                        ? trackOptions.FirstOrDefault()
+                        : trackOptions.LastOrDefault();
+
+                case TrainTrackSpline.TrackSelection.Right:
+                    return isAscending == askerIsForward
+                        ? trackOptions.LastOrDefault()
+                        : trackOptions.FirstOrDefault();
+
+                default:
+                    return trackOptions[isAscending ? spline.straightestNextIndex : spline.straightestPrevIndex];
+            }
+        }
+
+        private static Quaternion GetSplineTangentRotation(TrainTrackSpline spline, float distanceOnSpline, Quaternion initialRotation)
+        {
+            var initialDirection = initialRotation * Vector3.forward;
+            Vector3 idealDirection;
+            spline.GetPositionAndTangent(distanceOnSpline, initialDirection, out idealDirection);
+            return Quaternion.LookRotation(idealDirection);
+        }
+
+        private static Vector3 GetPositionAlongTrack(TrainTrackSpline spline, float distanceOnSpline, float desiredDistance, bool isAscending, bool askerIsForward, TrainTrackSpline.TrackSelection trackSelection, out TrainTrackSpline resultSpline, out float distanceOnResultSpline, out float remainingDistance)
+        {
+            resultSpline = spline;
+            distanceOnResultSpline = distanceOnSpline;
+            remainingDistance = desiredDistance;
+
+            var i = 0;
+
+            while (remainingDistance > 0)
+            {
+                if (i++ > 1000)
                 {
-                    Route = triggerData?.Route,
-                };
+                    LogError("Something is wrong. Please contact the plugin developer.");
+                    return Vector3.zero;
+                }
+
+                var splineLength = resultSpline.GetLength();
+                var newPositionOnSpline = isAscending
+                    ? distanceOnResultSpline + remainingDistance
+                    : distanceOnResultSpline - remainingDistance;
+
+                remainingDistance -= isAscending
+                    ? splineLength - distanceOnResultSpline
+                    : distanceOnResultSpline;
+
+                if (newPositionOnSpline >= 0 && newPositionOnSpline <= splineLength)
+                {
+                    // Reached desired distance.
+                    return resultSpline.GetPosition(newPositionOnSpline);
+                }
+
+                var adjacentTrackInfo = GetAdjacentTrackInfo(resultSpline, trackSelection, isAscending, askerIsForward);
+                if (adjacentTrackInfo == null)
+                {
+                    // Track is a dead end.
+                    return resultSpline.GetPosition(isAscending ? splineLength : 0);
+                }
+
+                if (adjacentTrackInfo.orientation == TrainTrackSpline.TrackOrientation.Reverse)
+                {
+                    isAscending = !isAscending;
+                }
+
+                resultSpline = adjacentTrackInfo.track;
+                distanceOnResultSpline = isAscending ? 0 : resultSpline.GetLength();
             }
 
-            var trainController = TrainController.AddToWorkcart(workcart, workcartData);
-            if (triggerData != null)
-                trainController.HandleConductorTrigger(triggerData);
-
-            _pluginInstance._workcartManager.Register(workcart, workcartData);
-            Interface.CallHook("OnWorkcartAutomationStarted", workcart);
-
-            return true;
+            return Vector3.zero;
         }
 
-        private static void RemoveTrainController(TrainEngine workcart, bool immediate = false)
+        private static Vector3 GetPositionAlongTrack(TrainTrackSpline spline, float distanceOnSpline, float desiredDistance, bool isAscending, bool askerIsForward, TrainTrackSpline.TrackSelection trackSelection, out TrainTrackSpline resultSpline, out float distanceOnResultSpline)
         {
-            var controller = TrainController.GetForWorkcart(workcart);
-            if (controller == null)
-                return;
-
-            if (immediate)
-                UnityEngine.Object.DestroyImmediate(controller);
-            else
-                UnityEngine.Object.Destroy(controller);
-
-            _pluginInstance._workcartManager.Unregister(workcart);
-            Interface.CallHook("OnWorkcartAutomationStopped", workcart);
+            float remainingDistance;
+            return GetPositionAlongTrack(spline, distanceOnSpline, desiredDistance, isAscending, askerIsForward, trackSelection, out resultSpline, out distanceOnResultSpline, out remainingDistance);
         }
+
+        private static Vector3 GetPositionAlongTrack(TrainTrackSpline spline, float distanceOnSpline, float desiredDistance, bool isAscending, bool askerIsForward, TrainTrackSpline.TrackSelection trackSelection)
+        {
+            TrainTrackSpline resultSpline;
+            float distanceOnResultSpline;
+            float remainingDistance;
+            return GetPositionAlongTrack(spline, distanceOnSpline, desiredDistance, isAscending, askerIsForward, trackSelection, out resultSpline, out distanceOnResultSpline, out remainingDistance);
+        }
+
+        private static bool IsWorkcartOwned(TrainEngine workcart) => workcart.OwnerID != 0;
 
         private static string GetShortName(string prefabName)
         {
@@ -1045,7 +1304,7 @@ namespace Oxide.Plugins
                 return true;
 
             engineSpeed = EngineSpeeds.Zero;
-            _pluginInstance.LogError($"Unrecognized engine speed: {speedName}");
+            LogError($"Unrecognized engine speed: {speedName}");
             return false;
         }
 
@@ -1054,7 +1313,7 @@ namespace Oxide.Plugins
             if (Enum.TryParse<TrackSelection>(selectionName, true, out trackSelection))
                 return true;
 
-            _pluginInstance.LogError($"Unrecognized track selection: {selectionName}");
+            LogError($"Unrecognized track selection: {selectionName}");
             trackSelection = TrackSelection.Default;
             return false;
         }
@@ -1517,6 +1776,9 @@ namespace Oxide.Plugins
             [JsonProperty("RotationAngle", DefaultValueHandling = DefaultValueHandling.Ignore)]
             public float RotationAngle;
 
+            [JsonProperty("Wagons", DefaultValueHandling = DefaultValueHandling.Ignore)]
+            public string[] Wagons;
+
             [JsonIgnore]
             public WorkcartTriggerType TriggerType => TunnelType != null ? WorkcartTriggerType.Tunnel : WorkcartTriggerType.Map;
 
@@ -1705,11 +1967,11 @@ namespace Oxide.Plugins
 
         #region Spawned Workcart Tracker
 
-        private class SpawnedWorkcartTracker : FacepunchBehaviour
+        private class SpawnedWorkcartComponent : FacepunchBehaviour
         {
             public static void AddToWorkcart(TrainEngine workcart, BaseTriggerInstance triggerInstance)
             {
-                var component = workcart.gameObject.AddComponent<SpawnedWorkcartTracker>();
+                var component = workcart.gameObject.AddComponent<SpawnedWorkcartComponent>();
                 component._workcart = workcart;
                 component._triggerInstance = triggerInstance;
             }
@@ -1892,27 +2154,32 @@ namespace Oxide.Plugins
                     ? AboveGroundWorkcartPrefab
                     : WorkcartPrefab;
 
-                var workcart = GameManager.server.CreateEntity(prefab, worldPosition, WorldRotation) as TrainEngine;
+                var rotation = GetSplineTangentRotation(Spline, DistanceOnSpline, WorldRotation);
+                var workcart = AutomatedWorkcarts.SpawnWorkcart(prefab, worldPosition, rotation, allowFrontCoupling: false);
+                if (workcart == null)
+                    return;
 
-                // Ensure the workcart does not decay for some time.
-                workcart.lastDecayTick = Time.realtimeSinceStartup;
+                TrainCar lastValidTrainCar = workcart;
 
-                workcart.EnableSaving(false);
-                workcart.Spawn();
-
-                workcart.Invoke(() =>
+                if (TriggerData.Wagons != null)
                 {
-                    foreach (var child in workcart.children)
-                    {
-                        if (child is BasePlayer)
-                            continue;
+                    var trackSelection = DetermineNextTrackSelection(TrackSelection.Default, TriggerData.GetTrackSelectionInstruction());
 
-                        child.EnableSaving(false);
+                    TrainCar previousWagon = workcart;
+                    foreach (var wagonPrefab in TriggerData.Wagons)
+                    {
+                        previousWagon = AddWagon(previousWagon, wagonPrefab, trackSelection);
+                        if (previousWagon == null)
+                            break;
+
+                        lastValidTrainCar = previousWagon;
                     }
-                }, 0);
+                }
+
+                UpdateAllowedCouplings(lastValidTrainCar, allowFront: lastValidTrainCar != workcart, allowRear: false);
 
                 _spawnedWorkcarts.Add(workcart);
-                SpawnedWorkcartTracker.AddToWorkcart(workcart, this);
+                SpawnedWorkcartComponent.AddToWorkcart(workcart, this);
             }
 
             private void KillWorkcarts()
@@ -1925,7 +2192,13 @@ namespace Oxide.Plugins
                     var workcart = _spawnedWorkcarts[i];
                     if (workcart != null && !workcart.IsDestroyed)
                     {
-                        workcart.Kill();
+                        foreach (var trainCar in workcart.completeTrain.trainCars.ToList())
+                        {
+                            if (trainCar != null && !trainCar.IsDestroyed)
+                            {
+                                trainCar.Kill();
+                            }
+                        }
                     }
                     _spawnedWorkcarts.RemoveAt(i);
                 }
@@ -2524,64 +2797,127 @@ namespace Oxide.Plugins
 
         #endregion
 
-        #region Workcart Manager
+        #region Train Manager
 
-        private class AutomatedWorkcartManager
+        private class TrainManager
         {
-            private List<TrainEngine> _automatedWorkcarts = new List<TrainEngine>();
+            private Dictionary<TrainEngine, TrainController> _trainControllers = new Dictionary<TrainEngine, TrainController>();
+            private bool _isUnloading = false;
 
-            public int NumWorkcarts => _automatedWorkcarts.Count;
-            public TrainEngine[] GetWorkcarts() => _automatedWorkcarts.ToArray();
+            public int NumWorkcarts => _trainControllers.Count;
+            public TrainEngine[] GetWorkcarts() => _trainControllers.Keys.ToArray();
 
-            public void Register(TrainEngine workcart, WorkcartData workcartData)
+            public bool IsRegistered(TrainCar trainCar)
             {
-                _automatedWorkcarts.Add(workcart);
+                var workcart = trainCar as TrainEngine;
+                if ((object)workcart != null)
+                {
+                    return _trainControllers.ContainsKey(workcart);
+                }
+
+                foreach (var possibleWorkcart in _trainControllers.Keys)
+                {
+                    if (possibleWorkcart.completeTrain == trainCar.completeTrain)
+                    {
+                        return true;
+                    }
+                }
+
+                return false;
+            }
+
+            public TrainController GetTrainController(TrainEngine workcart)
+            {
+                TrainController trainController;
+                return _trainControllers.TryGetValue(workcart, out trainController)
+                    ? trainController
+                    : null;
+            }
+
+            public bool TryAddTrainController(TrainEngine workcart, TriggerData triggerData = null, WorkcartData workcartData = null)
+            {
+                if (_pluginInstance.AutomationWasBlocked(workcart))
+                    return false;
+
+                if (workcartData == null)
+                {
+                    workcartData = new WorkcartData
+                    {
+                        Route = triggerData?.Route,
+                    };
+                }
+
+                var trainController = TrainController.AddToWorkcart(workcart, this, workcartData);
+                if (triggerData != null)
+                {
+                    trainController.HandleConductorTrigger(triggerData);
+                }
+
+                Register(workcart, trainController, workcartData);
+                ExposedHooks.OnWorkcartAutomationStarted(workcart);
+
+                return true;
+            }
+
+            public void RemoveTrainController(TrainEngine workcart)
+            {
+                var controller = GetTrainController(workcart);
+                if (controller == null)
+                    return;
+
+                UnityEngine.Object.DestroyImmediate(controller);
+                ExposedHooks.OnWorkcartAutomationStopped(workcart);
+            }
+
+            public void Register(TrainEngine workcart, TrainController trainController, WorkcartData workcartData)
+            {
+                _trainControllers[workcart] = trainController;
                 _pluginData.AddWorkcartId(workcart.net.ID, workcartData);
             }
 
-            public void Unregister(TrainEngine workcart)
+            public void Unregister(TrainEngine workcart, uint netId)
             {
-                _automatedWorkcarts.Remove(workcart);
-                _pluginData.RemoveWorkcartId(workcart.net.ID);
+                _trainControllers.Remove(workcart);
+
+                if (!_isUnloading)
+                {
+                    _pluginData.RemoveWorkcartId(netId);
+                }
             }
 
-            public int ResetAll()
+            public int Unload()
             {
+                _isUnloading = true;
+
                 var numWorkcarts = NumWorkcarts;
 
-                foreach (var workcart in _automatedWorkcarts.ToArray())
+                foreach (var workcart in _trainControllers.Keys.ToList())
+                {
                     RemoveTrainController(workcart);
+                }
 
                 return numWorkcarts;
             }
 
             public void ResendAllGenericMarkers()
             {
-                foreach (var workcart in _automatedWorkcarts)
+                foreach (var trainController in _trainControllers.Values)
                 {
-                    if (workcart == null)
+                    if (trainController == null)
                         continue;
 
-                    var controller = TrainController.GetForWorkcart(workcart);
-                    if (controller == null)
-                        continue;
-
-                    controller.ResendGenericMarker();
+                    trainController.ResendGenericMarker();
                 }
             }
 
             public void UpdateWorkcartData()
             {
-                foreach (var workcart in _automatedWorkcarts)
+                foreach (var trainController in _trainControllers.Values)
                 {
-                    if (workcart == null)
+                    if (trainController == null)
                         continue;
 
-                    var controller = TrainController.GetForWorkcart(workcart);
-                    if (controller == null)
-                        continue;
-
-                    controller.UpdateWorkcartData();
+                    trainController.UpdateWorkcartData();
                 }
             }
         }
@@ -2732,33 +3068,23 @@ namespace Oxide.Plugins
             public static TrainController GetForWorkcart(TrainEngine workcart) =>
                 workcart.GetComponent<TrainController>();
 
-            public static TrainController AddToWorkcart(TrainEngine workcart, WorkcartData workcartData)
+            public static TrainController AddToWorkcart(TrainEngine workcart, TrainManager workcartManager, WorkcartData workcartData)
             {
-                var controller = workcart.GetComponent<TrainController>();
+                var controller = GetForWorkcart(workcart);
                 if (controller != null)
                     return controller;
 
                 controller = workcart.gameObject.AddComponent<TrainController>();
-                controller.Init(workcartData);
+                controller.Init(workcartManager, workcartData);
                 return controller;
-            }
-
-            public static void DestroyAll()
-            {
-                foreach (var entity in BaseNetworkable.serverEntities)
-                {
-                    var workcart = entity as TrainEngine;
-                    if (workcart == null)
-                        continue;
-
-                    RemoveTrainController(workcart, immediate: true);
-                }
             }
 
             public NPCShopKeeper Conductor { get; private set; }
             public TrainEngine Workcart { get; private set; }
             public Transform Transform { get; private set; }
 
+            private TrainManager _workcartManager;
+            private uint _netId;
             private string _netIdString;
             private MapMarkerGenericRadius _genericMarker;
             private VendingMachineMapMarker _vendingMarker;
@@ -2780,18 +3106,22 @@ namespace Oxide.Plugins
 
                 Transform = Workcart.transform;
                 Workcart.SetHealth(Workcart.MaxHealth());
-                _netIdString = Workcart.net.ID.ToString();
+                _netId = Workcart.net.ID;
+                _netIdString = _netId.ToString();
 
                 AddConductor();
                 MaybeAddMapMarkers();
                 EnableUnlimitedFuel();
             }
 
-            public void Init(WorkcartData workcartData)
+            public void Init(TrainManager workcartManager, WorkcartData workcartData)
             {
+                _workcartManager = workcartManager;
                 _workcartData = workcartData;
 
                 Workcart.engineController.TryStartEngine(Conductor);
+
+                EnableInvincibility();
 
                 // Delay disabling hazard checks since starting the engine does not immediately update entity flags.
                 Invoke(DisableHazardChecks, 1f);
@@ -3032,6 +3362,16 @@ namespace Oxide.Plugins
                 Conductor.SendNetworkUpdate();
             }
 
+            private void EnableInvincibility()
+            {
+                Workcart.initialSpawnTime = float.MaxValue;
+            }
+
+            private void DisableInvincibility()
+            {
+                Workcart.initialSpawnTime = Time.time;
+            }
+
             private void DisableHazardChecks()
             {
                 Workcart.SetFlag(TrainEngine.Flag_HazardAhead, false);
@@ -3041,7 +3381,9 @@ namespace Oxide.Plugins
             private void EnableHazardChecks()
             {
                 if (Workcart.IsOn() && !Workcart.IsInvoking(Workcart.CheckForHazards))
+                {
                     Workcart.InvokeRandomized(Workcart.CheckForHazards, 0f, 1f, 0.1f);
+                }
             }
 
             private void EnableUnlimitedFuel()
@@ -3058,6 +3400,8 @@ namespace Oxide.Plugins
 
             private void OnDestroy()
             {
+                _workcartManager.Unregister(Workcart, _netId);
+
                 if (Conductor != null)
                     Conductor.Kill();
 
@@ -3067,6 +3411,7 @@ namespace Oxide.Plugins
                 if (_vendingMarker != null)
                     _vendingMarker.Kill();
 
+                DisableInvincibility();
                 DisableUnlimitedFuel();
                 EnableHazardChecks();
             }
@@ -3196,7 +3541,7 @@ namespace Oxide.Plugins
                         var data = Interface.Oxide.DataFileSystem.ReadObject<StoredMapData>(perWipeFilepath);
                         if (data != null)
                         {
-                            _pluginInstance.LogWarning($"Migrating map data file from '{perWipeFilepath}.json' to '{filepath}.json'");
+                            LogWarning($"Migrating map data file from '{perWipeFilepath}.json' to '{filepath}.json'");
                             data.Save();
                             return data;
                         }
@@ -3288,7 +3633,7 @@ namespace Oxide.Plugins
 
                 if (migratedTriggers > 0)
                 {
-                    _pluginInstance.LogWarning($"Automatically relocated {migratedTriggers} tunnel triggers to bypass tunnels.");
+                    LogWarning($"Automatically relocated {migratedTriggers} tunnel triggers to bypass tunnels.");
                     Save();
                 }
             }
@@ -3435,7 +3780,7 @@ namespace Oxide.Plugins
                     if (itemDefinition != null)
                         _itemDefinition = itemDefinition;
                     else
-                        _pluginInstance.LogError($"Invalid item short name in config: '{ShortName}'");
+                        LogError($"Invalid item short name in config: '{ShortName}'");
 
                     _isValidated = true;
                 }
@@ -3736,8 +4081,8 @@ namespace Oxide.Plugins
 
         private string GetConductorCountMessage(IPlayer player) =>
              _pluginConfig.MaxConductors >= 0
-             ? GetMessage(player, Lang.InfoConductorCountLimited, _workcartManager.NumWorkcarts, _pluginConfig.MaxConductors)
-             : GetMessage(player, Lang.InfoConductorCountUnlimited, _workcartManager.NumWorkcarts);
+             ? GetMessage(player, Lang.InfoConductorCountLimited, _trainManager.NumWorkcarts, _pluginConfig.MaxConductors)
+             : GetMessage(player, Lang.InfoConductorCountUnlimited, _trainManager.NumWorkcarts);
 
         private class Lang
         {
