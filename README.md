@@ -204,6 +204,7 @@ Default configuration:
 
 ```json
 {
+  "EnableTerrainCollision": true,
   "DefaultSpeed": "Fwd_Hi",
   "DefaultTrackSelection": "Left",
   "BulldozeOffendingWorkcarts": false,
@@ -245,6 +246,7 @@ Default configuration:
 }
 ```
 
+- `EnableTerrainCollision` (`true` or `false`) -- While `true` (default), workcarts and wagons will be unable to travel through terrain or terrain triggers. This doesn't matter for procedural maps because vanilla train tracks never pass through terrain, but if you have a custom map which has train tunnels that pass through terrain, you should set this to `false` to allow workcarts and wagons to travel through those tunnels. This option affects all workcarts and wagons, regardless of whether they were spawned or controlled by this plugin.
 - `DefaultSpeed` -- Default speed to use when a workcart starts being automated.
   - Allowed values: `"Rev_Hi"` | `"Rev_Med"` | `"Rev_Lo"` | `"Zero"` | `"Fwd_Lo"` | `"Fwd_Med"` | `"Fwd_Hi"`.
   - This value is ignored if the workcart is on a trigger that specifies speed.

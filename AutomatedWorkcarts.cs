@@ -64,12 +64,28 @@ namespace Oxide.Plugins
             permission.RegisterPermission(PermissionToggle, this);
             permission.RegisterPermission(PermissionManageTriggers, this);
 
+            Unsubscribe(nameof(OnEntitySpawned));
+
             if (!_pluginConfig.GenericMapMarker.Enabled)
                 Unsubscribe(nameof(OnPlayerConnected));
         }
 
         private void OnServerInitialized()
         {
+            if (!_pluginConfig.EnableTerrainCollision)
+            {
+                foreach (var entity in BaseNetworkable.serverEntities)
+                {
+                    var trainCar = entity as TrainCar;
+                    if (trainCar != null)
+                    {
+                        EnableTerrainCollision(trainCar, false);
+                    }
+                }
+
+                Subscribe(nameof(OnEntitySpawned));
+            }
+
             _tunnelData.MigrateTriggers();
             _mapData = StoredMapData.Load();
 
@@ -78,6 +94,18 @@ namespace Oxide.Plugins
 
         private void Unload()
         {
+            if (!_pluginConfig.EnableTerrainCollision)
+            {
+                foreach (var entity in BaseNetworkable.serverEntities)
+                {
+                    var trainCar = entity as TrainCar;
+                    if (trainCar != null)
+                    {
+                        EnableTerrainCollision(trainCar, true);
+                    }
+                }
+            }
+
             if (_startupCoroutine != null)
                 ServerMgr.Instance.StopCoroutine(_startupCoroutine);
 
@@ -112,6 +140,11 @@ namespace Oxide.Plugins
             }
 
             _trainManager.ResendAllGenericMarkers();
+        }
+
+        private void OnEntitySpawned(TrainCar trainCar)
+        {
+            EnableTerrainCollision(trainCar, false);
         }
 
         private void OnEntityEnter(WorkcartTrigger trigger, TrainEngine workcart)
@@ -1067,6 +1100,12 @@ namespace Oxide.Plugins
 
             _pluginData.TrimToWorkcartIds(foundWorkcartIds);
             TrackEnd();
+        }
+
+        private void EnableTerrainCollision(TrainCar trainCar, bool enabled)
+        {
+            Physics.IgnoreCollision(trainCar.frontCollisionTrigger.triggerCollider, TerrainMeta.Collider, !enabled);
+            Physics.IgnoreCollision(trainCar.rearCollisionTrigger.triggerCollider, TerrainMeta.Collider, !enabled);
         }
 
         private bool AutomationWasBlocked(TrainEngine workcart)
@@ -3841,6 +3880,9 @@ namespace Oxide.Plugins
 
         private class Configuration : SerializableConfiguration
         {
+            [JsonProperty("EnableTerrainCollision")]
+            public bool EnableTerrainCollision = true;
+
             [JsonProperty("DefaultSpeed")]
             public string DefaultSpeed = EngineSpeeds.Fwd_Hi.ToString();
 
