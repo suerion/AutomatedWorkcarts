@@ -2599,6 +2599,11 @@ namespace Oxide.Plugins
 
             public void AddTriggerCommand(TriggerData triggerData, string command)
             {
+                if (triggerData.Commands == null)
+                {
+                    triggerData.Commands = new List<string>();
+                }
+
                 if (triggerData.Commands.Contains(command, StringComparer.InvariantCultureIgnoreCase))
                     return;
 
