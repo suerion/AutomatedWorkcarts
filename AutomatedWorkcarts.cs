@@ -1198,17 +1198,26 @@ namespace Oxide.Plugins
             var distanceOnSpline = GetSplineDistance(rearSpline, position);
             var carLength = GetTrainCarLength(trainCar.PrefabName);
 
+            var askerIsForward = rearSpline.IsForward(trainCar.transform.forward, distanceOnSpline);
+            var splineInfo = new SplineInfo
+            {
+                Spline = rearSpline,
+                Distance = distanceOnSpline,
+                Ascending = !askerIsForward,
+                IsForward = askerIsForward,
+            };
+
             var distanceFromTrainCar = carLength + GetTrainCarLength(prefabName) - 0.6f;
 
-            TrainTrackSpline resultSpline;
-            float distanceOnResultSpline;
-            var askerIsForward = rearSpline.IsForward(trainCar.transform.forward, distanceOnSpline);
-            var isAscending = !askerIsForward;
-            var resultPosition = GetPositionAlongTrack(rearSpline, distanceOnSpline, distanceFromTrainCar, isAscending, askerIsForward, trackSelection, out resultSpline, out distanceOnResultSpline);
-            var resultRotation = GetSplineTangentRotation(resultSpline, distanceOnResultSpline, trainCar.transform.rotation);
+            SplineInfo resultSplineInfo;
+            var resultPosition = GetPositionAlongTrack(splineInfo, distanceFromTrainCar, trackSelection, out resultSplineInfo);
+            var resultRotation = GetSplineTangentRotation(resultSplineInfo.Spline, resultSplineInfo.Distance, trainCar.transform.rotation);
 
             var wagon = SpawnWagon(prefabName, resultPosition, resultRotation, allowFrontCoupling: true, allowRearCoupling: allowRearCoupling);
-            TryCoupleTrainCars(trainCar, wagon);
+            if (wagon != null)
+            {
+                TryCoupleTrainCars(trainCar, wagon);
+            }
 
             return wagon;
         }
@@ -1227,7 +1236,7 @@ namespace Oxide.Plugins
             return prefab.WorldSpaceBounds().extents.z;
         }
 
-        private static TrainTrackSpline.ConnectedTrackInfo GetAdjacentTrackInfo(TrainTrackSpline spline, TrainTrackSpline.TrackSelection selection, bool isAscending = true, bool askerIsForward = true)
+        private static ConnectedTrackInfo GetAdjacentTrackInfo(TrainTrackSpline spline, TrainTrackSpline.TrackSelection selection, bool isAscending = true, bool askerIsForward = true)
         {
             var trackOptions = isAscending
                 ? spline.nextTracks
@@ -1256,18 +1265,24 @@ namespace Oxide.Plugins
             }
         }
 
-        private static Quaternion GetSplineTangentRotation(TrainTrackSpline spline, float distanceOnSpline, Quaternion initialRotation)
+        private static Quaternion GetSplineTangentRotation(TrainTrackSpline spline, float distanceOnSpline, Quaternion approximateRotation)
         {
-            var initialDirection = initialRotation * Vector3.forward;
-            Vector3 idealDirection;
-            spline.GetPositionAndTangent(distanceOnSpline, initialDirection, out idealDirection);
-            return Quaternion.LookRotation(idealDirection);
+            Vector3 tangentDirection;
+            spline.GetPositionAndTangent(distanceOnSpline, approximateRotation * Vector3.forward, out tangentDirection);
+            return Quaternion.LookRotation(tangentDirection);
         }
 
-        private static Vector3 GetPositionAlongTrack(TrainTrackSpline spline, float distanceOnSpline, float desiredDistance, bool isAscending, bool askerIsForward, TrainTrackSpline.TrackSelection trackSelection, out TrainTrackSpline resultSpline, out float distanceOnResultSpline, out float remainingDistance)
+        private struct SplineInfo
         {
-            resultSpline = spline;
-            distanceOnResultSpline = distanceOnSpline;
+            public TrainTrackSpline Spline;
+            public float Distance;
+            public bool Ascending;
+            public bool IsForward;
+        }
+
+        private static Vector3 GetPositionAlongTrack(SplineInfo splineInfo, float desiredDistance, TrackSelection trackSelection, out SplineInfo resultSplineInfo, out float remainingDistance)
+        {
+            resultSplineInfo = splineInfo;
             remainingDistance = desiredDistance;
 
             var i = 0;
@@ -1280,52 +1295,54 @@ namespace Oxide.Plugins
                     return Vector3.zero;
                 }
 
-                var splineLength = resultSpline.GetLength();
-                var newPositionOnSpline = isAscending
-                    ? distanceOnResultSpline + remainingDistance
-                    : distanceOnResultSpline - remainingDistance;
+                var splineLength = resultSplineInfo.Spline.GetLength();
+                var newDistanceOnSpline = resultSplineInfo.Ascending
+                    ? resultSplineInfo.Distance + remainingDistance
+                    : resultSplineInfo.Distance - remainingDistance;
 
-                remainingDistance -= isAscending
-                    ? splineLength - distanceOnResultSpline
-                    : distanceOnResultSpline;
+                remainingDistance -= resultSplineInfo.Ascending
+                    ? splineLength - resultSplineInfo.Distance
+                    : resultSplineInfo.Distance;
 
-                if (newPositionOnSpline >= 0 && newPositionOnSpline <= splineLength)
+                if (newDistanceOnSpline >= 0 && newDistanceOnSpline <= splineLength)
                 {
                     // Reached desired distance.
-                    return resultSpline.GetPosition(newPositionOnSpline);
+                    resultSplineInfo.Distance = newDistanceOnSpline;
+                    return resultSplineInfo.Spline.GetPosition(resultSplineInfo.Distance);
                 }
 
-                var adjacentTrackInfo = GetAdjacentTrackInfo(resultSpline, trackSelection, isAscending, askerIsForward);
+                var adjacentTrackInfo = GetAdjacentTrackInfo(resultSplineInfo.Spline, trackSelection, resultSplineInfo.Ascending, resultSplineInfo.IsForward);
                 if (adjacentTrackInfo == null)
                 {
                     // Track is a dead end.
-                    return resultSpline.GetPosition(isAscending ? splineLength : 0);
+                    resultSplineInfo.Distance = resultSplineInfo.Ascending ? splineLength : 0;
+                    return resultSplineInfo.Spline.GetPosition(resultSplineInfo.Distance);
                 }
 
                 if (adjacentTrackInfo.orientation == TrainTrackSpline.TrackOrientation.Reverse)
                 {
-                    isAscending = !isAscending;
+                    resultSplineInfo.Ascending = !resultSplineInfo.Ascending;
+                    resultSplineInfo.IsForward = !resultSplineInfo.IsForward;
                 }
 
-                resultSpline = adjacentTrackInfo.track;
-                distanceOnResultSpline = isAscending ? 0 : resultSpline.GetLength();
+                resultSplineInfo.Spline = adjacentTrackInfo.track;
+                resultSplineInfo.Distance = resultSplineInfo.Ascending ? 0 : resultSplineInfo.Spline.GetLength();
             }
 
             return Vector3.zero;
         }
 
-        private static Vector3 GetPositionAlongTrack(TrainTrackSpline spline, float distanceOnSpline, float desiredDistance, bool isAscending, bool askerIsForward, TrainTrackSpline.TrackSelection trackSelection, out TrainTrackSpline resultSpline, out float distanceOnResultSpline)
+        private static Vector3 GetPositionAlongTrack(SplineInfo splineInfo, float desiredDistance, TrackSelection trackSelection, out SplineInfo resultSplineInfo)
         {
             float remainingDistance;
-            return GetPositionAlongTrack(spline, distanceOnSpline, desiredDistance, isAscending, askerIsForward, trackSelection, out resultSpline, out distanceOnResultSpline, out remainingDistance);
+            return GetPositionAlongTrack(splineInfo, desiredDistance, trackSelection, out resultSplineInfo, out remainingDistance);
         }
 
-        private static Vector3 GetPositionAlongTrack(TrainTrackSpline spline, float distanceOnSpline, float desiredDistance, bool isAscending, bool askerIsForward, TrainTrackSpline.TrackSelection trackSelection)
+        private static Vector3 GetPositionAlongTrack(SplineInfo splineInfo, float desiredDistance, TrackSelection trackSelection)
         {
-            TrainTrackSpline resultSpline;
-            float distanceOnResultSpline;
+            SplineInfo resultSplineInfo;
             float remainingDistance;
-            return GetPositionAlongTrack(spline, distanceOnSpline, desiredDistance, isAscending, askerIsForward, trackSelection, out resultSpline, out distanceOnResultSpline, out remainingDistance);
+            return GetPositionAlongTrack(splineInfo, desiredDistance, trackSelection, out resultSplineInfo, out remainingDistance);
         }
 
         private static bool IsWorkcartOwned(TrainEngine workcart) => workcart.OwnerID != 0;
@@ -2171,12 +2188,12 @@ namespace Oxide.Plugins
                     _spawnedWorkcarts = new List<TrainEngine>(MaxSpawnedWorkcarts);
                 }
 
-                _workcartTrigger.InvokeRepeating(SpawnWorkcart, UnityEngine.Random.Range(0f, 1f), TimeBetweenSpawns);
+                _workcartTrigger.InvokeRepeating(SpawnWorkcartTracked, UnityEngine.Random.Range(0f, 1f), TimeBetweenSpawns);
             }
 
             private void StopSpawningWorkcarts()
             {
-                _workcartTrigger.CancelInvoke(SpawnWorkcart);
+                _workcartTrigger.CancelInvoke(SpawnWorkcartTracked);
             }
 
             private void SpawnWorkcart()
@@ -2189,7 +2206,7 @@ namespace Oxide.Plugins
 
                 var worldPosition = WorldPosition;
                 var terrainHeight = TerrainMeta.HeightMap.GetHeight(worldPosition);
-                var prefab = worldPosition.y - terrainHeight > -1
+                var prefab = worldPosition.y - terrainHeight > -1 || (TriggerData.Wagons?.Length ?? 0) > 0
                     ? AboveGroundWorkcartPrefab
                     : WorkcartPrefab;
 
@@ -2219,6 +2236,13 @@ namespace Oxide.Plugins
 
                 _spawnedWorkcarts.Add(workcart);
                 SpawnedWorkcartComponent.AddToWorkcart(workcart, this);
+            }
+
+            private void SpawnWorkcartTracked()
+            {
+                _pluginInstance?.TrackStart();
+                SpawnWorkcart();
+                _pluginInstance?.TrackEnd();
             }
 
             private void KillWorkcarts()
