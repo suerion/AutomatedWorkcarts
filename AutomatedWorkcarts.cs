@@ -636,7 +636,7 @@ namespace Oxide.Plugins
             ReplyToPlayer(player, Lang.RotateTriggerSuccess, GetTriggerPrefix(player, triggerData), triggerData.Id);
         }
 
-        [Command("aw.addtriggercommand", "awt.addcommand")]
+        [Command("aw.addtriggercommand", "awt.addcommand", "awt.addcmd")]
         private void CommandAddCommand(IPlayer player, string cmd, string[] args)
         {
             TriggerData triggerData;
@@ -659,7 +659,7 @@ namespace Oxide.Plugins
             ReplyToPlayer(player, Lang.UpdateTriggerSuccess, GetTriggerPrefix(player, triggerData), triggerData.Id);
         }
 
-        [Command("aw.removetriggercommand", "awt.removecommand")]
+        [Command("aw.removetriggercommand", "awt.removecommand", "awt.removecmd")]
         private void CommandRemoveCommand(IPlayer player, string cmd, string[] args)
         {
             TriggerData triggerData;

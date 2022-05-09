@@ -166,8 +166,8 @@ The following command aliases are available:
 - `aw.removetrigger` -> `awt.remove`
 - `aw.enabletrigger` -> `awt.enable`
 - `aw.disabletrigger` -> `awt.disable`
-- `aw.addtriggercommand` -> `awt.addcommand`
-- `aw.removetriggercommand` -> `awt.removecommand`
+- `aw.addtriggercommand` -> `awt.addcommand` or `awt.addcmd`
+- `aw.removetriggercommand` -> `awt.removecommand` or `awt.removecmd`
 
 ### Command examples
 
