@@ -420,10 +420,10 @@ namespace Oxide.Plugins
                 Position = dungeonCellWrapper.InverseTransformPoint(trackPosition),
             };
 
-            AddTriggerShared(player, cmd, args, triggerData);
+            AddTriggerShared(player, cmd, args, triggerData, dungeonCellWrapper);
         }
 
-        private void AddTriggerShared(IPlayer player, string cmd, string[] args, TriggerData triggerData)
+        private void AddTriggerShared(IPlayer player, string cmd, string[] args, TriggerData triggerData, DungeonCellWrapper dungeonCellWrapper = null)
         {
             foreach (var arg in args)
             {
@@ -441,6 +441,16 @@ namespace Oxide.Plugins
             }
 
             var basePlayer = player.Object as BasePlayer;
+
+            if (triggerData.Spawner)
+            {
+                var rotation = Quaternion.Euler(basePlayer.viewAngles);
+                if (dungeonCellWrapper != null)
+                {
+                    rotation *= Quaternion.Inverse(dungeonCellWrapper.Rotation);
+                }
+                triggerData.RotationAngle = rotation.eulerAngles.y % 360;
+            }
 
             _triggerManager.AddTrigger(triggerData);
 
@@ -614,13 +624,13 @@ namespace Oxide.Plugins
             var playerPosition = basePlayer.transform.position;
 
             var triggerInstance = _triggerManager.FindNearestTrigger(playerPosition, triggerData);
-            var rotation = Quaternion.LookRotation(playerPosition - triggerInstance.WorldPosition);
+            var rotation = Quaternion.Euler(basePlayer.viewAngles);
             var tunnelTriggerInstance = triggerInstance as TunnelTriggerInstance;
             if (tunnelTriggerInstance != null)
             {
                 rotation *= Quaternion.Inverse(tunnelTriggerInstance.DungeonCellWrapper.Rotation);
             }
-            _triggerManager.RotateTrigger(triggerData, (rotation.eulerAngles.y + 180) % 360);
+            _triggerManager.RotateTrigger(triggerData, rotation.eulerAngles.y % 360);
 
             _triggerManager.ShowAllRepeatedly(basePlayer);
             ReplyToPlayer(player, Lang.RotateTriggerSuccess, GetTriggerPrefix(player, triggerData), triggerData.Id);
