@@ -636,6 +636,25 @@ namespace Oxide.Plugins
             ReplyToPlayer(player, Lang.RotateTriggerSuccess, GetTriggerPrefix(player, triggerData), triggerData.Id);
         }
 
+        [Command("aw.respawntrigger", "awt.respawn")]
+        private void CommandRespawnTrigger(IPlayer player, string cmd, string[] args)
+        {
+            TriggerData triggerData;
+            string[] optionArgs;
+
+            if (!VerifyCanModifyTrigger(player, cmd, args, Lang.SimpleTriggerSyntax, out triggerData, out optionArgs))
+                return;
+
+            // No explicit feedback since this is an internal command for testing.
+            if (!triggerData.Spawner || !triggerData.Enabled)
+                return;
+
+            _triggerManager.RespawnTrigger(triggerData);
+
+            var basePlayer = player.Object as BasePlayer;
+            _triggerManager.ShowAllRepeatedly(basePlayer);
+        }
+
         [Command("aw.addtriggercommand", "awt.addcommand", "awt.addcmd")]
         private void CommandAddCommand(IPlayer player, string cmd, string[] args)
         {
@@ -2181,6 +2200,15 @@ namespace Oxide.Plugins
                 }
             }
 
+            public void Respawn()
+            {
+                if (!TriggerData.Spawner || !TriggerData.Enabled)
+                    return;
+
+                KillWorkcarts();
+                SpawnWorkcart();
+            }
+
             public void HandleWorkcartKilled(TrainEngine workcart)
             {
                 _spawnedWorkcarts.Remove(workcart);
@@ -2366,6 +2394,14 @@ namespace Oxide.Plugins
                 foreach (var triggerInstance in TriggerInstanceList)
                 {
                     triggerInstance.OnSpawnerToggled();
+                }
+            }
+
+            public void Respawn()
+            {
+                foreach (var triggerInstance in TriggerInstanceList)
+                {
+                    triggerInstance.Respawn();
                 }
             }
 
@@ -2617,6 +2653,15 @@ namespace Oxide.Plugins
                 triggerData.RotationAngle = rotationAngle;
                 triggerController.OnRotate();
                 SaveTrigger(triggerData);
+            }
+
+            public void RespawnTrigger(TriggerData triggerData)
+            {
+                var triggerController = GetTriggerController(triggerData);
+                if (triggerController == null)
+                    return;
+
+                triggerController.Respawn();
             }
 
             public void AddTriggerCommand(TriggerData triggerData, string command)
