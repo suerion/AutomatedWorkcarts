@@ -1151,7 +1151,7 @@ namespace Oxide.Plugins
             }
         }
 
-        private static TrainEngine SpawnWorkcart(string prefabName, Vector3 position, Quaternion rotation, bool allowFrontCoupling = true, bool allowRearCoupling = true)
+        private static TrainEngine SpawnWorkcart(string prefabName, Vector3 position, Quaternion rotation)
         {
             var workcart = GameManager.server.CreateEntity(prefabName, position, rotation) as TrainEngine;
 
@@ -1163,8 +1163,6 @@ namespace Oxide.Plugins
 
             if (workcart.IsDestroyed)
                 return null;
-
-            UpdateAllowedCouplings(workcart, allowFrontCoupling, allowRearCoupling);
 
             workcart.Invoke(() => EnableSavingRecursive(workcart, false), 0);
 
@@ -2221,11 +2219,9 @@ namespace Oxide.Plugins
                     : WorkcartPrefab;
 
                 var rotation = GetSplineTangentRotation(Spline, DistanceOnSpline, WorldRotation);
-                var workcart = AutomatedWorkcarts.SpawnWorkcart(prefab, worldPosition, rotation, allowFrontCoupling: false);
+                var workcart = AutomatedWorkcarts.SpawnWorkcart(prefab, worldPosition, rotation);
                 if (workcart == null)
                     return;
-
-                TrainCar lastValidTrainCar = workcart;
 
                 if (TriggerData.Wagons != null)
                 {
@@ -2235,14 +2231,10 @@ namespace Oxide.Plugins
                     foreach (var wagonPrefab in TriggerData.Wagons)
                     {
                         previousWagon = AddWagon(previousWagon, wagonPrefab, trackSelection);
-                        if (previousWagon == null)
+                        if ((object)previousWagon == null)
                             break;
-
-                        lastValidTrainCar = previousWagon;
                     }
                 }
-
-                UpdateAllowedCouplings(lastValidTrainCar, allowFront: lastValidTrainCar != workcart, allowRear: false);
 
                 _spawnedWorkcarts.Add(workcart);
                 SpawnedWorkcartComponent.AddToWorkcart(workcart, this);
