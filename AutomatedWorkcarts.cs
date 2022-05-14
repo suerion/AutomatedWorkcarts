@@ -1075,6 +1075,36 @@ namespace Oxide.Plugins
             }
         }
 
+        private static void DisableTrainCoupling(CompleteTrain completeTrain)
+        {
+            var firstTrainCar = completeTrain.trainCars.FirstOrDefault();
+            var lastTrainCar = completeTrain.trainCars.LastOrDefault();
+            if (firstTrainCar == null || lastTrainCar == null)
+                return;
+
+            UpdateAllowedCouplings(firstTrainCar, firstTrainCar.coupling.IsFrontCoupled, firstTrainCar.coupling.IsRearCoupled);
+
+            if (lastTrainCar != firstTrainCar)
+            {
+                UpdateAllowedCouplings(lastTrainCar, lastTrainCar.coupling.IsFrontCoupled, lastTrainCar.coupling.IsRearCoupled);
+            }
+        }
+
+        private static void EnableTrainCoupling(CompleteTrain completeTrain)
+        {
+            var firstTrainCar = completeTrain.trainCars.FirstOrDefault();
+            var lastTrainCar = completeTrain.trainCars.LastOrDefault();
+            if (firstTrainCar == null || lastTrainCar == null)
+                return;
+
+            UpdateAllowedCouplings(firstTrainCar, allowFront: true, allowRear: true);
+
+            if (lastTrainCar != firstTrainCar)
+            {
+                UpdateAllowedCouplings(lastTrainCar, allowFront: true, allowRear: true);
+            }
+        }
+
         #endregion
 
         #region Helper Methods
@@ -3189,6 +3219,8 @@ namespace Oxide.Plugins
                 _workcartManager = workcartManager;
                 _workcartData = workcartData;
 
+                DisableTrainCoupling(Workcart.completeTrain);
+
                 Workcart.engineController.TryStartEngine(Conductor);
 
                 EnableInvincibility();
@@ -3481,9 +3513,13 @@ namespace Oxide.Plugins
                 if (_vendingMarker != null)
                     _vendingMarker.Kill();
 
-                DisableInvincibility();
-                DisableUnlimitedFuel();
-                EnableHazardChecks();
+                if (Workcart != null && !Workcart.IsDestroyed)
+                {
+                    DisableInvincibility();
+                    DisableUnlimitedFuel();
+                    EnableHazardChecks();
+                    EnableTrainCoupling(Workcart.completeTrain);
+                }
             }
         }
 
