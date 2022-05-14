@@ -2113,6 +2113,7 @@ namespace Oxide.Plugins
 
             public abstract Vector3 WorldPosition { get; }
             public abstract Quaternion WorldRotation { get; }
+            public Quaternion SpawnRotation => GetSplineTangentRotation(Spline, DistanceOnSpline, WorldRotation);
 
             private GameObject _gameObject;
             private WorkcartTrigger _workcartTrigger;
@@ -2276,8 +2277,7 @@ namespace Oxide.Plugins
                     ? AboveGroundWorkcartPrefab
                     : WorkcartPrefab;
 
-                var rotation = GetSplineTangentRotation(Spline, DistanceOnSpline, WorldRotation);
-                var workcart = AutomatedWorkcarts.SpawnWorkcart(prefab, worldPosition, rotation);
+                var workcart = AutomatedWorkcarts.SpawnWorkcart(prefab, worldPosition, SpawnRotation);
                 if (workcart == null)
                     return;
 
@@ -2853,9 +2853,9 @@ namespace Oxide.Plugins
                     if (triggerData.Spawner)
                     {
                         infoLines.Add(_pluginInstance.GetMessage(player, Lang.InfoTriggerSpawner));
-                        var worldRotation = trigger.WorldRotation;
-                        var arrowBack = spherePosition + Vector3.up + worldRotation * Vector3.back * 1.5f;
-                        var arrowForward = spherePosition + Vector3.up + worldRotation * Vector3.forward * 1.5f;
+                        var spawnRotation = trigger.SpawnRotation;
+                        var arrowBack = spherePosition + Vector3.up + spawnRotation * Vector3.back * 1.5f;
+                        var arrowForward = spherePosition + Vector3.up + spawnRotation * Vector3.forward * 1.5f;
                         player.SendConsoleCommand("ddraw.arrow", TriggerDisplayDuration, color, arrowBack, arrowForward, 0.5f);
                     }
 
