@@ -3505,7 +3505,10 @@ namespace Oxide.Plugins
                 _workcartManager.Unregister(Workcart, _netId);
 
                 if (Conductor != null)
+                {
+                    Conductor.EnsureDismounted();
                     Conductor.Kill();
+                }
 
                 if (_genericMarker != null)
                     _genericMarker.Kill();
