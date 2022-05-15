@@ -1261,7 +1261,7 @@ namespace Oxide.Plugins
             return workcart;
         }
 
-        private static TrainCar SpawnWagon(string prefabName, Vector3 position, Quaternion rotation, bool allowFrontCoupling = true, bool allowRearCoupling = true)
+        private static TrainCar SpawnWagon(string prefabName, Vector3 position, Quaternion rotation)
         {
             var trainCar = GameManager.server.CreateEntity(prefabName, position, rotation) as TrainCar;
 
@@ -1276,8 +1276,6 @@ namespace Oxide.Plugins
 
             if (trainCar.IsDestroyed)
                 return null;
-
-            UpdateAllowedCouplings(trainCar, allowFrontCoupling, allowRearCoupling);
 
             trainCar.Invoke(() => EnableSavingRecursive(trainCar, false), 0);
 
