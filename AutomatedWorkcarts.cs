@@ -645,9 +645,17 @@ namespace Oxide.Plugins
             if (!VerifyCanModifyTrigger(player, cmd, args, Lang.SimpleTriggerSyntax, out triggerData, out optionArgs))
                 return;
 
-            // No explicit feedback since this is an internal command for testing.
-            if (!triggerData.Spawner || !triggerData.Enabled)
+            if (!triggerData.Spawner)
+            {
+                ReplyToPlayer(player, Lang.ErrorRequiresSpawnTrigger);
                 return;
+            }
+
+            if (!triggerData.Enabled)
+            {
+                ReplyToPlayer(player, Lang.ErrorTriggerDisabled);
+                return;
+            }
 
             _triggerManager.RespawnTrigger(triggerData);
 
@@ -701,6 +709,41 @@ namespace Oxide.Plugins
             }
 
             _triggerManager.RemoveTriggerCommand(triggerData, commandIndex - 1);
+
+            var basePlayer = player.Object as BasePlayer;
+            _triggerManager.ShowAllRepeatedly(basePlayer);
+            ReplyToPlayer(player, Lang.UpdateTriggerSuccess, GetTriggerPrefix(player, triggerData), triggerData.Id);
+        }
+
+        [Command("aw.settriggerwagons", "awt.setwagons")]
+        private void CommandTriggerWagons(IPlayer player, string cmd, string[] args)
+        {
+            TriggerData triggerData;
+            string[] optionArgs;
+
+            if (!VerifyCanModifyTrigger(player, cmd, args, Lang.RemoveCommandSyntax, out triggerData, out optionArgs))
+                return;
+
+            if (!triggerData.Spawner)
+            {
+                ReplyToPlayer(player, Lang.ErrorRequiresSpawnTrigger);
+                return;
+            }
+
+            var wagonNames = new List<string>();
+            foreach (var arg in optionArgs)
+            {
+                var trainCarPrefab = TrainCarPrefab.FindPrefab(arg);
+                if (trainCarPrefab == null)
+                {
+                    ReplyToPlayer(player, Lang.ErrorUnrecognizedWagon, arg);
+                    return;
+                }
+
+                wagonNames.Add(trainCarPrefab.TrainCarName);
+            }
+
+            _triggerManager.UpdateWagons(triggerData, wagonNames.ToArray());
 
             var basePlayer = player.Object as BasePlayer;
             _triggerManager.ShowAllRepeatedly(basePlayer);
@@ -1589,6 +1632,39 @@ namespace Oxide.Plugins
 
         #endregion
 
+        #region Train Car Prefabs
+
+        private class TrainCarPrefab
+        {
+            private static readonly Dictionary<string, TrainCarPrefab> AllowedPrefabs = new Dictionary<string, TrainCarPrefab>(StringComparer.InvariantCultureIgnoreCase)
+            {
+                ["WagonA"] = new TrainCarPrefab("WagonA", "assets/content/vehicles/train/trainwagona.entity.prefab"),
+                ["WagonB"] = new TrainCarPrefab("WagonB", "assets/content/vehicles/train/trainwagonb.entity.prefab"),
+                ["WagonC"] = new TrainCarPrefab("WagonC", "assets/content/vehicles/train/trainwagonc.entity.prefab"),
+                ["WagonD"] = new TrainCarPrefab("WagonD", "assets/content/vehicles/train/trainwagond.entity.prefab"),
+                ["Workcart"] = new TrainCarPrefab("Workcart", AboveGroundWorkcartPrefab),
+            };
+
+            public static TrainCarPrefab FindPrefab(string trainCarName)
+            {
+                TrainCarPrefab trainCarPrefab;
+                return AllowedPrefabs.TryGetValue(trainCarName, out trainCarPrefab)
+                    ? trainCarPrefab
+                    : null;
+            }
+
+            public string TrainCarName;
+            public string PrefabPath;
+
+            public TrainCarPrefab(string trainCarName, string prefabPath)
+            {
+                TrainCarName = trainCarName;
+                PrefabPath = prefabPath;
+            }
+        }
+
+        #endregion
+
         #region Dungeon Cells
 
         private enum TunnelType
@@ -2286,9 +2362,13 @@ namespace Oxide.Plugins
                     var trackSelection = DetermineNextTrackSelection(TrackSelection.Default, TriggerData.GetTrackSelectionInstruction());
 
                     TrainCar previousWagon = workcart;
-                    foreach (var wagonPrefab in TriggerData.Wagons)
+                    foreach (var wagonName in TriggerData.Wagons)
                     {
-                        previousWagon = AddWagon(previousWagon, wagonPrefab, trackSelection);
+                        var trainCarPrefab = TrainCarPrefab.FindPrefab(wagonName);
+                        if (trainCarPrefab == null)
+                            continue;
+
+                        previousWagon = AddWagon(previousWagon, trainCarPrefab.PrefabPath, trackSelection);
                         if ((object)previousWagon == null)
                             break;
                     }
@@ -2684,6 +2764,16 @@ namespace Oxide.Plugins
                 SaveTrigger(triggerData);
             }
 
+            public void UpdateWagons(TriggerData triggerData, string[] wagonNames)
+            {
+                if (triggerData.Wagons?.SequenceEqual(wagonNames) ?? false)
+                    return;
+
+                triggerData.Wagons = wagonNames;
+                RespawnTrigger(triggerData);
+                SaveTrigger(triggerData);
+            }
+
             private void DestroyTriggerController(BaseTriggerController triggerController)
             {
                 UnregisterTriggerFromSpline(triggerController);
@@ -2853,6 +2943,21 @@ namespace Oxide.Plugins
                     if (triggerData.Spawner)
                     {
                         infoLines.Add(_pluginInstance.GetMessage(player, Lang.InfoTriggerSpawner));
+
+                        if (triggerData.Spawner && triggerData.Wagons != null && triggerData.Wagons.Length > 0)
+                        {
+                            var wagonList = new List<string>();
+                            for (var i = 0; i < triggerData.Wagons.Length; i++)
+                            {
+                                var wagonName = triggerData.Wagons[i];
+                                if (TrainCarPrefab.FindPrefab(wagonName) != null)
+                                {
+                                    wagonList.Add(wagonName);
+                                }
+                            }
+                            infoLines.Add(_pluginInstance.GetMessage(player, Lang.InfoTriggerWagons, string.Join(" ", wagonList)));
+                        }
+
                         var spawnRotation = trigger.SpawnRotation;
                         var arrowBack = spherePosition + Vector3.up + spawnRotation * Vector3.back * 1.5f;
                         var arrowForward = spherePosition + Vector3.up + spawnRotation * Vector3.forward * 1.5f;
@@ -2900,7 +3005,7 @@ namespace Oxide.Plugins
                     infoLines.Add(_pluginInstance.GetMessage(player, Lang.InfoTriggerCommands, commandList));
                 }
 
-                var textPosition = trigger.WorldPosition + new Vector3(0, 1.5f + infoLines.Count * 0.1f, 0);
+                var textPosition = trigger.WorldPosition + new Vector3(0, 1.5f + infoLines.Count * 0.075f, 0);
                 player.SendConsoleCommand("ddraw.text", TriggerDisplayDuration, color, textPosition, string.Join("\n", infoLines));
             }
 
@@ -4255,6 +4360,9 @@ namespace Oxide.Plugins
             public const string ErrorMaxConductors = "Error.MaxConductors";
             public const string ErrorWorkcartOwned = "Error.WorkcartOwned";
             public const string ErrorNoAutomatedWorkcarts = "Error.NoAutomatedWorkcarts";
+            public const string ErrorRequiresSpawnTrigger = "Error.RequiresSpawnTrigger";
+            public const string ErrorTriggerDisabled = "Error.TriggerDisabled";
+            public const string ErrorUnrecognizedWagon = "Error.UnrecognizedWagon";
 
             public const string ToggleOnSuccess = "Toggle.Success.On";
             public const string ToggleOnWithRouteSuccess = "Toggle.Success.On.WithRoute";
@@ -4293,6 +4401,7 @@ namespace Oxide.Plugins
             public const string InfoTriggerRoute = "Info.Trigger.Route";
             public const string InfoTriggerTunnel = "Info.Trigger.Tunnel";
             public const string InfoTriggerSpawner = "Info.Trigger.Spawner";
+            public const string InfoTriggerWagons = "Info.Trigger.Wagons";
             public const string InfoTriggerAddConductor = "Info.Trigger.Conductor";
             public const string InfoTriggerDestroy = "Info.Trigger.Destroy";
             public const string InfoTriggerStopDuration = "Info.Trigger.StopDuration";
@@ -4322,6 +4431,9 @@ namespace Oxide.Plugins
                 [Lang.ErrorMaxConductors] = "Error: There are already <color=#fd4>{0}</color> out of <color=#fd4>{1}</color> conductors.",
                 [Lang.ErrorWorkcartOwned] = "Error: That workcart has an owner.",
                 [Lang.ErrorNoAutomatedWorkcarts] = "Error: There are no automated workcarts.",
+                [Lang.ErrorRequiresSpawnTrigger] = "Error: That is not a spawn trigger.",
+                [Lang.ErrorTriggerDisabled] = "Error: That trigger is disabled.",
+                [Lang.ErrorUnrecognizedWagon] = "Error: Unrecognized wagon: {0}.",
 
                 [Lang.ToggleOnSuccess] = "That workcart is now automated.",
                 [Lang.ToggleOnWithRouteSuccess] = "That workcart is now automated with route <color=#fd4>@{0}</color>.",
@@ -4361,6 +4473,7 @@ namespace Oxide.Plugins
                 [Lang.InfoTriggerTunnel] = "Tunnel type: {0} (x{1})",
                 [Lang.InfoTriggerSpawner] = "Spawns workcart",
                 [Lang.InfoTriggerAddConductor] = "Adds Conductor",
+                [Lang.InfoTriggerWagons] = "Wagons: {0}",
                 [Lang.InfoTriggerDestroy] = "Destroys workcart",
                 [Lang.InfoTriggerStopDuration] = "Stop duration: {0}s",
 
@@ -4388,6 +4501,9 @@ namespace Oxide.Plugins
                 [Lang.ErrorMaxConductors] = "Erro: já existem <color=#fd4>{0}</color> de <color=#fd4>{1}</color>condutores.",
                 [Lang.ErrorWorkcartOwned] = "Erro: esse carrinho de trabalho tem um proprietário.",
                 [Lang.ErrorNoAutomatedWorkcarts] = "Erro: não há carrinhos de trabalho automatizados.",
+                [Lang.ErrorRequiresSpawnTrigger] = "Erro: Isso não é um gatilho de desova.",
+                [Lang.ErrorTriggerDisabled] = "Erro: esse gatilho está desativado.",
+                [Lang.ErrorUnrecognizedWagon] = "Erro: Vagão de trem não reconhecido: {0}.",
 
                 [Lang.ToggleOnSuccess] = "Esse carrinho de trabalho agora é automatizado.",
                 [Lang.ToggleOnWithRouteSuccess] = "Esse carrinho de trabalho agora é automatizado com rota <color=#fd4>@{0}</color>.",
@@ -4427,6 +4543,7 @@ namespace Oxide.Plugins
                 [Lang.InfoTriggerTunnel] = "Tipo de túnel: {0} (x{1})",
                 [Lang.InfoTriggerSpawner] = "Gera carrinho de trabalho",
                 [Lang.InfoTriggerAddConductor] = "Adiciona Condutor",
+                [Lang.InfoTriggerWagons] = "Vagões de trem: {0}",
                 [Lang.InfoTriggerDestroy] = "Destrói o carrinho de trabalho",
                 [Lang.InfoTriggerStopDuration] = "Duração da parada: {0}s",
 

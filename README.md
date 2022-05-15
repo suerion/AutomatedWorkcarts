@@ -148,7 +148,10 @@ Note: This section was originally written assuming you are using a custom map to
 - `aw.removetrigger <id>` -- Removes the specified trigger.
 - `aw.enabletrigger <id>` -- Enables the specified trigger. This is identical to `aw.updatetrigger <id> enabled`.
 - `aw.disabletrigger <id>` -- Disables the specified trigger. This is identical to `aw.updatetrigger <id> disabled`. Disabled triggers are ignored by workcarts and are colored gray.
-- `aw.addtriggercommand <id> <command>` -- Adds the specified command to the trigger, which will be executed whenever a workcart passes through the trigger. You can use the magic variable `$id` in the command which will be replaced by the workcart's Net ID.
+- `aw.settriggerwagons <id> <wagon1> <wagon2> ...` -- Assigns zero or more train wagons to the trigger, replacing the current list of wagons. Whenever this trigger spawns a workcart, it will attempt to spawn all of the specified wagons behind it in the specified order. The wagons will be automatically coupled to the workcart. Allowed values: `WagonA`, `WagonB`, `WagonC`, `WagonD`, `Workcart`.
+  - To remove all wagons, run the command without specifying any wagons.
+- `aw.respawntrigger <id>` -- Despawns and respawns the workcart and associated wagons for the specified trigger. When used at a tunnel trigger, workcarts and wagons will be respawned at all instances of the tunnel trigger.
+- `aw.addtriggercommand <id> <command>` -- Adds the specified command to the trigger. which will be executed whenever a workcart passes through the trigger. You can use the magic variable `$id` in the command which will be replaced by the workcart's Net ID.
 - `aw.removetriggercommand <id> <number>` -- Removes the specified command from the trigger. The command number will be 1, 2, 3, etc. and will be visible on the trigger info when using `aw.showtriggers`.
 
 Tip: For the commands that update, move or remove triggers, you can skip the `<id>` argument if you are aiming at a nearby trigger.
@@ -166,6 +169,8 @@ The following command aliases are available:
 - `aw.removetrigger` -> `awt.remove`
 - `aw.enabletrigger` -> `awt.enable`
 - `aw.disabletrigger` -> `awt.disable`
+- `aw.settriggerwagons` -> `awt.setwagons`
+- `aw.respawntrigger` -> `awt.respawn`
 - `aw.addtriggercommand` -> `awt.addcommand` or `awt.addcmd`
 - `aw.removetriggercommand` -> `awt.removecommand` or `awt.removecmd`
 
