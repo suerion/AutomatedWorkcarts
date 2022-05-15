@@ -715,7 +715,7 @@ namespace Oxide.Plugins
             ReplyToPlayer(player, Lang.UpdateTriggerSuccess, GetTriggerPrefix(player, triggerData), triggerData.Id);
         }
 
-        [Command("aw.settriggerwagons", "awt.setwagons")]
+        [Command("aw.settriggerwagons", "awt.setwagons", "awt.wagons")]
         private void CommandTriggerWagons(IPlayer player, string cmd, string[] args)
         {
             TriggerData triggerData;
