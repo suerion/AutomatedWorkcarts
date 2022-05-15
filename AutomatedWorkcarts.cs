@@ -1268,9 +1268,6 @@ namespace Oxide.Plugins
             // Ensure the workcart does not decay for some time.
             trainCar.lastDecayTick = Time.realtimeSinceStartup;
 
-            // Enable invincibility.
-            trainCar.initialSpawnTime = float.MaxValue;
-
             trainCar.EnableSaving(false);
             trainCar.Spawn();
 
@@ -3614,12 +3611,18 @@ namespace Oxide.Plugins
 
             private void EnableInvincibility()
             {
-                Workcart.initialSpawnTime = float.MaxValue;
+                foreach (var trainCar in Workcart.completeTrain.trainCars)
+                {
+                    Workcart.initialSpawnTime = float.MaxValue;
+                }
             }
 
             private void DisableInvincibility()
             {
-                Workcart.initialSpawnTime = Time.time;
+                foreach (var trainCar in Workcart.completeTrain.trainCars)
+                {
+                    Workcart.initialSpawnTime = Time.time;
+                }
             }
 
             private void DisableHazardChecks()
