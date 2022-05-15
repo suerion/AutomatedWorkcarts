@@ -1640,6 +1640,20 @@ namespace Oxide.Plugins
             workcart.Invoke(() => DestroyWorkcart(workcart), 0);
         }
 
+        private static bool CollectionsEqual<T>(ICollection<T> collectionA, ICollection<T> collectionB)
+        {
+            var countA = collectionA?.Count ?? 0;
+            var countB = collectionB?.Count ?? 0;
+
+            if (countA != countB)
+                return false;
+
+            if (countA == 0 && countB == 0)
+                return true;
+
+            return collectionA?.SequenceEqual(collectionB) ?? false;
+        }
+
         private static string FormatTime(double seconds) =>
             TimeSpan.FromSeconds(seconds).ToString("g");
 
@@ -2709,6 +2723,7 @@ namespace Oxide.Plugins
 
                 var enabledChanged = triggerData.Enabled != newTriggerData.Enabled;
                 var spawnerChanged = triggerData.Spawner != newTriggerData.Spawner;
+                var wagonsChanged = !CollectionsEqual(triggerData.Wagons, newTriggerData.Wagons);
 
                 triggerData.CopyFrom(newTriggerData);
                 triggerData.InvalidateCache();
@@ -2730,6 +2745,10 @@ namespace Oxide.Plugins
                 if (spawnerChanged)
                 {
                     triggerController.OnSpawnerToggled();
+                }
+                else if (wagonsChanged)
+                {
+                    triggerController.Respawn();
                 }
 
                 SaveTrigger(triggerData);
@@ -2790,7 +2809,7 @@ namespace Oxide.Plugins
 
             public void UpdateWagons(TriggerData triggerData, string[] wagonNames)
             {
-                if (triggerData.Wagons?.SequenceEqual(wagonNames) ?? false)
+                if (CollectionsEqual(triggerData.Wagons, wagonNames))
                     return;
 
                 triggerData.Wagons = wagonNames;
