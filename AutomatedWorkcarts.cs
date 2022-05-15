@@ -1246,6 +1246,8 @@ namespace Oxide.Plugins
         private static TrainEngine SpawnWorkcart(string prefabName, Vector3 position, Quaternion rotation)
         {
             var workcart = GameManager.server.CreateEntity(prefabName, position, rotation) as TrainEngine;
+            if (workcart == null)
+                return null;
 
             // Ensure the workcart does not decay for some time.
             workcart.lastDecayTick = Time.realtimeSinceStartup;
@@ -1265,6 +1267,8 @@ namespace Oxide.Plugins
         private static TrainCar SpawnWagon(string prefabName, Vector3 position, Quaternion rotation)
         {
             var trainCar = GameManager.server.CreateEntity(prefabName, position, rotation) as TrainCar;
+            if (trainCar == null)
+                return null;
 
             // Ensure the workcart does not decay for some time.
             trainCar.lastDecayTick = Time.realtimeSinceStartup;
