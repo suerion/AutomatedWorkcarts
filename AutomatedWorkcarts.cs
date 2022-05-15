@@ -1250,6 +1250,7 @@ namespace Oxide.Plugins
             // Ensure the workcart does not decay for some time.
             workcart.lastDecayTick = Time.realtimeSinceStartup;
 
+            workcart.limitNetworking = true;
             workcart.EnableSaving(false);
             workcart.Spawn();
 
@@ -1268,6 +1269,7 @@ namespace Oxide.Plugins
             // Ensure the workcart does not decay for some time.
             trainCar.lastDecayTick = Time.realtimeSinceStartup;
 
+            trainCar.limitNetworking = true;
             trainCar.EnableSaving(false);
             trainCar.Spawn();
 
@@ -1286,12 +1288,11 @@ namespace Oxide.Plugins
             return distanceOnSpline;
         }
 
-        private static TrainCar AddWagon(TrainCar trainCar, string prefabName, TrackSelection trackSelection, bool allowRearCoupling = true)
+        private static TrainCar AddTrainCar(TrainCar trainCar, string prefabName, TrackSelection trackSelection, bool allowRearCoupling = true)
         {
             var rearSpline = trainCar.FrontTrackSection;
             var position = trainCar.transform.position;
             var distanceOnSpline = GetSplineDistance(rearSpline, position);
-            var carLength = GetTrainCarLength(trainCar.PrefabName);
 
             var askerIsForward = rearSpline.IsForward(trainCar.transform.forward, distanceOnSpline);
             var splineInfo = new SplineInfo
@@ -1302,19 +1303,32 @@ namespace Oxide.Plugins
                 IsForward = askerIsForward,
             };
 
-            var distanceFromTrainCar = carLength + GetTrainCarLength(prefabName) - 0.6f;
+            var finalDistance = Math.Abs(trainCar.rearCoupling.localPosition.z) + GetTrainCarFrontCouplingOffsetZ(prefabName);
+            var spawnDistance = Mathf.Max(finalDistance, 18);
 
-            SplineInfo resultSplineInfo;
-            var resultPosition = GetPositionAlongTrack(splineInfo, distanceFromTrainCar, trackSelection, out resultSplineInfo);
-            var resultRotation = GetSplineTangentRotation(resultSplineInfo.Spline, resultSplineInfo.Distance, trainCar.transform.rotation);
+            SplineInfo finalSplineInfo;
+            var finalPosition = GetPositionAlongTrack(splineInfo, finalDistance, trackSelection, out finalSplineInfo);
 
-            var wagon = SpawnWagon(prefabName, resultPosition, resultRotation, allowFrontCoupling: true, allowRearCoupling: allowRearCoupling);
-            if (wagon != null)
+            SplineInfo spawnSplineInfo;
+            var resultPosition = GetPositionAlongTrack(finalSplineInfo, spawnDistance - finalDistance, trackSelection, out spawnSplineInfo);
+            var resultRotation = GetSplineTangentRotation(spawnSplineInfo.Spline, spawnSplineInfo.Distance, trainCar.transform.rotation);
+
+            var rearTrainCar = SpawnWagon(prefabName, resultPosition, resultRotation);
+            if (rearTrainCar != null)
             {
-                TryCoupleTrainCars(trainCar, wagon);
+                rearTrainCar.MoveFrontWheelsAlongTrackSpline(
+                    rearTrainCar.FrontTrackSection,
+                    rearTrainCar.FrontWheelSplineDist,
+                    spawnDistance - finalDistance,
+                    rearTrainCar.RearTrackSection != rearTrainCar.FrontTrackSection ? rearTrainCar.RearTrackSection : null,
+                    trackSelection
+                );
+
+                rearTrainCar.transform.position = finalPosition;
+                TryCoupleTrainCars(trainCar, rearTrainCar);
             }
 
-            return wagon;
+            return rearTrainCar;
         }
 
         private static void TryCoupleTrainCars(TrainCar front, TrainCar rear)
@@ -1322,13 +1336,13 @@ namespace Oxide.Plugins
             front.coupling.rearCoupling.TryCouple(rear.coupling.frontCoupling, reflect: true);
         }
 
-        private static float GetTrainCarLength(string prefabName)
+        private static float GetTrainCarFrontCouplingOffsetZ(string prefabName)
         {
             var prefab = GameManager.server.FindPrefab(prefabName)?.GetComponent<TrainCar>();
             if (prefab == null)
                 return 0;
 
-            return prefab.WorldSpaceBounds().extents.z;
+            return prefab.frontCoupling.localPosition.z;
         }
 
         private static ConnectedTrackInfo GetAdjacentTrackInfo(TrainTrackSpline spline, TrainTrackSpline.TrackSelection selection, bool isAscending = true, bool askerIsForward = true)
@@ -2363,11 +2377,21 @@ namespace Oxide.Plugins
                         if (trainCarPrefab == null)
                             continue;
 
-                        previousWagon = AddWagon(previousWagon, trainCarPrefab.PrefabPath, trackSelection);
+                        previousWagon = AddTrainCar(previousWagon, trainCarPrefab.PrefabPath, trackSelection);
                         if ((object)previousWagon == null)
                             break;
                     }
                 }
+
+                // Not perfect, but gets the job done.
+                workcart.Invoke(() =>
+                {
+                    var trainCars = workcart.completeTrain.trainCars;
+                    for (var i = trainCars.Count - 1; i >= 0; i--)
+                    {
+                        trainCars[i].limitNetworking = false;
+                    }
+                }, 0.1f);
 
                 _spawnedWorkcarts.Add(workcart);
                 SpawnedWorkcartComponent.AddToWorkcart(workcart, this);
