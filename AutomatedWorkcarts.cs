@@ -2093,6 +2093,7 @@ namespace Oxide.Plugins
                 TrackSelection = triggerData.TrackSelection;
                 StopDuration = triggerData.StopDuration;
                 Spawner = triggerData.Spawner;
+                Wagons = triggerData.Wagons;
                 Commands = triggerData.Commands;
             }
 
