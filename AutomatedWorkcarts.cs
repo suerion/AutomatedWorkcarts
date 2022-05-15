@@ -1173,8 +1173,8 @@ namespace Oxide.Plugins
 
         private IEnumerator DoStartupRoutine()
         {
-            TrackStart();
             yield return _triggerManager.CreateAll();
+            TrackStart();
 
             var foundWorkcartIds = new HashSet<uint>();
             foreach (var entity in BaseNetworkable.serverEntities)
