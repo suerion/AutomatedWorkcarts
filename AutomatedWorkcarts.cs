@@ -11,6 +11,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
+using System.Reflection;
 using System.Text.RegularExpressions;
 using UnityEngine;
 using static TrainEngine;
@@ -42,6 +43,9 @@ namespace Oxide.Plugins
         private const string GenericMapMarkerPrefab = "assets/prefabs/tools/map/genericradiusmarker.prefab";
         private const string VendingMapMarkerPrefab = "assets/prefabs/deployable/vendingmachine/vending_mapmarker.prefab";
         private const string IdPlaceholder = "$id";
+
+        private static readonly FieldInfo TrainCouplingIsValidField = typeof(TrainCoupling).GetField("isValid", BindingFlags.NonPublic | BindingFlags.Instance)
+            ?? typeof(TrainCoupling).GetField("isValid", BindingFlags.Public | BindingFlags.Instance);
 
         private static readonly object False = false;
         private static readonly Regex IdRegex = new Regex("\\$id", RegexOptions.IgnoreCase | RegexOptions.Compiled);
@@ -1076,13 +1080,8 @@ namespace Oxide.Plugins
         private static void UpdateAllowedCouplings(TrainCar trainCar, bool allowFront, bool allowRear)
         {
             var coupling = trainCar.coupling;
-
-            if (allowFront == coupling.frontCoupling.isValid
-                && allowRear == coupling.rearCoupling.isValid)
-            {
-                // No change to couplings needed.
-                return;
-            }
+            var frontCoupling = coupling.frontCoupling;
+            var rearCoupling = coupling.rearCoupling;
 
             if (trainCar.frontCoupling == null || trainCar.rearCoupling == null)
             {
@@ -1090,50 +1089,24 @@ namespace Oxide.Plugins
                 return;
             }
 
-            if (!trainCar.IsFullySpawned())
+            if (!allowFront && frontCoupling.IsCoupled)
             {
-                LogError($"Cannot update couplings before spawn.");
-                return;
+                frontCoupling.Uncouple(reflect: true);
             }
 
-            var frontTransform = trainCar.frontCoupling;
-            var rearTransform = trainCar.rearCoupling;
-
-            var frontTarget = coupling.frontCoupling.CoupledTo;
-            var rearTarget = coupling.rearCoupling.CoupledTo;
-
-            if (coupling.frontCoupling.IsCoupled)
+            if (!allowRear && rearCoupling.IsCoupled)
             {
-                coupling.frontCoupling.Uncouple(reflect: true);
+                rearCoupling.Uncouple(reflect: true);
             }
 
-            if (coupling.rearCoupling.IsCoupled)
+            if (frontCoupling.isValid != allowFront)
             {
-                coupling.rearCoupling.Uncouple(reflect: true);
+                TrainCouplingIsValidField.SetValue(frontCoupling, allowFront);
             }
 
-            if (!allowFront)
+            if (rearCoupling.isValid != allowRear)
             {
-                trainCar.frontCoupling = null;
-            }
-
-            if (!allowRear)
-            {
-                trainCar.rearCoupling = null;
-            }
-
-            trainCar.coupling = new TrainCouplingController(trainCar);
-            trainCar.frontCoupling = frontTransform;
-            trainCar.rearCoupling = rearTransform;
-
-            if (allowFront && frontTarget != null)
-            {
-                trainCar.coupling.frontCoupling.TryCouple(frontTarget, reflect: true);
-            }
-
-            if (allowRear && rearTarget != null)
-            {
-                trainCar.coupling.rearCoupling.TryCouple(rearTarget, reflect: true);
+                TrainCouplingIsValidField.SetValue(rearCoupling, allowRear);
             }
         }
 
