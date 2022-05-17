@@ -1504,6 +1504,14 @@ namespace Oxide.Plugins
             return true;
         }
 
+        private static WorkcartTrigger GetHitTrigger(BasePlayer player, float maxDistance = 30)
+        {
+            RaycastHit hit;
+            return Physics.Raycast(player.eyes.HeadRay(), out hit, maxDistance, 1 << WorkcartTrigger.TriggerLayer, QueryTriggerInteraction.Collide)
+                ? hit.collider.GetComponent<WorkcartTrigger>()
+                : null;
+        }
+
         private static DungeonCellWrapper FindNearestDungeonCell(Vector3 position)
         {
             DungeonGridCell closestDungeon = null;
@@ -1911,6 +1919,9 @@ namespace Oxide.Plugins
 
         private class WorkcartTrigger : TriggerBase
         {
+            public const int TriggerLayer = 6;
+            public const float TriggerRadius = 1f;
+
             public TriggerData TriggerData;
         }
 
@@ -2184,6 +2195,8 @@ namespace Oxide.Plugins
             private const int MaxSpawnedWorkcarts = 1;
             private const float TimeBetweenSpawns = 30;
 
+            protected static readonly Vector3 TriggerOffset = new Vector3(0, 0.9f, 0);
+
             public TriggerData TriggerData { get; protected set; }
             public TrainTrackSpline Spline { get; private set; }
             public float DistanceOnSpline { get; private set; }
@@ -2208,8 +2221,8 @@ namespace Oxide.Plugins
 
                 var sphereCollider = _gameObject.AddComponent<SphereCollider>();
                 sphereCollider.isTrigger = true;
-                sphereCollider.radius = 1;
-                sphereCollider.gameObject.layer = 6;
+                sphereCollider.radius = WorkcartTrigger.TriggerRadius;
+                sphereCollider.gameObject.layer = WorkcartTrigger.TriggerLayer;
 
                 _workcartTrigger = _gameObject.AddComponent<WorkcartTrigger>();
                 _workcartTrigger.TriggerData = TriggerData;
@@ -2421,7 +2434,7 @@ namespace Oxide.Plugins
 
         private class MapTriggerInstance : BaseTriggerInstance
         {
-            public override Vector3 WorldPosition => TriggerData.Position;
+            public override Vector3 WorldPosition => TriggerData.Position + TriggerOffset;
             public override Quaternion WorldRotation => Quaternion.Euler(0, TriggerData.RotationAngle, 0);
 
             public MapTriggerInstance(TriggerData triggerData) : base(triggerData) {}
@@ -2431,7 +2444,7 @@ namespace Oxide.Plugins
         {
             public DungeonCellWrapper DungeonCellWrapper { get; private set; }
 
-            public override Vector3 WorldPosition => DungeonCellWrapper.TransformPoint(TriggerData.Position);
+            public override Vector3 WorldPosition => DungeonCellWrapper.TransformPoint(TriggerData.Position) + TriggerOffset;
             public override Quaternion WorldRotation => DungeonCellWrapper.Rotation * Quaternion.Euler(0, TriggerData.RotationAngle, 0);
 
             public TunnelTriggerInstance(TriggerData triggerData, DungeonCellWrapper dungeonCellWrapper) : base(triggerData)
@@ -2573,7 +2586,7 @@ namespace Oxide.Plugins
             }
 
             private const float TriggerDisplayDuration = 1f;
-            private const float TriggerDisplayRadius = 1f;
+            private const float TriggerDisplayRadius = WorkcartTrigger.TriggerRadius;
             private float TriggerDisplayDistanceSquared => _pluginConfig.TriggerDisplayDistance * _pluginConfig.TriggerDisplayDistance;
 
             private Dictionary<TriggerData, BaseTriggerController> _triggerControllers = new Dictionary<TriggerData, BaseTriggerController>();
@@ -3025,7 +3038,7 @@ namespace Oxide.Plugins
                 player.SendConsoleCommand("ddraw.text", TriggerDisplayDuration, color, textPosition, string.Join("\n", infoLines));
             }
 
-            public BaseTriggerInstance FindNearestTrigger(Vector3 position, float maxDistanceSquared = 10)
+            public BaseTriggerInstance FindNearestTrigger(Vector3 position, float maxDistanceSquared = 16)
             {
                 BaseTriggerInstance closestTriggerInstance = null;
                 float closestDistanceSquared = float.MaxValue;
@@ -3051,13 +3064,17 @@ namespace Oxide.Plugins
                 return GetTriggerController(triggerData)?.FindNearest(position, maxDistanceSquared, out distanceSquared);
             }
 
-            public TriggerData FindNearestTriggerWhereAiming(BasePlayer player, float maxDistance = 10)
+            public TriggerData FindNearestTriggerWhereAiming(BasePlayer player, float maxDistanceSquared = 16)
             {
+                var triggerInstance = GetHitTrigger(player);
+                if (triggerInstance != null)
+                    return triggerInstance.TriggerData;
+
                 Vector3 trackPosition;
                 if (!TryGetTrackPosition(player, out trackPosition))
                     return null;
 
-                return FindNearestTrigger(trackPosition, maxDistance)?.TriggerData;
+                return FindNearestTrigger(trackPosition, maxDistanceSquared)?.TriggerData;
             }
         }
 
