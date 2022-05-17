@@ -2203,7 +2203,17 @@ namespace Oxide.Plugins
 
             public abstract Vector3 WorldPosition { get; }
             public abstract Quaternion WorldRotation { get; }
-            public Quaternion SpawnRotation => GetSplineTangentRotation(Spline, DistanceOnSpline, WorldRotation);
+
+            public Vector3 TriggerPosition => WorldPosition + TriggerOffset;
+            public Quaternion SpawnRotation
+            {
+                get
+                {
+                    return Spline != null
+                        ? GetSplineTangentRotation(Spline, DistanceOnSpline, WorldRotation)
+                        : WorldRotation;
+                }
+            }
 
             private GameObject _gameObject;
             private WorkcartTrigger _workcartTrigger;
@@ -2239,7 +2249,7 @@ namespace Oxide.Plugins
                 if (_gameObject == null)
                     return;
 
-                _gameObject.transform.SetPositionAndRotation(WorldPosition, WorldRotation);
+                _gameObject.transform.SetPositionAndRotation(TriggerPosition, WorldRotation);
 
                 TrainTrackSpline spline;
                 float distanceOnSpline;
@@ -2434,7 +2444,7 @@ namespace Oxide.Plugins
 
         private class MapTriggerInstance : BaseTriggerInstance
         {
-            public override Vector3 WorldPosition => TriggerData.Position + TriggerOffset;
+            public override Vector3 WorldPosition => TriggerData.Position;
             public override Quaternion WorldRotation => Quaternion.Euler(0, TriggerData.RotationAngle, 0);
 
             public MapTriggerInstance(TriggerData triggerData) : base(triggerData) {}
@@ -2444,7 +2454,7 @@ namespace Oxide.Plugins
         {
             public DungeonCellWrapper DungeonCellWrapper { get; private set; }
 
-            public override Vector3 WorldPosition => DungeonCellWrapper.TransformPoint(TriggerData.Position) + TriggerOffset;
+            public override Vector3 WorldPosition => DungeonCellWrapper.TransformPoint(TriggerData.Position);
             public override Quaternion WorldRotation => DungeonCellWrapper.Rotation * Quaternion.Euler(0, TriggerData.RotationAngle, 0);
 
             public TunnelTriggerInstance(TriggerData triggerData, DungeonCellWrapper dungeonCellWrapper) : base(triggerData)
@@ -2944,7 +2954,7 @@ namespace Oxide.Plugins
                 var triggerData = trigger.TriggerData;
                 var color = triggerData.GetColor(routeName);
 
-                var spherePosition = trigger.WorldPosition;
+                var spherePosition = trigger.TriggerPosition;
                 player.SendConsoleCommand("ddraw.sphere", TriggerDisplayDuration, color, spherePosition, TriggerDisplayRadius);
 
                 var triggerPrefix = _pluginInstance.GetTriggerPrefix(player, triggerData);
@@ -3034,11 +3044,11 @@ namespace Oxide.Plugins
                     infoLines.Add(_pluginInstance.GetMessage(player, Lang.InfoTriggerCommands, commandList));
                 }
 
-                var textPosition = trigger.WorldPosition + new Vector3(0, 1.5f + infoLines.Count * 0.075f, 0);
+                var textPosition = trigger.TriggerPosition + new Vector3(0, 1.5f + infoLines.Count * 0.075f, 0);
                 player.SendConsoleCommand("ddraw.text", TriggerDisplayDuration, color, textPosition, string.Join("\n", infoLines));
             }
 
-            public BaseTriggerInstance FindNearestTrigger(Vector3 position, float maxDistanceSquared = 16)
+            public BaseTriggerInstance FindNearestTrigger(Vector3 position, float maxDistanceSquared = 9)
             {
                 BaseTriggerInstance closestTriggerInstance = null;
                 float closestDistanceSquared = float.MaxValue;
@@ -3064,7 +3074,7 @@ namespace Oxide.Plugins
                 return GetTriggerController(triggerData)?.FindNearest(position, maxDistanceSquared, out distanceSquared);
             }
 
-            public TriggerData FindNearestTriggerWhereAiming(BasePlayer player, float maxDistanceSquared = 16)
+            public TriggerData FindNearestTriggerWhereAiming(BasePlayer player, float maxDistanceSquared = 9)
             {
                 var triggerInstance = GetHitTrigger(player);
                 if (triggerInstance != null)
