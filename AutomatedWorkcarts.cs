@@ -29,7 +29,6 @@ namespace Oxide.Plugins
         private Plugin CargoTrainEvent;
 
         private static AutomatedWorkcarts _pluginInstance;
-        private static StoredPluginData _pluginData;
 
         private const string PermissionToggle = "automatedworkcarts.toggle";
         private const string PermissionManageTriggers = "automatedworkcarts.managetriggers";
@@ -48,6 +47,7 @@ namespace Oxide.Plugins
         private static readonly Regex IdRegex = new Regex("\\$id", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
         private Configuration _pluginConfig;
+        private StoredPluginData _pluginData;
         private StoredTunnelData _tunnelData;
         private StoredMapData _mapData;
         private WorkcartTriggerManager _triggerManager;
@@ -65,7 +65,7 @@ namespace Oxide.Plugins
             _pluginData = StoredPluginData.Load();
             _tunnelData = StoredTunnelData.Load();
 
-            _trainManager = new TrainManager(_pluginConfig);
+            _trainManager = new TrainManager(_pluginConfig, _pluginData);
             _triggerManager = new WorkcartTriggerManager(_pluginConfig, _trainManager, _tunnelData);
 
             permission.RegisterPermission(PermissionToggle, this);
@@ -121,7 +121,6 @@ namespace Oxide.Plugins
             _triggerManager.DestroyAll();
             _trainManager.Unload();
 
-            _pluginData = null;
             _pluginInstance = null;
         }
 
@@ -3101,6 +3100,7 @@ namespace Oxide.Plugins
         private class TrainManager
         {
             public Configuration PluginConfig { get; private set; }
+            private StoredPluginData _pluginData;
             private HashSet<TrainController> _trainControllers = new HashSet<TrainController>();
             private Dictionary<TrainEngine, WorkcartController> _workcartControllers = new Dictionary<TrainEngine, WorkcartController>();
             private bool _isUnloading = false;
@@ -3108,9 +3108,10 @@ namespace Oxide.Plugins
             public int TrainCount => _trainControllers.Count;
             public TrainEngine[] GetWorkcarts() => _workcartControllers.Keys.ToArray();
 
-            public TrainManager(Configuration pluginConfig)
+            public TrainManager(Configuration pluginConfig, StoredPluginData pluginData)
             {
                 PluginConfig = pluginConfig;
+                _pluginData = pluginData;
             }
 
             public bool CanHaveMoreConductors() => PluginConfig.MaxConductors < 0
