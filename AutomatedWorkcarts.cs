@@ -51,7 +51,7 @@ namespace Oxide.Plugins
         private StoredTunnelData _tunnelData;
         private StoredMapData _mapData;
 
-        private readonly SpawnedWorkcartTracker _spawnedWorkcartTracker = new SpawnedWorkcartTracker();
+        private readonly SpawnedTrainCarTracker _spawnedTrainCarTracker = new SpawnedTrainCarTracker();
         private WorkcartTriggerManager _triggerManager;
         private TrainManager _trainManager;
 
@@ -67,7 +67,7 @@ namespace Oxide.Plugins
             _pluginData = StoredPluginData.Load();
             _tunnelData = StoredTunnelData.Load();
 
-            _trainManager = new TrainManager(_pluginConfig, _pluginData, _spawnedWorkcartTracker);
+            _trainManager = new TrainManager(_pluginConfig, _pluginData, _spawnedTrainCarTracker);
             _triggerManager = new WorkcartTriggerManager(_pluginConfig, _trainManager, _tunnelData);
 
             permission.RegisterPermission(PermissionToggle, this);
@@ -2156,45 +2156,45 @@ namespace Oxide.Plugins
 
         #endregion
 
-        #region Spawned Workcart Tracker
+        #region Spawned Train Car Tracker
 
-        private class SpawnedWorkcartTracker
+        private class SpawnedTrainCarTracker
         {
-            private HashSet<TrainEngine> _spawnedWorkcarts = new HashSet<TrainEngine>();
+            private HashSet<TrainCar> _spawnedTrainCars = new HashSet<TrainCar>();
 
-            public bool HasWorkcart(TrainEngine workcart)
+            public bool HasWorkcart(TrainCar trainCar)
             {
-                return _spawnedWorkcarts.Contains(workcart);
+                return _spawnedTrainCars.Contains(trainCar);
             }
 
-            public void RegisterWorkcart(TrainEngine workcart)
+            public void RegisterWorkcart(TrainCar trainCar)
             {
-                _spawnedWorkcarts.Add(workcart);
+                _spawnedTrainCars.Add(trainCar);
             }
 
-            public void UnregisterWorkcart(TrainEngine workcart)
+            public void UnregisterWorkcart(TrainCar trainCar)
             {
-                _spawnedWorkcarts.Remove(workcart);
+                _spawnedTrainCars.Remove(trainCar);
             }
         }
 
-        private class SpawnedWorkcartComponent : FacepunchBehaviour
+        private class SpawnedTrainCarComponent : FacepunchBehaviour
         {
-            public static void AddToWorkcart(TrainEngine workcart, BaseTriggerInstance triggerInstance)
+            public static void AddToEntity(TrainCar trainCar, BaseTriggerInstance triggerInstance)
             {
-                var component = workcart.gameObject.AddComponent<SpawnedWorkcartComponent>();
-                component._workcart = workcart;
+                var component = trainCar.gameObject.AddComponent<SpawnedTrainCarComponent>();
+                component._trainCar = trainCar;
                 component._triggerInstance = triggerInstance;
-                triggerInstance.TrainManager.SpawnedWorkcartTracker.RegisterWorkcart(workcart);
+                triggerInstance.TrainManager.SpawnedTrainCarTracker.RegisterWorkcart(trainCar);
             }
 
-            private TrainEngine _workcart;
+            private TrainCar _trainCar;
             private BaseTriggerInstance _triggerInstance;
 
             private void OnDestroy()
             {
-                _triggerInstance.HandleWorkcartKilled(_workcart);
-                _triggerInstance.TrainManager.SpawnedWorkcartTracker.UnregisterWorkcart(_workcart);
+                _triggerInstance.HandleTrainCarKilled(_trainCar);
+                _triggerInstance.TrainManager.SpawnedTrainCarTracker.UnregisterWorkcart(_trainCar);
             }
         }
 
@@ -2204,7 +2204,7 @@ namespace Oxide.Plugins
 
         private abstract class BaseTriggerInstance
         {
-            private const int MaxSpawnedWorkcarts = 1;
+            private const int MaxSpawnedTrains = 1;
             private const float TimeBetweenSpawns = 30;
 
             protected static readonly Vector3 TriggerOffset = new Vector3(0, 0.9f, 0);
@@ -2230,7 +2230,7 @@ namespace Oxide.Plugins
 
             private GameObject _gameObject;
             private WorkcartTrigger _workcartTrigger;
-            private List<TrainEngine> _spawnedWorkcarts;
+            private List<TrainCar> _spawnedTrainCars;
 
             protected BaseTriggerInstance(TrainManager trainManager, TriggerData triggerData)
             {
@@ -2252,7 +2252,7 @@ namespace Oxide.Plugins
 
                 if (TriggerData.Spawner)
                 {
-                    StartSpawningWorkcarts();
+                    StartSpawningTrains();
                 }
             }
 
@@ -2303,13 +2303,13 @@ namespace Oxide.Plugins
                 {
                     if (TriggerData.Enabled)
                     {
-                        StartSpawningWorkcarts();
+                        StartSpawningTrains();
                     }
                 }
                 else
                 {
-                    KillWorkcarts();
-                    StopSpawningWorkcarts();
+                    KillTrains();
+                    StopSpawningTrains();
                 }
             }
 
@@ -2318,19 +2318,19 @@ namespace Oxide.Plugins
                 if (!TriggerData.Spawner || !TriggerData.Enabled)
                     return;
 
-                KillWorkcarts();
-                SpawnWorkcart();
+                KillTrains();
+                SpawnTrain();
             }
 
-            public void HandleWorkcartKilled(TrainEngine workcart)
+            public void HandleTrainCarKilled(TrainCar traincar)
             {
-                _spawnedWorkcarts.Remove(workcart);
+                _spawnedTrainCars.Remove(traincar);
             }
 
             public void Destroy()
             {
                 UnityEngine.Object.Destroy(_gameObject);
-                KillWorkcarts();
+                KillTrains();
             }
 
             private void Enable()
@@ -2340,7 +2340,7 @@ namespace Oxide.Plugins
                     _gameObject.SetActive(true);
                     if (TriggerData.Spawner)
                     {
-                        StartSpawningWorkcarts();
+                        StartSpawningTrains();
                     }
                 }
                 else
@@ -2356,28 +2356,28 @@ namespace Oxide.Plugins
                     _gameObject.SetActive(false);
                 }
 
-                KillWorkcarts();
-                StopSpawningWorkcarts();
+                KillTrains();
+                StopSpawningTrains();
             }
 
-            private void StartSpawningWorkcarts()
+            private void StartSpawningTrains()
             {
-                if (_spawnedWorkcarts == null)
+                if (_spawnedTrainCars == null)
                 {
-                    _spawnedWorkcarts = new List<TrainEngine>(MaxSpawnedWorkcarts);
+                    _spawnedTrainCars = new List<TrainCar>(MaxSpawnedTrains);
                 }
 
-                _workcartTrigger.InvokeRepeating(SpawnWorkcartTracked, UnityEngine.Random.Range(0f, 1f), TimeBetweenSpawns);
+                _workcartTrigger.InvokeRepeating(SpawnTrainTracked, UnityEngine.Random.Range(0f, 1f), TimeBetweenSpawns);
             }
 
-            private void StopSpawningWorkcarts()
+            private void StopSpawningTrains()
             {
-                _workcartTrigger.CancelInvoke(SpawnWorkcartTracked);
+                _workcartTrigger.CancelInvoke(SpawnTrainTracked);
             }
 
-            private void SpawnWorkcart()
+            private void SpawnTrain()
             {
-                if (_spawnedWorkcarts.Count >= MaxSpawnedWorkcarts)
+                if (_spawnedTrainCars.Count >= MaxSpawnedTrains)
                     return;
 
                 if (Spline == null)
@@ -2393,6 +2393,9 @@ namespace Oxide.Plugins
                 if (workcart == null)
                     return;
 
+                _spawnedTrainCars.Add(workcart);
+                SpawnedTrainCarComponent.AddToEntity(workcart, this);
+
                 if (TriggerData.Wagons != null)
                 {
                     var trackSelection = ApplyTrackSelection(TrackSelection.Default, TriggerData.GetTrackSelectionInstruction());
@@ -2407,6 +2410,9 @@ namespace Oxide.Plugins
                         previousWagon = AddTrainCar(previousWagon, trainCarPrefab.PrefabPath, trackSelection);
                         if ((object)previousWagon == null)
                             break;
+
+                        _spawnedTrainCars.Add(previousWagon);
+                        SpawnedTrainCarComponent.AddToEntity(previousWagon, this);
                     }
                 }
 
@@ -2419,37 +2425,29 @@ namespace Oxide.Plugins
                         trainCars[i].limitNetworking = false;
                     }
                 }, 0.1f);
-
-                _spawnedWorkcarts.Add(workcart);
-                SpawnedWorkcartComponent.AddToWorkcart(workcart, this);
             }
 
-            private void SpawnWorkcartTracked()
+            private void SpawnTrainTracked()
             {
                 _pluginInstance?.TrackStart();
-                SpawnWorkcart();
+                SpawnTrain();
                 _pluginInstance?.TrackEnd();
             }
 
-            private void KillWorkcarts()
+            private void KillTrains()
             {
-                if (_spawnedWorkcarts == null)
+                if (_spawnedTrainCars == null)
                     return;
 
-                for (var i = _spawnedWorkcarts.Count - 1; i >= 0; i--)
+                for (var i = _spawnedTrainCars.Count - 1; i >= 0; i--)
                 {
-                    var workcart = _spawnedWorkcarts[i];
-                    if (workcart != null && !workcart.IsDestroyed)
+                    var trainCar = _spawnedTrainCars[i];
+                    if (trainCar != null && !trainCar.IsDestroyed)
                     {
-                        foreach (var trainCar in workcart.completeTrain.trainCars.ToList())
-                        {
-                            if (trainCar != null && !trainCar.IsDestroyed)
-                            {
-                                trainCar.Kill();
-                            }
-                        }
+                        trainCar.Kill();
                     }
-                    _spawnedWorkcarts.RemoveAt(i);
+
+                    _spawnedTrainCars.RemoveAt(i);
                 }
             }
         }
@@ -3130,7 +3128,7 @@ namespace Oxide.Plugins
         private class TrainManager
         {
             public Configuration PluginConfig { get; private set; }
-            public SpawnedWorkcartTracker SpawnedWorkcartTracker { get; private set; }
+            public SpawnedTrainCarTracker SpawnedTrainCarTracker { get; private set; }
 
             private StoredPluginData _pluginData;
             private HashSet<TrainController> _trainControllers = new HashSet<TrainController>();
@@ -3151,11 +3149,11 @@ namespace Oxide.Plugins
                 return workcartList.ToArray();
             }
 
-            public TrainManager(Configuration pluginConfig, StoredPluginData pluginData, SpawnedWorkcartTracker spawnedWorkcartTracker)
+            public TrainManager(Configuration pluginConfig, StoredPluginData pluginData, SpawnedTrainCarTracker spawnedTrainCarTracker)
             {
                 PluginConfig = pluginConfig;
                 _pluginData = pluginData;
-                SpawnedWorkcartTracker = spawnedWorkcartTracker;
+                SpawnedTrainCarTracker = spawnedTrainCarTracker;
             }
 
             public bool CanHaveMoreConductors() => PluginConfig.MaxConductors < 0
@@ -3201,7 +3199,7 @@ namespace Oxide.Plugins
                 trainController.AddTrainCarComponent(primaryWorkcartController);
                 _trainCarComponents[primaryWorkcart] = primaryWorkcartController;
 
-                if (!SpawnedWorkcartTracker.HasWorkcart(primaryWorkcart))
+                if (!SpawnedTrainCarTracker.HasWorkcart(primaryWorkcart))
                 {
                     _pluginData.AddWorkcartId(primaryWorkcart.net.ID, workcartData);
                 }
@@ -3457,7 +3455,7 @@ namespace Oxide.Plugins
             public CompleteTrain CompleteTrain => PrimaryWorkcart.completeTrain;
 
             public Configuration PluginConfig => _trainManager.PluginConfig;
-            private SpawnedWorkcartTracker _spawnedWorkcartTracker => _trainManager.SpawnedWorkcartTracker;
+            private SpawnedTrainCarTracker _spawnedTrainCarTracker => _trainManager.SpawnedTrainCarTracker;
 
             private TrainManager _trainManager;
             private readonly List<WorkcartController> _workcartControllers = new List<WorkcartController>();
@@ -3658,7 +3656,7 @@ namespace Oxide.Plugins
 
             public bool UpdateWorkcartData()
             {
-                if (_spawnedWorkcartTracker.HasWorkcart(PrimaryWorkcart))
+                if (_spawnedTrainCarTracker.HasWorkcart(PrimaryWorkcart))
                     return false;
 
                 return _workcartData.UpdateData(DepartureThrottle, PrimaryWorkcart.localTrackSelection);
