@@ -31,7 +31,6 @@ namespace Oxide.Plugins
         private static AutomatedWorkcarts _pluginInstance;
         private static StoredPluginData _pluginData;
         private static StoredMapData _mapData;
-        private static StoredTunnelData _tunnelData;
 
         private const string PermissionToggle = "automatedworkcarts.toggle";
         private const string PermissionManageTriggers = "automatedworkcarts.managetriggers";
@@ -50,6 +49,7 @@ namespace Oxide.Plugins
         private static readonly Regex IdRegex = new Regex("\\$id", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
         private Configuration _pluginConfig;
+        private StoredTunnelData _tunnelData;
         private WorkcartTriggerManager _triggerManager;
         private TrainManager _trainManager;
 
@@ -66,7 +66,7 @@ namespace Oxide.Plugins
             _tunnelData = StoredTunnelData.Load();
 
             _trainManager = new TrainManager(_pluginConfig);
-            _triggerManager = new WorkcartTriggerManager(_pluginConfig, _trainManager);
+            _triggerManager = new WorkcartTriggerManager(_pluginConfig, _trainManager, _tunnelData);
 
             permission.RegisterPermission(PermissionToggle, this);
             permission.RegisterPermission(PermissionManageTriggers, this);
@@ -122,7 +122,6 @@ namespace Oxide.Plugins
 
             _mapData = null;
             _pluginData = null;
-            _tunnelData = null;
             _pluginInstance = null;
         }
 
@@ -2592,14 +2591,16 @@ namespace Oxide.Plugins
 
             private Configuration _pluginConfig;
             private TrainManager _trainManager;
+            private StoredTunnelData _tunnelData;
             private Dictionary<TriggerData, BaseTriggerController> _triggerControllers = new Dictionary<TriggerData, BaseTriggerController>();
             private Dictionary<TrainTrackSpline, List<BaseTriggerInstance>> _splinesToTriggers = new Dictionary<TrainTrackSpline, List<BaseTriggerInstance>>();
             private Dictionary<ulong, PlayerInfo> _playerInfo = new Dictionary<ulong, PlayerInfo>();
 
-            public WorkcartTriggerManager(Configuration pluginConfig, TrainManager trainManager)
+            public WorkcartTriggerManager(Configuration pluginConfig, TrainManager trainManager, StoredTunnelData tunnelData)
             {
                 _pluginConfig = pluginConfig;
                 _trainManager = trainManager;
+                _tunnelData = tunnelData;
             }
 
             private int GetHighestTriggerId(IEnumerable<TriggerData> triggerList)
@@ -4046,7 +4047,7 @@ namespace Oxide.Plugins
             {
                 var migratedTriggers = 0;
 
-                foreach (var triggerData in _tunnelData.TunnelTriggers)
+                foreach (var triggerData in TunnelTriggers)
                 {
                     var tunnelType = triggerData.GetTunnelType();
                     if (tunnelType == TunnelType.TrainStation)
