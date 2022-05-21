@@ -29,7 +29,6 @@ namespace Oxide.Plugins
         private Plugin CargoTrainEvent;
 
         private static AutomatedWorkcarts _pluginInstance;
-        private static Configuration _pluginConfig;
         private static StoredPluginData _pluginData;
         private static StoredMapData _mapData;
         private static StoredTunnelData _tunnelData;
@@ -50,6 +49,7 @@ namespace Oxide.Plugins
         private static readonly object False = false;
         private static readonly Regex IdRegex = new Regex("\\$id", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
+        private Configuration _pluginConfig;
         private WorkcartTriggerManager _triggerManager;
         private TrainManager _trainManager;
 
@@ -66,7 +66,7 @@ namespace Oxide.Plugins
             _tunnelData = StoredTunnelData.Load();
 
             _trainManager = new TrainManager(_pluginConfig);
-            _triggerManager = new WorkcartTriggerManager(_trainManager);
+            _triggerManager = new WorkcartTriggerManager(_pluginConfig, _trainManager);
 
             permission.RegisterPermission(PermissionToggle, this);
             permission.RegisterPermission(PermissionManageTriggers, this);
@@ -123,7 +123,6 @@ namespace Oxide.Plugins
             _mapData = null;
             _pluginData = null;
             _tunnelData = null;
-            _pluginConfig = null;
             _pluginInstance = null;
         }
 
@@ -2591,13 +2590,15 @@ namespace Oxide.Plugins
             private const float TriggerDisplayRadius = WorkcartTrigger.TriggerRadius;
             private float TriggerDisplayDistanceSquared => _pluginConfig.TriggerDisplayDistance * _pluginConfig.TriggerDisplayDistance;
 
+            private Configuration _pluginConfig;
             private TrainManager _trainManager;
             private Dictionary<TriggerData, BaseTriggerController> _triggerControllers = new Dictionary<TriggerData, BaseTriggerController>();
             private Dictionary<TrainTrackSpline, List<BaseTriggerInstance>> _splinesToTriggers = new Dictionary<TrainTrackSpline, List<BaseTriggerInstance>>();
             private Dictionary<ulong, PlayerInfo> _playerInfo = new Dictionary<ulong, PlayerInfo>();
 
-            public WorkcartTriggerManager(TrainManager trainManager)
+            public WorkcartTriggerManager(Configuration pluginConfig, TrainManager trainManager)
             {
+                _pluginConfig = pluginConfig;
                 _trainManager = trainManager;
             }
 
@@ -3092,7 +3093,7 @@ namespace Oxide.Plugins
 
         private class TrainManager
         {
-            private Configuration _pluginConfig;
+            public Configuration PluginConfig { get; private set; }
             private HashSet<TrainController> _trainControllers = new HashSet<TrainController>();
             private Dictionary<TrainEngine, WorkcartController> _workcartControllers = new Dictionary<TrainEngine, WorkcartController>();
             private bool _isUnloading = false;
@@ -3102,11 +3103,11 @@ namespace Oxide.Plugins
 
             public TrainManager(Configuration pluginConfig)
             {
-                _pluginConfig = pluginConfig;
+                PluginConfig = pluginConfig;
             }
 
-            public bool CanHaveMoreConductors() => _pluginConfig.MaxConductors < 0
-                || TrainCount < _pluginConfig.MaxConductors;
+            public bool CanHaveMoreConductors() => PluginConfig.MaxConductors < 0
+                || TrainCount < PluginConfig.MaxConductors;
 
             public TrainController GetTrainController(TrainCar trainCar)
             {
@@ -3392,6 +3393,8 @@ namespace Oxide.Plugins
             public TrainEngine PrimaryWorkcart => PrimaryWorkcartController.Workcart;
             public CompleteTrain CompleteTrain => PrimaryWorkcart.completeTrain;
 
+            public Configuration PluginConfig => _trainManager.PluginConfig;
+
             private TrainManager _trainManager;
             private List<WorkcartController> _workcartControllers = new List<WorkcartController>();
 
@@ -3440,11 +3443,11 @@ namespace Oxide.Plugins
                 var throttle = _workcartData.Throttle ?? EngineSpeeds.Zero;
                 if (throttle == EngineSpeeds.Zero)
                 {
-                    throttle = _pluginConfig.GetDefaultSpeed();
+                    throttle = PluginConfig.GetDefaultSpeed();
                 }
 
                 SetThrottle(throttle);
-                SetTrackSelection(_workcartData.TrackSelection ?? _pluginConfig.GetDefaultTrackSelection());
+                SetTrackSelection(_workcartData.TrackSelection ?? PluginConfig.GetDefaultTrackSelection());
             }
 
             public void SetThrottle(EngineSpeeds throttle)
@@ -3626,7 +3629,7 @@ namespace Oxide.Plugins
 
             private void MaybeAddMapMarkers()
             {
-                if (_pluginConfig.GenericMapMarker.Enabled)
+                if (PluginConfig.GenericMapMarker.Enabled)
                 {
                     _genericMarker = GameManager.server.CreateEntity(GenericMapMarkerPrefab, PrimaryWorkcartController.Position) as MapMarkerGenericRadius;
                     if (_genericMarker != null)
@@ -3636,20 +3639,20 @@ namespace Oxide.Plugins
                         _genericMarker.syncPosition = false;
                         _genericMarker.Spawn();
 
-                        _genericMarker.color1 = _pluginConfig.GenericMapMarker.GetColor();
+                        _genericMarker.color1 = PluginConfig.GenericMapMarker.GetColor();
                         _genericMarker.color2 = _genericMarker.color1;
-                        _genericMarker.alpha = _pluginConfig.GenericMapMarker.Alpha;
-                        _genericMarker.radius = _pluginConfig.GenericMapMarker.Radius;
+                        _genericMarker.alpha = PluginConfig.GenericMapMarker.Alpha;
+                        _genericMarker.radius = PluginConfig.GenericMapMarker.Radius;
                         _genericMarker.SendUpdate();
                     }
                 }
 
-                if (_pluginConfig.VendingMapMarker.Enabled)
+                if (PluginConfig.VendingMapMarker.Enabled)
                 {
                     _vendingMarker = GameManager.server.CreateEntity(VendingMapMarkerPrefab, PrimaryWorkcartController.Position) as VendingMachineMapMarker;
                     if (_vendingMarker != null)
                     {
-                        _vendingMarker.markerShopName = _pluginConfig.VendingMapMarker.Name;
+                        _vendingMarker.markerShopName = PluginConfig.VendingMapMarker.Name;
 
                         _vendingMarker.EnableSaving(false);
                         _vendingMarker.EnableGlobalBroadcast(true);
@@ -3683,7 +3686,7 @@ namespace Oxide.Plugins
                     }
 
                     _pluginInstance?.TrackEnd();
-                }, 0, _pluginConfig.MapMarkerUpdateInveralSeconds, _pluginConfig.MapMarkerUpdateInveralSeconds * 0.1f);
+                }, 0, PluginConfig.MapMarkerUpdateInveralSeconds, PluginConfig.MapMarkerUpdateInveralSeconds * 0.1f);
             }
         }
 
@@ -3702,10 +3705,10 @@ namespace Oxide.Plugins
             public NPCShopKeeper Conductor { get; private set; }
             public uint NetId { get; private set; }
             public string NetIdString { get; private set; }
+            private bool _isReverse;
 
             public Vector3 Position => Transform.position;
-
-            private bool _isReverse;
+            private Configuration _pluginConfig => TrainController.PluginConfig;
 
             public void Init(TrainEngine workcart, TrainController trainController, bool isReverse)
             {
