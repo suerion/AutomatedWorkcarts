@@ -50,6 +50,8 @@ namespace Oxide.Plugins
         private StoredPluginData _pluginData;
         private StoredTunnelData _tunnelData;
         private StoredMapData _mapData;
+
+        private readonly SpawnedWorkcartTracker _spawnedWorkcartTracker = new SpawnedWorkcartTracker();
         private WorkcartTriggerManager _triggerManager;
         private TrainManager _trainManager;
 
@@ -65,7 +67,7 @@ namespace Oxide.Plugins
             _pluginData = StoredPluginData.Load();
             _tunnelData = StoredTunnelData.Load();
 
-            _trainManager = new TrainManager(_pluginConfig, _pluginData);
+            _trainManager = new TrainManager(_pluginConfig, _pluginData, _spawnedWorkcartTracker);
             _triggerManager = new WorkcartTriggerManager(_pluginConfig, _trainManager, _tunnelData);
 
             permission.RegisterPermission(PermissionToggle, this);
@@ -126,8 +128,14 @@ namespace Oxide.Plugins
 
         private void OnServerSave()
         {
-            _trainManager.UpdateWorkcartData();
-            _pluginData.Save();
+            if (_trainManager.UpdateWorkcartData())
+            {
+                _pluginData.Save();
+            }
+            else
+            {
+                _pluginData.SaveIfDirty();
+            }
         }
 
         private void OnNewSave()
@@ -2150,6 +2158,26 @@ namespace Oxide.Plugins
 
         #region Spawned Workcart Tracker
 
+        private class SpawnedWorkcartTracker
+        {
+            private HashSet<TrainEngine> _spawnedWorkcarts = new HashSet<TrainEngine>();
+
+            public bool HasWorkcart(TrainEngine workcart)
+            {
+                return _spawnedWorkcarts.Contains(workcart);
+            }
+
+            public void RegisterWorkcart(TrainEngine workcart)
+            {
+                _spawnedWorkcarts.Add(workcart);
+            }
+
+            public void UnregisterWorkcart(TrainEngine workcart)
+            {
+                _spawnedWorkcarts.Remove(workcart);
+            }
+        }
+
         private class SpawnedWorkcartComponent : FacepunchBehaviour
         {
             public static void AddToWorkcart(TrainEngine workcart, BaseTriggerInstance triggerInstance)
@@ -2157,6 +2185,7 @@ namespace Oxide.Plugins
                 var component = workcart.gameObject.AddComponent<SpawnedWorkcartComponent>();
                 component._workcart = workcart;
                 component._triggerInstance = triggerInstance;
+                triggerInstance.TrainManager.SpawnedWorkcartTracker.RegisterWorkcart(workcart);
             }
 
             private TrainEngine _workcart;
@@ -2165,6 +2194,7 @@ namespace Oxide.Plugins
             private void OnDestroy()
             {
                 _triggerInstance.HandleWorkcartKilled(_workcart);
+                _triggerInstance.TrainManager.SpawnedWorkcartTracker.UnregisterWorkcart(_workcart);
             }
         }
 
@@ -2179,6 +2209,7 @@ namespace Oxide.Plugins
 
             protected static readonly Vector3 TriggerOffset = new Vector3(0, 0.9f, 0);
 
+            public TrainManager TrainManager { get; private set; }
             public TriggerData TriggerData { get; protected set; }
             public TrainTrackSpline Spline { get; private set; }
             public float DistanceOnSpline { get; private set; }
@@ -2197,14 +2228,13 @@ namespace Oxide.Plugins
                 }
             }
 
-            private TrainManager _trainManager;
             private GameObject _gameObject;
             private WorkcartTrigger _workcartTrigger;
             private List<TrainEngine> _spawnedWorkcarts;
 
             protected BaseTriggerInstance(TrainManager trainManager, TriggerData triggerData)
             {
-                _trainManager = trainManager;
+                TrainManager = trainManager;
                 TriggerData = triggerData;
             }
 
@@ -2218,7 +2248,7 @@ namespace Oxide.Plugins
                 sphereCollider.radius = WorkcartTrigger.TriggerRadius;
                 sphereCollider.gameObject.layer = WorkcartTrigger.TriggerLayer;
 
-                _workcartTrigger = WorkcartTrigger.AddToGameObject(_gameObject, TriggerData, _trainManager);
+                _workcartTrigger = WorkcartTrigger.AddToGameObject(_gameObject, TriggerData, TrainManager);
 
                 if (TriggerData.Spawner)
                 {
@@ -3100,6 +3130,8 @@ namespace Oxide.Plugins
         private class TrainManager
         {
             public Configuration PluginConfig { get; private set; }
+            public SpawnedWorkcartTracker SpawnedWorkcartTracker { get; private set; }
+
             private StoredPluginData _pluginData;
             private HashSet<TrainController> _trainControllers = new HashSet<TrainController>();
             private Dictionary<TrainEngine, WorkcartController> _workcartControllers = new Dictionary<TrainEngine, WorkcartController>();
@@ -3108,10 +3140,11 @@ namespace Oxide.Plugins
             public int TrainCount => _trainControllers.Count;
             public TrainEngine[] GetWorkcarts() => _workcartControllers.Keys.ToArray();
 
-            public TrainManager(Configuration pluginConfig, StoredPluginData pluginData)
+            public TrainManager(Configuration pluginConfig, StoredPluginData pluginData, SpawnedWorkcartTracker spawnedWorkcartTracker)
             {
                 PluginConfig = pluginConfig;
                 _pluginData = pluginData;
+                SpawnedWorkcartTracker = spawnedWorkcartTracker;
             }
 
             public bool CanHaveMoreConductors() => PluginConfig.MaxConductors < 0
@@ -3160,7 +3193,10 @@ namespace Oxide.Plugins
                 trainController.AddWorkcartController(primaryWorkcartController);
                 _workcartControllers[primaryWorkcart] = primaryWorkcartController;
 
-                _pluginData.AddWorkcartId(primaryWorkcart.net.ID, workcartData);
+                if (!SpawnedWorkcartTracker.HasWorkcart(primaryWorkcart))
+                {
+                    _pluginData.AddWorkcartId(primaryWorkcart.net.ID, workcartData);
+                }
 
                 var primaryForward = primaryWorkcart.transform.forward;
 
@@ -3244,12 +3280,19 @@ namespace Oxide.Plugins
                 }
             }
 
-            public void UpdateWorkcartData()
+            public bool UpdateWorkcartData()
             {
+                var changed = false;
+
                 foreach (var trainController in _trainControllers)
                 {
-                    trainController.UpdateWorkcartData();
+                    if (trainController.UpdateWorkcartData())
+                    {
+                        changed = true;
+                    }
                 }
+
+                return changed;
             }
 
             private WorkcartController GetWorkcartController(TrainEngine workcart)
@@ -3402,6 +3445,7 @@ namespace Oxide.Plugins
             public CompleteTrain CompleteTrain => PrimaryWorkcart.completeTrain;
 
             public Configuration PluginConfig => _trainManager.PluginConfig;
+            private SpawnedWorkcartTracker _spawnedWorkcartTracker => _trainManager.SpawnedWorkcartTracker;
 
             private TrainManager _trainManager;
             private List<WorkcartController> _workcartControllers = new List<WorkcartController>();
@@ -3585,10 +3629,12 @@ namespace Oxide.Plugins
                 }, UnityEngine.Random.Range(1, 2f));
             }
 
-            public void UpdateWorkcartData()
+            public bool UpdateWorkcartData()
             {
-                _workcartData.Throttle = DepartureThrottle;
-                _workcartData.TrackSelection = PrimaryWorkcart.localTrackSelection;
+                if (_spawnedWorkcartTracker.HasWorkcart(PrimaryWorkcart))
+                    return false;
+
+                return _workcartData.UpdateData(DepartureThrottle, PrimaryWorkcart.localTrackSelection);
             }
 
             public void EnableInvincibility()
@@ -3864,6 +3910,7 @@ namespace Oxide.Plugins
 
         #region Data
 
+        [JsonObject(MemberSerialization.OptIn)]
         private class WorkcartData
         {
             [JsonProperty("Route", DefaultValueHandling = DefaultValueHandling.Ignore)]
@@ -3871,20 +3918,50 @@ namespace Oxide.Plugins
 
             [JsonProperty("Throttle", DefaultValueHandling = DefaultValueHandling.Ignore)]
             [JsonConverter(typeof(StringEnumConverter))]
-            public EngineSpeeds? Throttle;
+            public EngineSpeeds? Throttle { get; private set; }
 
             [JsonProperty("TrackSelection", DefaultValueHandling = DefaultValueHandling.Ignore)]
             [JsonConverter(typeof(StringEnumConverter))]
-            public TrackSelection? TrackSelection;
+            public TrackSelection? TrackSelection { get; private set; }
+
+            public bool UpdateData(EngineSpeeds throttle, TrackSelection trackSelection)
+            {
+                var changed = false;
+
+                if (Throttle != throttle)
+                {
+                    Throttle = throttle;
+                    changed = true;
+                }
+
+                if (TrackSelection != trackSelection)
+                {
+                    TrackSelection = trackSelection;
+                    changed = true;
+                }
+
+                return changed;
+            }
         }
 
+        [JsonObject(MemberSerialization.OptIn)]
         private class StoredPluginData
         {
+            public static StoredPluginData Clear()
+            {
+                var data = new StoredPluginData();
+                data.Save();
+                return data;
+            }
+
             [JsonProperty("AutomatedWorkcardIds", DefaultValueHandling = DefaultValueHandling.Ignore)]
             public HashSet<uint> AutomatedWorkcardIds;
 
             [JsonProperty("AutomatedWorkcarts")]
             public Dictionary<uint, WorkcartData> AutomatedWorkcarts = new Dictionary<uint, WorkcartData>();
+
+            [JsonIgnore]
+            private bool _isDirty;
 
             public static string Filename => nameof(AutomatedWorkcarts);
 
@@ -3904,12 +3981,17 @@ namespace Oxide.Plugins
                 return data;
             }
 
-            public static StoredPluginData Clear() => new StoredPluginData().Save();
-
-            public StoredPluginData Save()
+            public void Save()
             {
                 Interface.Oxide.DataFileSystem.WriteObject<StoredPluginData>(Filename, this);
-                return this;
+            }
+
+            public void SaveIfDirty()
+            {
+                if (_isDirty)
+                {
+                    Save();
+                }
             }
 
             public WorkcartData GetWorkcartData(uint workcartId)
@@ -3927,12 +4009,19 @@ namespace Oxide.Plugins
 
             public void AddWorkcartId(uint workcartId, WorkcartData workcartData)
             {
+                if (AutomatedWorkcarts.ContainsKey(workcartId))
+                    return;
+
                 AutomatedWorkcarts[workcartId] = workcartData;
+                _isDirty = true;
             }
 
             public void RemoveWorkcartId(uint workcartId)
             {
-                AutomatedWorkcarts.Remove(workcartId);
+                if (AutomatedWorkcarts.Remove(workcartId))
+                {
+                    _isDirty = true;
+                }
             }
 
             public void TrimToWorkcartIds(HashSet<uint> foundWorkcartIds)
@@ -3940,13 +4029,16 @@ namespace Oxide.Plugins
                 foreach (var workcartId in AutomatedWorkcarts.Keys.ToArray())
                 {
                     if (!foundWorkcartIds.Contains(workcartId))
-                        AutomatedWorkcarts.Remove(workcartId);
+                    {
+                        RemoveWorkcartId(workcartId);
+                    }
                 }
 
-                Save();
+                SaveIfDirty();
             }
         }
 
+        [JsonObject(MemberSerialization.OptIn)]
         private class StoredMapData
         {
             [JsonProperty("MapTriggers")]
@@ -4013,6 +4105,7 @@ namespace Oxide.Plugins
             }
         }
 
+        [JsonObject(MemberSerialization.OptIn)]
         private class StoredTunnelData
         {
             private const float DefaultStationStopDuration = 15;
