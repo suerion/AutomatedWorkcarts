@@ -30,7 +30,6 @@ namespace Oxide.Plugins
 
         private static AutomatedWorkcarts _pluginInstance;
         private static StoredPluginData _pluginData;
-        private static StoredMapData _mapData;
 
         private const string PermissionToggle = "automatedworkcarts.toggle";
         private const string PermissionManageTriggers = "automatedworkcarts.managetriggers";
@@ -50,6 +49,7 @@ namespace Oxide.Plugins
 
         private Configuration _pluginConfig;
         private StoredTunnelData _tunnelData;
+        private StoredMapData _mapData;
         private WorkcartTriggerManager _triggerManager;
         private TrainManager _trainManager;
 
@@ -95,6 +95,7 @@ namespace Oxide.Plugins
 
             _tunnelData.MigrateTriggers();
             _mapData = StoredMapData.Load();
+            _triggerManager.SetMapData(_mapData);
 
             _startupCoroutine = ServerMgr.Instance.StartCoroutine(DoStartupRoutine());
         }
@@ -120,7 +121,6 @@ namespace Oxide.Plugins
             _triggerManager.DestroyAll();
             _trainManager.Unload();
 
-            _mapData = null;
             _pluginData = null;
             _pluginInstance = null;
         }
@@ -2591,6 +2591,7 @@ namespace Oxide.Plugins
 
             private Configuration _pluginConfig;
             private TrainManager _trainManager;
+            private StoredMapData _mapData;
             private StoredTunnelData _tunnelData;
             private Dictionary<TriggerData, BaseTriggerController> _triggerControllers = new Dictionary<TriggerData, BaseTriggerController>();
             private Dictionary<TrainTrackSpline, List<BaseTriggerInstance>> _splinesToTriggers = new Dictionary<TrainTrackSpline, List<BaseTriggerInstance>>();
@@ -2601,6 +2602,11 @@ namespace Oxide.Plugins
                 _pluginConfig = pluginConfig;
                 _trainManager = trainManager;
                 _tunnelData = tunnelData;
+            }
+
+            public void SetMapData(StoredMapData mapData)
+            {
+                _mapData = mapData;
             }
 
             private int GetHighestTriggerId(IEnumerable<TriggerData> triggerList)
