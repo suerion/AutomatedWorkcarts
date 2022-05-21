@@ -712,7 +712,7 @@ namespace Oxide.Plugins
         [HookMethod("API_GetAutomatedWorkcarts")]
         private TrainEngine[] API_GetAutomatedWorkcarts()
         {
-            return _trainManager.GetWorkcarts();
+            return _trainManager.GetAutomatedWorkcarts();
         }
 
         #endregion
@@ -3134,11 +3134,22 @@ namespace Oxide.Plugins
 
             private StoredPluginData _pluginData;
             private HashSet<TrainController> _trainControllers = new HashSet<TrainController>();
-            private Dictionary<TrainEngine, WorkcartController> _workcartControllers = new Dictionary<TrainEngine, WorkcartController>();
+            private Dictionary<TrainCar, ITrainCarComponent> _trainCarComponents = new Dictionary<TrainCar, ITrainCarComponent>();
             private bool _isUnloading = false;
 
             public int TrainCount => _trainControllers.Count;
-            public TrainEngine[] GetWorkcarts() => _workcartControllers.Keys.ToArray();
+
+            public TrainEngine[] GetAutomatedWorkcarts()
+            {
+                var workcartList = new List<TrainEngine>();
+
+                foreach (var trainController in _trainControllers)
+                {
+                    trainController.GetWorkcarts(workcartList);
+                }
+
+                return workcartList.ToArray();
+            }
 
             public TrainManager(Configuration pluginConfig, StoredPluginData pluginData, SpawnedWorkcartTracker spawnedWorkcartTracker)
             {
@@ -3152,16 +3163,10 @@ namespace Oxide.Plugins
 
             public TrainController GetTrainController(TrainCar trainCar)
             {
-                foreach (var car in trainCar.completeTrain.trainCars)
-                {
-                    var workcart = car as TrainEngine;
-                    if ((object)workcart != null)
-                    {
-                        return GetWorkcartController(workcart)?.TrainController;
-                    }
-                }
-
-                return null;
+                ITrainCarComponent trainCarComponent;
+                return _trainCarComponents.TryGetValue(trainCar, out trainCarComponent)
+                    ? trainCarComponent.TrainController
+                    : null;
             }
 
             public bool HasTrainController(TrainCar trainCar)
@@ -3173,6 +3178,9 @@ namespace Oxide.Plugins
             {
                 foreach (var trainCar in primaryWorkcart.completeTrain.trainCars)
                 {
+                    if (_trainCarComponents.ContainsKey(trainCar))
+                        return false;
+
                     var workcart = trainCar as TrainEngine;
                     if ((object)workcart != null && _pluginInstance.AutomationWasBlocked(workcart))
                         return false;
@@ -3190,8 +3198,8 @@ namespace Oxide.Plugins
                 _trainControllers.Add(trainController);
 
                 var primaryWorkcartController = WorkcartController.AddToEntity(primaryWorkcart, trainController);
-                trainController.AddWorkcartController(primaryWorkcartController);
-                _workcartControllers[primaryWorkcart] = primaryWorkcartController;
+                trainController.AddTrainCarComponent(primaryWorkcartController);
+                _trainCarComponents[primaryWorkcart] = primaryWorkcartController;
 
                 if (!SpawnedWorkcartTracker.HasWorkcart(primaryWorkcart))
                 {
@@ -3203,17 +3211,25 @@ namespace Oxide.Plugins
                 foreach (var trainCar in primaryWorkcart.completeTrain.trainCars)
                 {
                     var workcart = trainCar as TrainEngine;
-                    if ((object)workcart == null
-                        || workcart == primaryWorkcart
-                        || _workcartControllers.ContainsKey(workcart))
-                        continue;
+                    if ((object)workcart != null)
+                    {
+                        if (workcart == primaryWorkcart)
+                            continue;
 
-                    // This approach will need to be updated if people have long trains and/or tight corners.
-                    var isReverse = Vector3.Dot(primaryForward, workcart.transform.forward) < 0;
+                        // This approach will need to be updated if people have long trains and/or tight corners.
+                        var isReverse = Vector3.Dot(primaryForward, workcart.transform.forward) < 0;
 
-                    var workcartController = WorkcartController.AddToEntity(workcart, trainController, isReverse);
-                    _workcartControllers[workcart] = workcartController;
-                    trainController.AddWorkcartController(workcartController);
+                        var workcartController = WorkcartController.AddToEntity(workcart, trainController, isReverse);
+                        _trainCarComponents[workcart] = workcartController;
+                        trainController.AddTrainCarComponent(workcartController);
+                    }
+                    else
+                    {
+                        var trainCarComponent = TrainCarComponent.AddToEntity(trainCar, trainController);
+                        _trainCarComponents[trainCar] = trainCarComponent;
+                        trainController.AddTrainCarComponent(trainCarComponent);
+                    }
+
                 }
 
                 trainController.StartTrain();
@@ -3226,13 +3242,17 @@ namespace Oxide.Plugins
                 return true;
             }
 
-            public void UnregisterWorkcartController(WorkcartController workcartController)
+            public void UnregisterTrainCarComponent(ITrainCarComponent trainCarComponent)
             {
-                _workcartControllers.Remove(workcartController.Workcart);
+                _trainCarComponents.Remove(trainCarComponent.TrainCar);
 
                 if (!_isUnloading)
                 {
-                    _pluginData.RemoveWorkcartId(workcartController.NetId);
+                    var workcartController = trainCarComponent as WorkcartController;
+                    if ((object)workcartController != null)
+                    {
+                        _pluginData.RemoveWorkcartId(workcartController.NetId);
+                    }
                 }
             }
 
@@ -3293,14 +3313,6 @@ namespace Oxide.Plugins
                 }
 
                 return changed;
-            }
-
-            private WorkcartController GetWorkcartController(TrainEngine workcart)
-            {
-                WorkcartController trainController;
-                return _workcartControllers.TryGetValue(workcart, out trainController)
-                    ? trainController
-                    : null;
             }
         }
 
@@ -3448,7 +3460,8 @@ namespace Oxide.Plugins
             private SpawnedWorkcartTracker _spawnedWorkcartTracker => _trainManager.SpawnedWorkcartTracker;
 
             private TrainManager _trainManager;
-            private List<WorkcartController> _workcartControllers = new List<WorkcartController>();
+            private readonly List<WorkcartController> _workcartControllers = new List<WorkcartController>();
+            private readonly List<ITrainCarComponent> _trainCarComponents = new List<ITrainCarComponent>();
 
             private TrainState _trainState;
             private WorkcartData _workcartData;
@@ -3467,24 +3480,38 @@ namespace Oxide.Plugins
                 _workcartData = workcarData;
             }
 
-            public void AddWorkcartController(WorkcartController workcartController)
+            public void AddTrainCarComponent(ITrainCarComponent trainCarComponent)
             {
-                _workcartControllers.Add(workcartController);
-                if (_workcartControllers.Count == 1)
+                _trainCarComponents.Add(trainCarComponent);
+
+                var workcartController = trainCarComponent as WorkcartController;
+                if ((object)workcartController != null)
                 {
-                    PrimaryWorkcartController = workcartController;
-                    MaybeAddMapMarkers();
+                    _workcartControllers.Add(workcartController);
+
+                    if ((object)PrimaryWorkcartController == null)
+                    {
+                        PrimaryWorkcartController = workcartController;
+                        MaybeAddMapMarkers();
+                    }
                 }
             }
 
-            public void RemoveWorkcartController(WorkcartController workcartController)
+            public void HandleTrainCarDestroyed(ITrainCarComponent trainCarComponent)
             {
-                _workcartControllers.Remove(workcartController);
-                _trainManager.UnregisterWorkcartController(workcartController);
+                _trainCarComponents.Remove(trainCarComponent);
+                _trainManager.UnregisterTrainCarComponent(trainCarComponent);
 
-                // Any workcart removal should disable automation to all of them.
-                // A future improvement would be to detect removal of any train cars.
+                // Any train car removal should disable automation of the entire train.
                 Kill();
+            }
+
+            public void GetWorkcarts(List<TrainEngine> workcartList)
+            {
+                foreach (var workcartController in _workcartControllers)
+                {
+                    workcartList.Add(workcartController.Workcart);
+                }
             }
 
             public void StartTrain()
@@ -3673,9 +3700,9 @@ namespace Oxide.Plugins
                     _vendingMarker.Kill();
                 }
 
-                for (var i = _workcartControllers.Count - 1; i >= 0; i--)
+                for (var i = _trainCarComponents.Count - 1; i >= 0; i--)
                 {
-                    UnityEngine.Object.DestroyImmediate(_workcartControllers[i]);
+                    UnityEngine.Object.DestroyImmediate(_trainCarComponents[i] as FacepunchBehaviour);
                 }
 
                 _trainManager.UnregisterTrainController(this);
@@ -3744,7 +3771,32 @@ namespace Oxide.Plugins
             }
         }
 
-        private class WorkcartController : FacepunchBehaviour
+        private interface ITrainCarComponent
+        {
+            TrainController TrainController { get; }
+            TrainCar TrainCar { get; }
+        }
+
+        private class TrainCarComponent : FacepunchBehaviour, ITrainCarComponent
+        {
+            public static TrainCarComponent AddToEntity(TrainCar trainCar, TrainController trainController)
+            {
+                var component = trainCar.gameObject.AddComponent<TrainCarComponent>();
+                component.TrainController = trainController;
+                component.TrainCar = trainCar;
+                return component;
+            }
+
+            public TrainController TrainController { get; private set; }
+            public TrainCar TrainCar { get; private set; }
+
+            private void OnDestroy()
+            {
+                TrainController.HandleTrainCarDestroyed(this);
+            }
+        }
+
+        private class WorkcartController : FacepunchBehaviour, ITrainCarComponent
         {
             public static WorkcartController AddToEntity(TrainEngine workcart, TrainController trainController, bool isReverse = false)
             {
@@ -3761,6 +3813,7 @@ namespace Oxide.Plugins
             public string NetIdString { get; private set; }
             private bool _isReverse;
 
+            public TrainCar TrainCar => Workcart;
             public Vector3 Position => Transform.position;
             private Configuration _pluginConfig => TrainController.PluginConfig;
 
@@ -3888,7 +3941,7 @@ namespace Oxide.Plugins
 
             private void OnDestroy()
             {
-                TrainController.RemoveWorkcartController(this);
+                TrainController.HandleTrainCarDestroyed(this);
 
                 if (Conductor != null && !Conductor.IsDestroyed)
                 {
