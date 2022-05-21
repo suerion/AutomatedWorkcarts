@@ -50,8 +50,8 @@ namespace Oxide.Plugins
         private static readonly object False = false;
         private static readonly Regex IdRegex = new Regex("\\$id", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
-        private WorkcartTriggerManager _triggerManager = new WorkcartTriggerManager();
-        private TrainManager _trainManager = new TrainManager();
+        private WorkcartTriggerManager _triggerManager;
+        private TrainManager _trainManager;
 
         private Coroutine _startupCoroutine;
 
@@ -64,6 +64,9 @@ namespace Oxide.Plugins
             _pluginInstance = this;
             _pluginData = StoredPluginData.Load();
             _tunnelData = StoredTunnelData.Load();
+
+            _trainManager = new TrainManager(_pluginConfig);
+            _triggerManager = new WorkcartTriggerManager(_trainManager);
 
             permission.RegisterPermission(PermissionToggle, this);
             permission.RegisterPermission(PermissionManageTriggers, this);
@@ -151,47 +154,6 @@ namespace Oxide.Plugins
             EnableTerrainCollision(trainCar, false);
         }
 
-        private void OnEntityEnter(WorkcartTrigger trigger, TrainCar trainCar)
-        {
-            var trainController = _trainManager.GetTrainController(trainCar);
-            if (trainController == null)
-            {
-                // If there is no train controller, we only care about conductor triggers.
-                if (!trigger.TriggerData.AddConductor)
-                    return;
-
-                // Don't handle conductor triggers that are also destroy triggers since that indicates an incorrect setup.
-                if (trigger.TriggerData.Destroy)
-                    return;
-
-                // Make sure the train has at least one workcart.
-                var leadWorkcart = GetLeadWorkcart(trainCar);
-                if (leadWorkcart == null)
-                    return;
-
-                // Don't automate a train if any of the workcarts or wagons are player-owned.
-                // Not sure if this is the correct decision, but we'll see.
-                if (IsTrainOwned(trainCar))
-                    return;
-
-                if (!CanHaveMoreConductors())
-                    return;
-
-                _trainManager.TryCreateTrainController(leadWorkcart, trigger.TriggerData);
-                return;
-            }
-
-            // Ignore the trigger if the train car already entered it.
-            if (trigger.entityContents?.Contains(trainCar) ?? false)
-                return;
-
-            // The PrimaryTrainCar always refers to the train car at the front of the direction being traveled.
-            if (trainCar != trainCar.completeTrain.PrimaryTrainCar)
-                return;
-
-            trainController.HandleTrigger(trigger.TriggerData);
-        }
-
         private object OnTrainCarUncouple(TrainCar trainCar, BasePlayer player)
         {
             // Disallow uncoupling train cars from automated trains.
@@ -236,7 +198,7 @@ namespace Oxide.Plugins
                     return;
                 }
 
-                if (!CanHaveMoreConductors())
+                if (!_trainManager.CanHaveMoreConductors())
                 {
                     ReplyToPlayer(player, Lang.ErrorMaxConductors, _trainManager.TrainCount, _pluginConfig.MaxConductors);
                     return;
@@ -1086,7 +1048,7 @@ namespace Oxide.Plugins
                     {
                         if (workcart != null
                             && !IsTrainOwned(workcart)
-                            && CanHaveMoreConductors()
+                            && _trainManager.CanHaveMoreConductors()
                             && !_trainManager.HasTrainController(workcart))
                         {
                             _trainManager.TryCreateTrainController(workcart, workcartData: workcartData);
@@ -1116,10 +1078,6 @@ namespace Oxide.Plugins
 
             return false;
         }
-
-        private bool CanHaveMoreConductors() =>
-            _pluginConfig.MaxConductors < 0
-            || _trainManager.TrainCount < _pluginConfig.MaxConductors;
 
         public static void LogInfo(string message) => Interface.Oxide.LogInfo($"[Automated Workcarts] {message}");
         public static void LogError(string message) => Interface.Oxide.LogError($"[Automated Workcarts] {message}");
@@ -1873,10 +1831,83 @@ namespace Oxide.Plugins
 
         private class WorkcartTrigger : TriggerBase
         {
+            public static WorkcartTrigger AddToGameObject(GameObject gameObject, TriggerData triggerData, TrainManager trainManager)
+            {
+                var workcartTrigger = gameObject.AddComponent<WorkcartTrigger>();
+                workcartTrigger.Init(triggerData, trainManager);
+                return workcartTrigger;
+            }
+
             public const int TriggerLayer = 6;
             public const float TriggerRadius = 1f;
 
-            public TriggerData TriggerData;
+            public TriggerData TriggerData { get; private set; }
+            private TrainManager _trainManager;
+
+            public override void OnEntityEnter(BaseEntity entity)
+            {
+                _pluginInstance?.TrackStart();
+                var trainCar = entity as TrainCar;
+                if (trainCar != null)
+                {
+                    HandleTrainCar(trainCar);
+                }
+                _pluginInstance?.TrackEnd();
+            }
+
+            private void Init(TriggerData triggerData, TrainManager trainManager)
+            {
+                TriggerData = triggerData;
+                _trainManager = trainManager;
+
+                interestLayers = Layers.Mask.Vehicle_World;
+            }
+
+            private void HandleTrainCar(TrainCar trainCar)
+            {
+                if (entityContents == null)
+                {
+                    entityContents = new HashSet<BaseEntity>();
+                }
+
+                // Ignore the trigger if the train car is already colliding with it.
+                if (!entityContents.Add(trainCar))
+                    return;
+
+                var trainController = _trainManager.GetTrainController(trainCar);
+                if (trainController == null)
+                {
+                    // If there is no train controller, we only care about conductor triggers.
+                    if (!TriggerData.AddConductor)
+                        return;
+
+                    // Don't handle conductor triggers that are also destroy triggers since that indicates an incorrect setup.
+                    if (TriggerData.Destroy)
+                        return;
+
+                    // Make sure the train has at least one workcart.
+                    var leadWorkcart = GetLeadWorkcart(trainCar);
+                    if (leadWorkcart == null)
+                        return;
+
+                    // Don't automate a train if any of the workcarts or wagons are player-owned.
+                    // Not sure if this is the correct decision, but we'll see.
+                    if (IsTrainOwned(trainCar))
+                        return;
+
+                    if (!_trainManager.CanHaveMoreConductors())
+                        return;
+
+                    _trainManager.TryCreateTrainController(leadWorkcart, TriggerData);
+                    return;
+                }
+
+                // The PrimaryTrainCar always refers to the train car at the front of the direction being traveled.
+                if (trainCar != trainCar.completeTrain.PrimaryTrainCar)
+                    return;
+
+                trainController.HandleTrigger(TriggerData);
+            }
         }
 
         private class TriggerData
@@ -2169,12 +2200,14 @@ namespace Oxide.Plugins
                 }
             }
 
+            private TrainManager _trainManager;
             private GameObject _gameObject;
             private WorkcartTrigger _workcartTrigger;
             private List<TrainEngine> _spawnedWorkcarts;
 
-            protected BaseTriggerInstance(TriggerData triggerData)
+            protected BaseTriggerInstance(TrainManager trainManager, TriggerData triggerData)
             {
+                _trainManager = trainManager;
                 TriggerData = triggerData;
             }
 
@@ -2188,9 +2221,7 @@ namespace Oxide.Plugins
                 sphereCollider.radius = WorkcartTrigger.TriggerRadius;
                 sphereCollider.gameObject.layer = WorkcartTrigger.TriggerLayer;
 
-                _workcartTrigger = _gameObject.AddComponent<WorkcartTrigger>();
-                _workcartTrigger.TriggerData = TriggerData;
-                _workcartTrigger.interestLayers = Layers.Mask.Vehicle_World;
+                _workcartTrigger = WorkcartTrigger.AddToGameObject(_gameObject, TriggerData, _trainManager);
 
                 if (TriggerData.Spawner)
                 {
@@ -2401,7 +2432,8 @@ namespace Oxide.Plugins
             public override Vector3 WorldPosition => TriggerData.Position;
             public override Quaternion WorldRotation => Quaternion.Euler(0, TriggerData.RotationAngle, 0);
 
-            public MapTriggerInstance(TriggerData triggerData) : base(triggerData) {}
+            public MapTriggerInstance(TrainManager trainManager, TriggerData triggerData)
+                : base(trainManager, triggerData) {}
         }
 
         private class TunnelTriggerInstance : BaseTriggerInstance
@@ -2411,7 +2443,8 @@ namespace Oxide.Plugins
             public override Vector3 WorldPosition => DungeonCellWrapper.TransformPoint(TriggerData.Position);
             public override Quaternion WorldRotation => DungeonCellWrapper.Rotation * Quaternion.Euler(0, TriggerData.RotationAngle, 0);
 
-            public TunnelTriggerInstance(TriggerData triggerData, DungeonCellWrapper dungeonCellWrapper) : base(triggerData)
+            public TunnelTriggerInstance(TrainManager trainManager, TriggerData triggerData, DungeonCellWrapper dungeonCellWrapper)
+                : base(trainManager, triggerData)
             {
                 DungeonCellWrapper = dungeonCellWrapper;
             }
@@ -2426,8 +2459,11 @@ namespace Oxide.Plugins
             public TriggerData TriggerData { get; protected set; }
             public BaseTriggerInstance[] TriggerInstanceList { get; protected set; }
 
-            public BaseTriggerController(TriggerData triggerData)
+            protected TrainManager _trainManager;
+
+            public BaseTriggerController(TrainManager trainManager, TriggerData triggerData)
             {
+                _trainManager = trainManager;
                 TriggerData = triggerData;
             }
 
@@ -2505,11 +2541,12 @@ namespace Oxide.Plugins
 
         private class MapTriggerController : BaseTriggerController
         {
-            public MapTriggerController(TriggerData triggerData) : base(triggerData) {}
+            public MapTriggerController(TrainManager trainManager, TriggerData triggerData)
+                : base(trainManager, triggerData) {}
 
             public override void Create()
             {
-                var triggerInstance = new MapTriggerInstance(TriggerData);
+                var triggerInstance = new MapTriggerInstance(_trainManager, TriggerData);
                 TriggerInstanceList = new MapTriggerInstance[] { triggerInstance };
 
                 if (TriggerData.Enabled)
@@ -2519,7 +2556,8 @@ namespace Oxide.Plugins
 
         private class TunnelTriggerController : BaseTriggerController
         {
-            public TunnelTriggerController(TriggerData triggerData) : base(triggerData) {}
+            public TunnelTriggerController(TrainManager trainManager, TriggerData triggerData)
+                : base(trainManager, triggerData) {}
 
             public override void Create()
             {
@@ -2528,7 +2566,7 @@ namespace Oxide.Plugins
 
                 for (var i = 0; i < matchingDungeonCells.Count; i++)
                 {
-                    var triggerInstance = new TunnelTriggerInstance(TriggerData, matchingDungeonCells[i]);
+                    var triggerInstance = new TunnelTriggerInstance(_trainManager, TriggerData, matchingDungeonCells[i]);
                     TriggerInstanceList[i] = triggerInstance;
 
                     if (TriggerData.Enabled)
@@ -2553,9 +2591,15 @@ namespace Oxide.Plugins
             private const float TriggerDisplayRadius = WorkcartTrigger.TriggerRadius;
             private float TriggerDisplayDistanceSquared => _pluginConfig.TriggerDisplayDistance * _pluginConfig.TriggerDisplayDistance;
 
+            private TrainManager _trainManager;
             private Dictionary<TriggerData, BaseTriggerController> _triggerControllers = new Dictionary<TriggerData, BaseTriggerController>();
             private Dictionary<TrainTrackSpline, List<BaseTriggerInstance>> _splinesToTriggers = new Dictionary<TrainTrackSpline, List<BaseTriggerInstance>>();
             private Dictionary<ulong, PlayerInfo> _playerInfo = new Dictionary<ulong, PlayerInfo>();
+
+            public WorkcartTriggerManager(TrainManager trainManager)
+            {
+                _trainManager = trainManager;
+            }
 
             private int GetHighestTriggerId(IEnumerable<TriggerData> triggerList)
             {
@@ -2790,7 +2834,7 @@ namespace Oxide.Plugins
 
             private void CreateMapTriggerController(TriggerData triggerData)
             {
-                var triggerController = new MapTriggerController(triggerData);
+                var triggerController = new MapTriggerController(_trainManager, triggerData);
                 triggerController.Create();
                 RegisterTriggerWithSpline(triggerController);
                 _triggerControllers[triggerData] = triggerController;
@@ -2798,7 +2842,7 @@ namespace Oxide.Plugins
 
             private void CreateTunnelTriggerController(TriggerData triggerData)
             {
-                var triggerController = new TunnelTriggerController(triggerData);
+                var triggerController = new TunnelTriggerController(_trainManager, triggerData);
                 triggerController.Create();
                 RegisterTriggerWithSpline(triggerController);
                 _triggerControllers[triggerData] = triggerController;
@@ -3048,12 +3092,21 @@ namespace Oxide.Plugins
 
         private class TrainManager
         {
+            private Configuration _pluginConfig;
             private HashSet<TrainController> _trainControllers = new HashSet<TrainController>();
             private Dictionary<TrainEngine, WorkcartController> _workcartControllers = new Dictionary<TrainEngine, WorkcartController>();
             private bool _isUnloading = false;
 
             public int TrainCount => _trainControllers.Count;
             public TrainEngine[] GetWorkcarts() => _workcartControllers.Keys.ToArray();
+
+            public TrainManager(Configuration pluginConfig)
+            {
+                _pluginConfig = pluginConfig;
+            }
+
+            public bool CanHaveMoreConductors() => _pluginConfig.MaxConductors < 0
+                || TrainCount < _pluginConfig.MaxConductors;
 
             public TrainController GetTrainController(TrainCar trainCar)
             {
