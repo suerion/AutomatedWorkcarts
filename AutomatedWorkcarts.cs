@@ -38,6 +38,7 @@ namespace Oxide.Plugins
         private const string ShopkeeperPrefab = "assets/prefabs/npc/bandit/shopkeepers/bandit_shopkeeper.prefab";
         private const string GenericMapMarkerPrefab = "assets/prefabs/tools/map/genericradiusmarker.prefab";
         private const string VendingMapMarkerPrefab = "assets/prefabs/deployable/vendingmachine/vending_mapmarker.prefab";
+        private const string BradleyExplosionEffectPrefab = "assets/prefabs/npc/m2bradley/effects/bradley_explosion.prefab";
         private const string IdPlaceholder = "$id";
 
         private static readonly FieldInfo TrainCouplingIsValidField = typeof(TrainCoupling).GetField("isValid", BindingFlags.NonPublic | BindingFlags.Instance)
@@ -1135,6 +1136,29 @@ namespace Oxide.Plugins
             return GetLeadWorkcart(trainCar.completeTrain);
         }
 
+        private static void DetermineTrainCarOrientations(TrainCar trainCar, Vector3 forward, TrainCar otherTrainCar, Vector3 otherForward, out TrainCar forwardTrainCar, out TrainCar backwardTrainCar)
+        {
+            var position = trainCar.transform.position;
+            var otherPosition = otherTrainCar.transform.position;
+            var forwardPosition = position + forward * 100f;
+
+            forwardTrainCar = trainCar;
+            backwardTrainCar = otherTrainCar;
+
+            if ((forwardPosition - position).sqrMagnitude > (forwardPosition - otherPosition).sqrMagnitude)
+            {
+                forwardTrainCar = otherTrainCar;
+                backwardTrainCar = trainCar;
+            }
+        }
+
+        private static Vector3 GetTrainCarForward(TrainCar trainCar)
+        {
+            return trainCar.GetTrackSpeed() >= 0
+                ? trainCar.transform.forward
+                : -trainCar.transform.forward;
+        }
+
         private static void EnableInvincibility(TrainCar trainCar)
         {
             trainCar.initialSpawnTime = float.MaxValue;
@@ -1512,19 +1536,24 @@ namespace Oxide.Plugins
         private static TrainCar GetTrainCarWhereAiming(BasePlayer player) =>
             GetLookEntity(player, Rust.Layers.Mask.Vehicle_Detailed) as TrainCar;
 
-        private static void DestroyTrainCar(TrainCar traincar)
+        private static void DestroyTrainCarCinematically(TrainCar trainCar)
         {
-            if (traincar.IsDestroyed)
+            if (trainCar.IsDestroyed)
                 return;
 
-            var hitInfo = new HitInfo(null, traincar, Rust.DamageType.Explosion, float.MaxValue, traincar.transform.position);
+            if (!trainCar.IsEngine)
+            {
+                Effect.server.Run(BradleyExplosionEffectPrefab, trainCar.GetExplosionPos(), Vector3.up, sourceConnection: null, broadcast: true);
+            }
+
+            var hitInfo = new HitInfo(null, trainCar, Rust.DamageType.Explosion, float.MaxValue, trainCar.transform.position);
             hitInfo.UseProtection = false;
-            traincar.Die(hitInfo);
+            trainCar.Die(hitInfo);
         }
 
-        private static void ScheduleDestroyTrainCar(TrainCar trainCar)
+        private static void ScheduleDestroyTrainCarCinematically(TrainCar trainCar)
         {
-            trainCar.Invoke(() => DestroyTrainCar(trainCar), 0);
+            trainCar.Invoke(() => DestroyTrainCarCinematically(trainCar), 0);
         }
 
         private static bool CollectionsEqual<T>(ICollection<T> collectionA, ICollection<T> collectionB)
@@ -3450,23 +3479,42 @@ namespace Oxide.Plugins
 
         private class TrainController
         {
+            public TrainManager TrainManager { get; private set; }
             public WorkcartController PrimaryWorkcartController { get; private set; }
+            public bool IsDestroying { get; private set; }
             public TrainEngine PrimaryWorkcart => PrimaryWorkcartController.Workcart;
             public CompleteTrain CompleteTrain => PrimaryWorkcart.completeTrain;
+            public Configuration PluginConfig => TrainManager.PluginConfig;
 
-            public Configuration PluginConfig => _trainManager.PluginConfig;
-            private SpawnedTrainCarTracker _spawnedTrainCarTracker => _trainManager.SpawnedTrainCarTracker;
+            public Vector3 Forward
+            {
+                get
+                {
+                    return EngineThrottleToNumber(DepartureThrottle) >= 0
+                        ? PrimaryWorkcart.transform.forward
+                        : -PrimaryWorkcart.transform.forward;
+                }
+            }
 
-            private TrainManager _trainManager;
+            private SpawnedTrainCarTracker _spawnedTrainCarTracker => TrainManager.SpawnedTrainCarTracker;
+
             private readonly List<WorkcartController> _workcartControllers = new List<WorkcartController>();
             private readonly List<ITrainCarComponent> _trainCarComponents = new List<ITrainCarComponent>();
 
             private TrainState _trainState;
             private WorkcartData _workcartData;
 
+            private TrainCollisionTrigger _collisionTriggerA;
+            private TrainCollisionTrigger _collisionTriggerB;
             private MapMarkerGenericRadius _genericMarker;
             private VendingMachineMapMarker _vendingMarker;
             private bool _isDestroyed;
+
+            public void ScheduleCinematicDestruction()
+            {
+                IsDestroying = true;
+                PrimaryWorkcartController.Invoke(DestroyCinematically, 0);
+            }
 
             // Desired velocity, ignoring circumstances like stopping/braking/chilling.
             public EngineSpeeds DepartureThrottle =>
@@ -3474,7 +3522,7 @@ namespace Oxide.Plugins
 
             public TrainController(TrainManager workcartManager, WorkcartData workcarData)
             {
-                _trainManager = workcartManager;
+                TrainManager = workcartManager;
                 _workcartData = workcarData;
             }
 
@@ -3490,7 +3538,6 @@ namespace Oxide.Plugins
                     if ((object)PrimaryWorkcartController == null)
                     {
                         PrimaryWorkcartController = workcartController;
-                        MaybeAddMapMarkers();
                     }
                 }
             }
@@ -3498,7 +3545,7 @@ namespace Oxide.Plugins
             public void HandleTrainCarDestroyed(ITrainCarComponent trainCarComponent)
             {
                 _trainCarComponents.Remove(trainCarComponent);
-                _trainManager.UnregisterTrainCarComponent(trainCarComponent);
+                TrainManager.UnregisterTrainCarComponent(trainCarComponent);
 
                 // Any train car removal should disable automation of the entire train.
                 Kill();
@@ -3514,6 +3561,9 @@ namespace Oxide.Plugins
 
             public void StartTrain()
             {
+                MaybeAddMapMarkers();
+                SetupCollisionTriggers();
+
                 DisableTrainCoupling(CompleteTrain);
                 EnableInvincibility();
 
@@ -3662,28 +3712,15 @@ namespace Oxide.Plugins
                 return _workcartData.UpdateData(DepartureThrottle, PrimaryWorkcart.localTrackSelection);
             }
 
-            public void EnableInvincibility()
-            {
-                foreach (var trainCar in CompleteTrain.trainCars)
-                {
-                    AutomatedWorkcarts.EnableInvincibility(trainCar);
-                }
-            }
-
-            public void DisableInvincibility()
-            {
-                foreach (var trainCar in CompleteTrain.trainCars)
-                {
-                    AutomatedWorkcarts.DisableInvincibility(trainCar);
-                }
-            }
-
             public void Kill()
             {
                 if (_isDestroyed)
                     return;
 
                 _isDestroyed = true;
+
+                UnityEngine.Object.DestroyImmediate(_collisionTriggerA);
+                UnityEngine.Object.DestroyImmediate(_collisionTriggerB);
 
                 DisableInvincibility();
                 EnableTrainCoupling(CompleteTrain);
@@ -3703,7 +3740,7 @@ namespace Oxide.Plugins
                     UnityEngine.Object.DestroyImmediate(_trainCarComponents[i] as FacepunchBehaviour);
                 }
 
-                _trainManager.UnregisterTrainController(this);
+                TrainManager.UnregisterTrainController(this);
             }
 
             private void MaybeAddMapMarkers()
@@ -3766,6 +3803,145 @@ namespace Oxide.Plugins
 
                     _pluginInstance?.TrackEnd();
                 }, 0, PluginConfig.MapMarkerUpdateInveralSeconds, PluginConfig.MapMarkerUpdateInveralSeconds * 0.1f);
+            }
+
+            private void EnableInvincibility()
+            {
+                foreach (var trainCar in CompleteTrain.trainCars)
+                {
+                    AutomatedWorkcarts.EnableInvincibility(trainCar);
+                }
+            }
+
+            private void DisableInvincibility()
+            {
+                foreach (var trainCar in CompleteTrain.trainCars)
+                {
+                    AutomatedWorkcarts.DisableInvincibility(trainCar);
+                }
+            }
+
+            private void SetupCollisionTriggers()
+            {
+                var completeTrain = CompleteTrain;
+                var frontTrigger = completeTrain.frontCollisionTrigger;
+                var rearTrigger = completeTrain.rearCollisionTrigger;
+
+                _collisionTriggerA = TrainCollisionTrigger.AddToTrigger(frontTrigger, frontTrigger.owner, this);
+                _collisionTriggerB = TrainCollisionTrigger.AddToTrigger(rearTrigger, rearTrigger.owner, this);
+            }
+
+            private void DestroyCinematically()
+            {
+                foreach (var trainCar in CompleteTrain.trainCars.ToArray())
+                {
+                    DestroyTrainCarCinematically(trainCar);
+                }
+            }
+        }
+
+        private class TrainCollisionTrigger : TriggerBase
+        {
+            public static TrainCollisionTrigger AddToTrigger(TriggerBase hostTrigger, TrainCar trainCar, TrainController trainController)
+            {
+                var component = hostTrigger.gameObject.AddComponent<TrainCollisionTrigger>();
+                component.interestLayers = hostTrigger.interestLayers;
+                component.TrainController = trainController;
+                component.TrainCar = trainCar;
+                return component;
+            }
+
+            public TrainController TrainController { get; private set; }
+            public TrainCar TrainCar { get; private set; }
+
+            public override void OnEntityEnter(BaseEntity entity)
+            {
+                _pluginInstance?.TrackStart();
+                var trainCar = entity as TrainCar;
+                if (trainCar != null)
+                {
+                    HandleTrainCar(trainCar);
+                }
+                _pluginInstance?.TrackEnd();
+            }
+
+            private void HandleTrainCar(TrainCar otherTrainCar)
+            {
+                if (entityContents == null)
+                {
+                    entityContents = new HashSet<BaseEntity>();
+                }
+
+                // Ignore if already colliding with that train car.
+                if (!entityContents.Add(otherTrainCar))
+                    return;
+
+                var otherController = TrainController.TrainManager.GetTrainController(otherTrainCar);
+
+                var forward = TrainController.Forward;
+                var otherForward = otherController?.Forward ?? GetTrainCarForward(otherTrainCar);
+
+                if (Vector3.Dot(forward, otherForward) >= 0.01f)
+                {
+                    // Going same direction.
+                    TrainCar forwardTrainCar;
+                    TrainCar backwardTrainCar;
+                    DetermineTrainCarOrientations(TrainCar, forward, otherTrainCar, otherForward, out forwardTrainCar, out backwardTrainCar);
+
+                    var forwardController = TrainController;
+                    var backwardController = otherController;
+
+                    if (forwardTrainCar == otherTrainCar)
+                    {
+                        forwardController = otherController;
+                        backwardController = TrainController;
+                    }
+
+                    if (forwardController != null)
+                    {
+                        forwardController.DepartEarlyIfStoppedOrStopping();
+                    }
+                    else if (TrainController.PluginConfig.BulldozeOffendingWorkcarts)
+                    {
+                        LogWarning($"Destroying non-automated train due to blocking an automated train.");
+                        ScheduleDestroyTrainCarCinematically(forwardTrainCar);
+                        return;
+                    }
+
+                    backwardController?.StartChilling();
+                }
+                else
+                {
+                    // Going opposite directions or perpendicular.
+                    if (otherController == null)
+                    {
+                        if (TrainController.PluginConfig.BulldozeOffendingWorkcarts)
+                        {
+                            LogWarning($"Destroying non-automated train due to head-on collision with an automated train.");
+                            ScheduleDestroyTrainCarCinematically(otherTrainCar);
+                        }
+                        else
+                        {
+                            TrainController.StartChilling();
+                        }
+
+                        return;
+                    }
+
+                    // Don't destroy both, since the collison event can happen for both trains in the same frame.
+                    if (TrainController.IsDestroying)
+                        return;
+
+                    LogWarning($"Destroying automated train due to head-on collision with another.");
+                    if (TrainCar.GetTrackSpeed() < otherTrainCar.GetTrackSpeed())
+                    {
+                        TrainController.ScheduleCinematicDestruction();
+                    }
+                    else
+                    {
+                        otherController.ScheduleCinematicDestruction();
+                    }
+                }
             }
         }
 
