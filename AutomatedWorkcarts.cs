@@ -19,7 +19,7 @@ using static TrainTrackSpline;
 
 namespace Oxide.Plugins
 {
-    [Info("Automated Workcarts", "WhiteThunder", "0.27.0")]
+    [Info("Automated Workcarts", "WhiteThunder", "0.27.1")]
     [Description("Automates workcarts with NPC conductors.")]
     internal class AutomatedWorkcarts : CovalencePlugin
     {
@@ -3483,7 +3483,6 @@ namespace Oxide.Plugins
             public WorkcartController PrimaryWorkcartController { get; private set; }
             public bool IsDestroying { get; private set; }
             public TrainEngine PrimaryWorkcart => PrimaryWorkcartController.Workcart;
-            public CompleteTrain CompleteTrain => PrimaryWorkcart.completeTrain;
             public Configuration PluginConfig => TrainManager.PluginConfig;
 
             public Vector3 Forward
@@ -3564,7 +3563,7 @@ namespace Oxide.Plugins
                 MaybeAddMapMarkers();
                 SetupCollisionTriggers();
 
-                DisableTrainCoupling(CompleteTrain);
+                DisableTrainCoupling(PrimaryWorkcart.completeTrain);
                 EnableInvincibility();
 
                 var throttle = _workcartData.Throttle ?? EngineSpeeds.Zero;
@@ -3614,9 +3613,12 @@ namespace Oxide.Plugins
                 {
                     PrimaryWorkcartController.Invoke(() =>
                     {
-                        foreach (var trainCar in CompleteTrain.trainCars.ToArray())
+                        foreach (var trainCarCompnent in _trainCarComponents.ToArray())
                         {
-                            trainCar.Kill(BaseNetworkable.DestroyMode.Gib);
+                            if (trainCarCompnent.TrainCar != null && !trainCarCompnent.TrainCar.IsDestroyed)
+                            {
+                                trainCarCompnent.TrainCar.Kill(BaseNetworkable.DestroyMode.Gib);
+                            }
                         }
                     }, 0);
 
@@ -3723,7 +3725,11 @@ namespace Oxide.Plugins
                 UnityEngine.Object.DestroyImmediate(_collisionTriggerB);
 
                 DisableInvincibility();
-                EnableTrainCoupling(CompleteTrain);
+
+                foreach (var trainCarComponent in _trainCarComponents)
+                {
+                    UpdateAllowedCouplings(trainCarComponent.TrainCar, allowFront: true, allowRear: true);
+                }
 
                 if (_genericMarker != null && !_genericMarker.IsDestroyed)
                 {
@@ -3807,23 +3813,23 @@ namespace Oxide.Plugins
 
             private void EnableInvincibility()
             {
-                foreach (var trainCar in CompleteTrain.trainCars)
+                foreach (var trainCarCompnent in _trainCarComponents)
                 {
-                    AutomatedWorkcarts.EnableInvincibility(trainCar);
+                    AutomatedWorkcarts.EnableInvincibility(trainCarCompnent.TrainCar);
                 }
             }
 
             private void DisableInvincibility()
             {
-                foreach (var trainCar in CompleteTrain.trainCars)
+                foreach (var trainCarCompnent in _trainCarComponents)
                 {
-                    AutomatedWorkcarts.DisableInvincibility(trainCar);
+                    AutomatedWorkcarts.DisableInvincibility(trainCarCompnent.TrainCar);
                 }
             }
 
             private void SetupCollisionTriggers()
             {
-                var completeTrain = CompleteTrain;
+                var completeTrain = PrimaryWorkcart.completeTrain;
                 var frontTrigger = completeTrain.frontCollisionTrigger;
                 var rearTrigger = completeTrain.rearCollisionTrigger;
 
@@ -3833,9 +3839,9 @@ namespace Oxide.Plugins
 
             private void DestroyCinematically()
             {
-                foreach (var trainCar in CompleteTrain.trainCars.ToArray())
+                foreach (var trainCarCompnent in _trainCarComponents.ToArray())
                 {
-                    DestroyTrainCarCinematically(trainCar);
+                    DestroyTrainCarCinematically(trainCarCompnent.TrainCar);
                 }
             }
         }
