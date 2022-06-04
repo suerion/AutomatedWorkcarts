@@ -19,7 +19,7 @@ using static TrainTrackSpline;
 
 namespace Oxide.Plugins
 {
-    [Info("Automated Workcarts", "WhiteThunder", "0.27.1")]
+    [Info("Automated Workcarts", "WhiteThunder", "0.28.0")]
     [Description("Automates workcarts with NPC conductors.")]
     internal class AutomatedWorkcarts : CovalencePlugin
     {
@@ -33,8 +33,9 @@ namespace Oxide.Plugins
         private const string PermissionToggle = "automatedworkcarts.toggle";
         private const string PermissionManageTriggers = "automatedworkcarts.managetriggers";
 
-        private const string WorkcartPrefab = "assets/content/vehicles/workcart/workcart.entity.prefab";
+        private const string ClassicWorkcartPrefab = "assets/content/vehicles/workcart/workcart.entity.prefab";
         private const string AboveGroundWorkcartPrefab = "assets/content/vehicles/workcart/workcart_aboveground.entity.prefab";
+        private const string AboveGroundWorkcartCoveredPrefab = "assets/content/vehicles/workcart/workcart_aboveground2.entity.prefab";
         private const string ShopkeeperPrefab = "assets/prefabs/npc/bandit/shopkeepers/bandit_shopkeeper.prefab";
         private const string GenericMapMarkerPrefab = "assets/prefabs/tools/map/genericradiusmarker.prefab";
         private const string VendingMapMarkerPrefab = "assets/prefabs/deployable/vendingmachine/vending_mapmarker.prefab";
@@ -325,7 +326,8 @@ namespace Oxide.Plugins
                     return;
             }
 
-            if (!triggerData.AddConductor
+            if (!triggerData.IsSpawner
+                && !triggerData.AddConductor
                 && !triggerData.Destroy
                 && triggerData.GetTrackSelectionInstruction() == null
                 && triggerData.GetSpeedInstruction() == null
@@ -336,7 +338,7 @@ namespace Oxide.Plugins
 
             var basePlayer = player.Object as BasePlayer;
 
-            if (triggerData.Spawner)
+            if (triggerData.IsSpawner)
             {
                 var rotation = Quaternion.Euler(basePlayer.viewAngles);
                 if (dungeonCellWrapper != null)
@@ -539,7 +541,7 @@ namespace Oxide.Plugins
             if (!VerifyCanModifyTrigger(player, cmd, args, Lang.SimpleTriggerSyntax, out triggerData, out optionArgs))
                 return;
 
-            if (!triggerData.Spawner)
+            if (!triggerData.IsSpawner)
             {
                 ReplyToPlayer(player, Lang.ErrorRequiresSpawnTrigger);
                 return;
@@ -609,8 +611,8 @@ namespace Oxide.Plugins
             ReplyToPlayer(player, Lang.UpdateTriggerSuccess, GetTriggerPrefix(player, triggerData), triggerData.Id);
         }
 
-        [Command("aw.settriggerwagons", "awt.setwagons", "awt.wagons")]
-        private void CommandTriggerWagons(IPlayer player, string cmd, string[] args)
+        [Command("aw.settriggertrain", "awt.train")]
+        private void CommandTriggerTrain(IPlayer player, string cmd, string[] args)
         {
             TriggerData triggerData;
             string[] optionArgs;
@@ -618,26 +620,22 @@ namespace Oxide.Plugins
             if (!VerifyCanModifyTrigger(player, cmd, args, Lang.RemoveCommandSyntax, out triggerData, out optionArgs))
                 return;
 
-            if (!triggerData.Spawner)
-            {
-                ReplyToPlayer(player, Lang.ErrorRequiresSpawnTrigger);
-                return;
-            }
-
-            var wagonNames = new List<string>();
+            var trainCarAliases = new List<string>();
             foreach (var arg in optionArgs)
             {
                 var trainCarPrefab = TrainCarPrefab.FindPrefab(arg);
                 if (trainCarPrefab == null)
                 {
-                    ReplyToPlayer(player, Lang.ErrorUnrecognizedWagon, arg);
+                    ReplyToPlayer(player, Lang.ErrorUnrecognizedTrainCar, arg);
                     return;
                 }
 
-                wagonNames.Add(trainCarPrefab.TrainCarName);
+                trainCarAliases.Add(trainCarPrefab.TrainCarAlias);
             }
 
-            _triggerManager.UpdateWagons(triggerData, wagonNames.ToArray());
+            var newTriggerData =  triggerData.Clone();
+            newTriggerData.TrainCars = trainCarAliases.ToArray();
+            _triggerManager.UpdateTrigger(triggerData, newTriggerData);
 
             var basePlayer = player.Object as BasePlayer;
             _triggerManager.ShowAllRepeatedly(basePlayer);
@@ -899,12 +897,6 @@ namespace Oxide.Plugins
                 return true;
             }
 
-            if (argLower.StartsWith("spawn"))
-            {
-                triggerData.Spawner = true;
-                return true;
-            }
-
             if (argLower.StartsWith("enable"))
             {
                 triggerData.Enabled = true;
@@ -914,6 +906,22 @@ namespace Oxide.Plugins
             if (argLower.StartsWith("disable"))
             {
                 triggerData.Enabled = false;
+                return true;
+            }
+
+            var prefab = TrainCarPrefab.FindPrefab(argLower);
+            if (prefab != null)
+            {
+                if (triggerData.TrainCars == null)
+                {
+                    triggerData.TrainCars = new string[] { prefab.TrainCarAlias };
+                }
+                else
+                {
+                    var length = triggerData.TrainCars.Length;
+                    Array.Resize(ref triggerData.TrainCars, length + 1);
+                    triggerData.TrainCars[length] = prefab.TrainCarAlias;
+                }
                 return true;
             }
 
@@ -1182,28 +1190,7 @@ namespace Oxide.Plugins
             }
         }
 
-        private static TrainEngine SpawnWorkcart(string prefabName, Vector3 position, Quaternion rotation)
-        {
-            var workcart = GameManager.server.CreateEntity(prefabName, position, rotation) as TrainEngine;
-            if (workcart == null)
-                return null;
-
-            // Ensure the workcart does not decay for some time.
-            workcart.lastDecayTick = Time.realtimeSinceStartup;
-
-            workcart.limitNetworking = true;
-            workcart.EnableSaving(false);
-            workcart.Spawn();
-
-            if (workcart.IsDestroyed)
-                return null;
-
-            workcart.Invoke(() => EnableSavingRecursive(workcart, false), 0);
-
-            return workcart;
-        }
-
-        private static TrainCar SpawnWagon(string prefabName, Vector3 position, Quaternion rotation)
+        private static TrainCar SpawnTrainCar(string prefabName, Vector3 position, Quaternion rotation)
         {
             var trainCar = GameManager.server.CreateEntity(prefabName, position, rotation) as TrainCar;
             if (trainCar == null)
@@ -1256,7 +1243,7 @@ namespace Oxide.Plugins
             var resultPosition = GetPositionAlongTrack(finalSplineInfo, spawnDistance - finalDistance, trackSelection, out spawnSplineInfo);
             var resultRotation = GetSplineTangentRotation(spawnSplineInfo.Spline, spawnSplineInfo.Distance, trainCar.transform.rotation);
 
-            var rearTrainCar = SpawnWagon(prefabName, resultPosition, resultRotation);
+            var rearTrainCar = SpawnTrainCar(prefabName, resultPosition, resultRotation);
             if (rearTrainCar != null)
             {
                 rearTrainCar.MoveFrontWheelsAlongTrackSpline(
@@ -1435,14 +1422,23 @@ namespace Oxide.Plugins
             return false;
         }
 
+        private static string FormatOptions(ICollection<string> optionNames, string delimiter = " | ")
+        {
+            var formattedOptionNames = new string[optionNames.Count];
+
+            var i = 0;
+            foreach (var optionName in optionNames)
+            {
+                formattedOptionNames[i] = $"<color=#fd4>{optionName}</color>";
+                i++;
+            }
+
+            return string.Join(delimiter, formattedOptionNames);
+        }
+
         private static string GetEnumOptions<T>()
         {
-            var names = Enum.GetNames(typeof(T));
-
-            for (var i = 0; i < names.Length; i++)
-                names[i] = $"<color=#fd4>{names[i]}</color>";
-
-            return string.Join(" | ", names);
+            return FormatOptions(Enum.GetNames(typeof(T)));
         }
 
         private static bool TryGetHitPosition(BasePlayer player, out Vector3 position, float maxDistance)
@@ -1579,29 +1575,37 @@ namespace Oxide.Plugins
 
         private class TrainCarPrefab
         {
+            public const string WorkcartAlias = "Workcart";
+
             private static readonly Dictionary<string, TrainCarPrefab> AllowedPrefabs = new Dictionary<string, TrainCarPrefab>(StringComparer.InvariantCultureIgnoreCase)
             {
+                [WorkcartAlias] = new TrainCarPrefab(WorkcartAlias, AboveGroundWorkcartPrefab),
+                ["WorkcartCovered"] = new TrainCarPrefab("WorkcartCovered", AboveGroundWorkcartCoveredPrefab),
                 ["WagonA"] = new TrainCarPrefab("WagonA", "assets/content/vehicles/train/trainwagona.entity.prefab"),
                 ["WagonB"] = new TrainCarPrefab("WagonB", "assets/content/vehicles/train/trainwagonb.entity.prefab"),
                 ["WagonC"] = new TrainCarPrefab("WagonC", "assets/content/vehicles/train/trainwagonc.entity.prefab"),
                 ["WagonD"] = new TrainCarPrefab("WagonD", "assets/content/vehicles/train/trainwagond.entity.prefab"),
-                ["Workcart"] = new TrainCarPrefab("Workcart", AboveGroundWorkcartPrefab),
             };
 
-            public static TrainCarPrefab FindPrefab(string trainCarName)
+            public static TrainCarPrefab FindPrefab(string trainCarAlias)
             {
                 TrainCarPrefab trainCarPrefab;
-                return AllowedPrefabs.TryGetValue(trainCarName, out trainCarPrefab)
+                return AllowedPrefabs.TryGetValue(trainCarAlias, out trainCarPrefab)
                     ? trainCarPrefab
                     : null;
             }
 
-            public string TrainCarName;
+            public static ICollection<string> GetAliases()
+            {
+                return AllowedPrefabs.Keys;
+            }
+
+            public string TrainCarAlias;
             public string PrefabPath;
 
-            public TrainCarPrefab(string trainCarName, string prefabPath)
+            public TrainCarPrefab(string trainCarAlias, string prefabPath)
             {
-                TrainCarName = trainCarName;
+                TrainCarAlias = trainCarAlias;
                 PrefabPath = prefabPath;
             }
         }
@@ -1924,7 +1928,7 @@ namespace Oxide.Plugins
                     if (leadWorkcart == null)
                         return;
 
-                    // Don't automate a train if any of the workcarts or wagons are player-owned.
+                    // Don't automate a train if any of the train cars are player-owned.
                     // Not sure if this is the correct decision, but we'll see.
                     if (IsTrainOwned(trainCar))
                         return;
@@ -1986,17 +1990,44 @@ namespace Oxide.Plugins
             [JsonProperty("DepartureSpeed", DefaultValueHandling = DefaultValueHandling.Ignore)]
             public string DepartureSpeed;
 
-            [JsonProperty("Spawner", DefaultValueHandling = DefaultValueHandling.Ignore)]
-            public bool Spawner;
-
             [JsonProperty("Commands", DefaultValueHandling = DefaultValueHandling.Ignore)]
             public List<string> Commands;
 
             [JsonProperty("RotationAngle", DefaultValueHandling = DefaultValueHandling.Ignore)]
             public float RotationAngle;
 
+            [JsonProperty("TrainCars", DefaultValueHandling = DefaultValueHandling.Ignore)]
+            public string[] TrainCars;
+
+            [JsonProperty("Spawner", DefaultValueHandling = DefaultValueHandling.Ignore)]
+            private bool DeprecatedSpawner
+            {
+                set
+                {
+                    if (value && TrainCars == null)
+                    {
+                        TrainCars = new string[] { TrainCarPrefab.WorkcartAlias };
+                    }
+                }
+            }
+
             [JsonProperty("Wagons", DefaultValueHandling = DefaultValueHandling.Ignore)]
-            public string[] Wagons;
+            private string[] DeprecatedWagons
+            {
+                set
+                {
+                    if ((value?.Length ?? 0) == 0)
+                        return;
+
+                    if (TrainCars != null)
+                    {
+                        TrainCars = TrainCars.Concat(value).ToArray();
+                    }
+                }
+            }
+
+            [JsonIgnore]
+            public bool IsSpawner => (TrainCars?.Length ?? 0) > 0;
 
             [JsonIgnore]
             public WorkcartTriggerType TriggerType => TunnelType != null ? WorkcartTriggerType.Tunnel : WorkcartTriggerType.Map;
@@ -2113,8 +2144,7 @@ namespace Oxide.Plugins
                 Direction = triggerData.Direction;
                 TrackSelection = triggerData.TrackSelection;
                 StopDuration = triggerData.StopDuration;
-                Spawner = triggerData.Spawner;
-                Wagons = triggerData.Wagons;
+                TrainCars = triggerData.TrainCars;
                 Commands = triggerData.Commands;
             }
 
@@ -2133,7 +2163,7 @@ namespace Oxide.Plugins
                 if (Destroy)
                     return Color.red;
 
-                if (Spawner)
+                if (IsSpawner)
                     return new Color(0, 1, 0.75f);
 
                 if (AddConductor)
@@ -2279,7 +2309,7 @@ namespace Oxide.Plugins
 
                 _workcartTrigger = WorkcartTrigger.AddToGameObject(_gameObject, TriggerData, TrainManager);
 
-                if (TriggerData.Spawner)
+                if (TriggerData.IsSpawner)
                 {
                     StartSpawningTrains();
                 }
@@ -2328,7 +2358,7 @@ namespace Oxide.Plugins
 
             public void OnSpawnerToggled()
             {
-                if (TriggerData.Spawner)
+                if (TriggerData.IsSpawner)
                 {
                     if (TriggerData.Enabled)
                     {
@@ -2344,7 +2374,7 @@ namespace Oxide.Plugins
 
             public void Respawn()
             {
-                if (!TriggerData.Spawner || !TriggerData.Enabled)
+                if (!TriggerData.IsSpawner || !TriggerData.Enabled)
                     return;
 
                 KillTrains();
@@ -2367,7 +2397,7 @@ namespace Oxide.Plugins
                 if (_gameObject != null)
                 {
                     _gameObject.SetActive(true);
-                    if (TriggerData.Spawner)
+                    if (TriggerData.IsSpawner)
                     {
                         StartSpawningTrains();
                     }
@@ -2412,48 +2442,55 @@ namespace Oxide.Plugins
                 if (Spline == null)
                     return;
 
-                var worldPosition = WorldPosition;
-                var terrainHeight = TerrainMeta.HeightMap.GetHeight(worldPosition);
-                var prefab = worldPosition.y - terrainHeight > -1 || (TriggerData.Wagons?.Length ?? 0) > 0
-                    ? AboveGroundWorkcartPrefab
-                    : WorkcartPrefab;
+                var trackSelection = ApplyTrackSelection(TrackSelection.Default, TriggerData.GetTrackSelectionInstruction());
 
-                var workcart = AutomatedWorkcarts.SpawnWorkcart(prefab, worldPosition, SpawnRotation);
-                if (workcart == null)
-                    return;
+                TrainCar previousTrainCar = null;
 
-                _spawnedTrainCars.Add(workcart);
-                SpawnedTrainCarComponent.AddToEntity(workcart, this);
-
-                if (TriggerData.Wagons != null)
+                foreach (var trainCarAlias in TriggerData.TrainCars)
                 {
-                    var trackSelection = ApplyTrackSelection(TrackSelection.Default, TriggerData.GetTrackSelectionInstruction());
+                    var trainCarPrefab = TrainCarPrefab.FindPrefab(trainCarAlias);
+                    if (trainCarPrefab == null)
+                        continue;
 
-                    TrainCar previousWagon = workcart;
-                    foreach (var wagonName in TriggerData.Wagons)
+                    if (previousTrainCar == null)
                     {
-                        var trainCarPrefab = TrainCarPrefab.FindPrefab(wagonName);
-                        if (trainCarPrefab == null)
-                            continue;
+                        var worldPosition = WorldPosition;
+                        var workcartPrefab = trainCarPrefab.PrefabPath;
 
-                        previousWagon = AddTrainCar(previousWagon, trainCarPrefab.PrefabPath, trackSelection);
-                        if ((object)previousWagon == null)
-                            break;
+                        if (trainCarPrefab.TrainCarAlias == TrainCarPrefab.WorkcartAlias && TriggerData.TrainCars.Length == 1)
+                        {
+                            var terrainHeight = TerrainMeta.HeightMap.GetHeight(worldPosition);
+                            if (worldPosition.y - terrainHeight < -1)
+                            {
+                                workcartPrefab = ClassicWorkcartPrefab;
+                            }
+                        }
 
-                        _spawnedTrainCars.Add(previousWagon);
-                        SpawnedTrainCarComponent.AddToEntity(previousWagon, this);
+                        previousTrainCar = SpawnTrainCar(workcartPrefab, worldPosition, SpawnRotation);
                     }
+                    else
+                    {
+                        previousTrainCar = AddTrainCar(previousTrainCar, trainCarPrefab.PrefabPath, trackSelection);
+                    }
+
+                    if ((object)previousTrainCar == null)
+                        break;
+
+                    _spawnedTrainCars.Add(previousTrainCar);
+                    SpawnedTrainCarComponent.AddToEntity(previousTrainCar, this);
                 }
 
-                // Not perfect, but gets the job done.
-                workcart.Invoke(() =>
+                if ((object)previousTrainCar != null)
                 {
-                    var trainCars = workcart.completeTrain.trainCars;
-                    for (var i = trainCars.Count - 1; i >= 0; i--)
+                    previousTrainCar.Invoke(() =>
                     {
-                        trainCars[i].limitNetworking = false;
-                    }
-                }, 0.1f);
+                        var trainCars = previousTrainCar.completeTrain.trainCars;
+                        for (var i = trainCars.Count - 1; i >= 0; i--)
+                        {
+                            trainCars[i].limitNetworking = false;
+                        }
+                    }, 0.1f);
+                }
             }
 
             private void SpawnTrainTracked()
@@ -2780,8 +2817,8 @@ namespace Oxide.Plugins
                     return;
 
                 var enabledChanged = triggerData.Enabled != newTriggerData.Enabled;
-                var spawnerChanged = triggerData.Spawner != newTriggerData.Spawner;
-                var wagonsChanged = !CollectionsEqual(triggerData.Wagons, newTriggerData.Wagons);
+                var spawnerChanged = triggerData.IsSpawner != newTriggerData.IsSpawner;
+                var trainCarsChanged = !CollectionsEqual(triggerData.TrainCars, newTriggerData.TrainCars);
 
                 triggerData.CopyFrom(newTriggerData);
                 triggerData.InvalidateCache();
@@ -2804,7 +2841,7 @@ namespace Oxide.Plugins
                 {
                     triggerController.OnSpawnerToggled();
                 }
-                else if (wagonsChanged)
+                else if (trainCarsChanged)
                 {
                     triggerController.Respawn();
                 }
@@ -2862,16 +2899,6 @@ namespace Oxide.Plugins
             public void RemoveTriggerCommand(TriggerData triggerData, int index)
             {
                 triggerData.Commands.RemoveAt(index);
-                SaveTrigger(triggerData);
-            }
-
-            public void UpdateWagons(TriggerData triggerData, string[] wagonNames)
-            {
-                if (CollectionsEqual(triggerData.Wagons, wagonNames))
-                    return;
-
-                triggerData.Wagons = wagonNames;
-                RespawnTrigger(triggerData);
                 SaveTrigger(triggerData);
             }
 
@@ -3041,23 +3068,18 @@ namespace Oxide.Plugins
                 }
                 else
                 {
-                    if (triggerData.Spawner)
+                    if (triggerData.IsSpawner)
                     {
-                        infoLines.Add(_pluginInstance.GetMessage(player, Lang.InfoTriggerSpawner));
-
-                        if (triggerData.Spawner && triggerData.Wagons != null && triggerData.Wagons.Length > 0)
+                        var trainCarList = new List<string>();
+                        for (var i = 0; i < triggerData.TrainCars.Length; i++)
                         {
-                            var wagonList = new List<string>();
-                            for (var i = 0; i < triggerData.Wagons.Length; i++)
+                            var trainCarPrefab = TrainCarPrefab.FindPrefab(triggerData.TrainCars[i]);
+                            if (trainCarPrefab != null)
                             {
-                                var wagonName = triggerData.Wagons[i];
-                                if (TrainCarPrefab.FindPrefab(wagonName) != null)
-                                {
-                                    wagonList.Add(wagonName);
-                                }
+                                trainCarList.Add(trainCarPrefab.TrainCarAlias);
                             }
-                            infoLines.Add(_pluginInstance.GetMessage(player, Lang.InfoTriggerWagons, string.Join(" ", wagonList)));
                         }
+                        infoLines.Add(_pluginInstance.GetMessage(player, Lang.InfoTriggerSpawner, string.Join(" ", trainCarList)));
 
                         var spawnRotation = trigger.SpawnRotation;
                         var arrowBack = spherePosition + Vector3.up + spawnRotation * Vector3.back * 1.5f;
@@ -4834,9 +4856,10 @@ namespace Oxide.Plugins
             var speedOptions = GetMessage(player, Lang.HelpSpeedOptions, GetEnumOptions<SpeedInstruction>());
             var directionOptions = GetMessage(player, Lang.HelpDirectionOptions, GetEnumOptions<DirectionInstruction>());
             var trackSelectionOptions = GetMessage(player, Lang.HelpTrackSelectionOptions, GetEnumOptions<TrackSelectionInstruction>());
+            var trainCarOptions = GetMessage(player, Lang.HelpTrainCarOptions, FormatOptions(TrainCarPrefab.GetAliases()));
             var otherOptions = GetMessage(player, Lang.HelpOtherOptions);
 
-            return $"{speedOptions}\n{directionOptions}\n{trackSelectionOptions}\n{otherOptions}";
+            return $"{speedOptions}\n{directionOptions}\n{trackSelectionOptions}\n{trainCarOptions}\n{otherOptions}";
         }
 
         private string GetTriggerPrefix(IPlayer player, WorkcartTriggerType triggerType) =>
@@ -4873,7 +4896,7 @@ namespace Oxide.Plugins
             public const string ErrorNoAutomatedWorkcarts = "Error.NoAutomatedWorkcarts";
             public const string ErrorRequiresSpawnTrigger = "Error.RequiresSpawnTrigger";
             public const string ErrorTriggerDisabled = "Error.TriggerDisabled";
-            public const string ErrorUnrecognizedWagon = "Error.UnrecognizedWagon";
+            public const string ErrorUnrecognizedTrainCar = "Error.UnrecognizedTrainCar";
 
             public const string ToggleOnSuccess = "Toggle.Success.On";
             public const string ToggleOnWithRouteSuccess = "Toggle.Success.On.WithRoute";
@@ -4901,7 +4924,8 @@ namespace Oxide.Plugins
             public const string HelpSpeedOptions = "Help.SpeedOptions";
             public const string HelpDirectionOptions = "Help.DirectionOptions";
             public const string HelpTrackSelectionOptions = "Help.TrackSelectionOptions";
-            public const string HelpOtherOptions = "Help.OtherOptions2";
+            public const string HelpTrainCarOptions = "Help.HelpTrainCarOptions";
+            public const string HelpOtherOptions = "Help.OtherOptions3";
 
             public const string InfoTrigger = "Info.Trigger";
             public const string InfoTriggerMapPrefix = "Info.Trigger.Prefix.Map";
@@ -4911,8 +4935,7 @@ namespace Oxide.Plugins
             public const string InfoTriggerMap = "Info.Trigger.Map";
             public const string InfoTriggerRoute = "Info.Trigger.Route";
             public const string InfoTriggerTunnel = "Info.Trigger.Tunnel";
-            public const string InfoTriggerSpawner = "Info.Trigger.Spawner";
-            public const string InfoTriggerWagons = "Info.Trigger.Wagons";
+            public const string InfoTriggerSpawner = "Info.Trigger.Spawner2";
             public const string InfoTriggerAddConductor = "Info.Trigger.Conductor";
             public const string InfoTriggerDestroy = "Info.Trigger.Destroy";
             public const string InfoTriggerStopDuration = "Info.Trigger.StopDuration";
@@ -4945,7 +4968,7 @@ namespace Oxide.Plugins
                 [Lang.ErrorNoAutomatedWorkcarts] = "Error: There are no automated workcarts.",
                 [Lang.ErrorRequiresSpawnTrigger] = "Error: That is not a spawn trigger.",
                 [Lang.ErrorTriggerDisabled] = "Error: That trigger is disabled.",
-                [Lang.ErrorUnrecognizedWagon] = "Error: Unrecognized wagon: {0}.",
+                [Lang.ErrorUnrecognizedTrainCar] = "Error: Unrecognized train car: {0}.",
 
                 [Lang.ToggleOnSuccess] = "That workcart is now automated.",
                 [Lang.ToggleOnWithRouteSuccess] = "That workcart is now automated with route <color=#fd4>@{0}</color>.",
@@ -4973,7 +4996,8 @@ namespace Oxide.Plugins
                 [Lang.HelpSpeedOptions] = "Speeds: {0}",
                 [Lang.HelpDirectionOptions] = "Directions: {0}",
                 [Lang.HelpTrackSelectionOptions] = "Track selection: {0}",
-                [Lang.HelpOtherOptions] = "Other options: <color=#fd4>Spawn</color> | <color=#fd4>Conductor</color> | <color=#fd4>Brake</color> | <color=#fd4>Destroy</color> | <color=#fd4>@ROUTE_NAME</color> | <color=#fd4>Enabled</color> | <color=#fd4>Disabled</color>",
+                [Lang.HelpTrainCarOptions] = "Train car options: {0}",
+                [Lang.HelpOtherOptions] = "Other options: <color=#fd4>Conductor</color> | <color=#fd4>Brake</color> | <color=#fd4>Destroy</color> | <color=#fd4>@ROUTE_NAME</color> | <color=#fd4>Enabled</color> | <color=#fd4>Disabled</color>",
 
                 [Lang.InfoTrigger] = "Workcart Trigger #{0}{1}",
                 [Lang.InfoTriggerMapPrefix] = "M",
@@ -4983,9 +5007,8 @@ namespace Oxide.Plugins
                 [Lang.InfoTriggerMap] = "Map-specific",
                 [Lang.InfoTriggerRoute] = "Route: @{0}",
                 [Lang.InfoTriggerTunnel] = "Tunnel type: {0} (x{1})",
-                [Lang.InfoTriggerSpawner] = "Spawns workcart",
+                [Lang.InfoTriggerSpawner] = "Spawns: {0}",
                 [Lang.InfoTriggerAddConductor] = "Adds Conductor",
-                [Lang.InfoTriggerWagons] = "Wagons: {0}",
                 [Lang.InfoTriggerDestroy] = "Destroys workcart",
                 [Lang.InfoTriggerStopDuration] = "Stop duration: {0}s",
 
@@ -5016,7 +5039,7 @@ namespace Oxide.Plugins
                 [Lang.ErrorNoAutomatedWorkcarts] = "Erro: não há carrinhos de trabalho automatizados.",
                 [Lang.ErrorRequiresSpawnTrigger] = "Erro: Isso não é um gatilho de desova.",
                 [Lang.ErrorTriggerDisabled] = "Erro: esse gatilho está desativado.",
-                [Lang.ErrorUnrecognizedWagon] = "Erro: Vagão de trem não reconhecido: {0}.",
+                [Lang.ErrorUnrecognizedTrainCar] = "Erro: Vagão de trem não reconhecido: {0}.",
 
                 [Lang.ToggleOnSuccess] = "Esse carrinho de trabalho agora é automatizado.",
                 [Lang.ToggleOnWithRouteSuccess] = "Esse carrinho de trabalho agora é automatizado com rota <color=#fd4>@{0}</color>.",
@@ -5044,7 +5067,8 @@ namespace Oxide.Plugins
                 [Lang.HelpSpeedOptions] = "Velocidades: {0}",
                 [Lang.HelpDirectionOptions] = "Direções: {0}",
                 [Lang.HelpTrackSelectionOptions] = "Seleção de faixa: {0}",
-                [Lang.HelpOtherOptions] = "Outras opções: <color=#fd4>Spawn</color> | <color=#fd4>Conductor</color> | <color=#fd4>Brake</color> | <color=#fd4>Destroy</color> | <color=#fd4>@ROUTE_NAME</color> | <color=#fd4>Enabled</color> | <color=#fd4>Disabled</color>",
+                [Lang.HelpTrainCarOptions] = "Opções de vagões: {0}",
+                [Lang.HelpOtherOptions] = "Outras opções: <color=#fd4>Conductor</color> | <color=#fd4>Brake</color> | <color=#fd4>Destroy</color> | <color=#fd4>@ROUTE_NAME</color> | <color=#fd4>Enabled</color> | <color=#fd4>Disabled</color>",
 
                 [Lang.InfoTrigger] = "Acionador de carrinho de trabalho #{0}{1}",
                 [Lang.InfoTriggerMapPrefix] = "M",
@@ -5054,9 +5078,8 @@ namespace Oxide.Plugins
                 [Lang.InfoTriggerMap] = "Específico do mapa",
                 [Lang.InfoTriggerRoute] = "Rota: @{0}",
                 [Lang.InfoTriggerTunnel] = "Tipo de túnel: {0} (x{1})",
-                [Lang.InfoTriggerSpawner] = "Gera carrinho de trabalho",
+                [Lang.InfoTriggerSpawner] = "Gera {0}",
                 [Lang.InfoTriggerAddConductor] = "Adiciona Condutor",
-                [Lang.InfoTriggerWagons] = "Vagões de trem: {0}",
                 [Lang.InfoTriggerDestroy] = "Destrói o carrinho de trabalho",
                 [Lang.InfoTriggerStopDuration] = "Duração da parada: {0}s",
 
