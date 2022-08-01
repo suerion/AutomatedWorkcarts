@@ -5,8 +5,8 @@
 - Allows placing spawn points, which spawn workcarts with optional train wagons
 - Optional default triggers for underground tunnels
 - Optional map markers for automated trains
-- Extensible API for creating addon plugins
-- Fully compatible with the new trains from the May 2022 Rust update
+- Fully compatible with the new trains from the May and August 2022 Rust updates
+- API for creating addon plugins
 
 ## Introduction
 
@@ -90,8 +90,7 @@ Workcarts can be spawned via spawn triggers. The following steps will walk you t
 2. Aim somewhere on train tracks, and run the command `awt.add Workcart` (or `awt.addt Workcart` for a tunnel-relative trigger). A workcart should spawn there immediately (if there is sufficient space) but won't have a conductor.
 3. If the workcart is facing the wrong direction, aim at the trigger while facing approximately the direction you want the workcart to face, then run `awt.rotate` and `awt.respawn`.
 4. To move the spawn point, aim where you want to move it to, and run `awt.move <id>`, where `<id>` should be replaced with the trigger id which you can see floating above the trigger (it will have a `#`).
-5. To add wagons to the spawn point, aim at the trigger and run the command `awt.train Workcart WagonA WagonB WagonC WagonD Workcart`. This example command will add all 4 types of wagons, with an additional workcart at the end. You can add as
-many wagons and workcarts as you want, in any order, as long as there is enough space for them on the tracks.
+5. To add wagons to the spawn point, aim at the trigger and run the command `awt.train Workcart WagonA WagonB WagonC Workcart`. This example command will add multiple wagons, with an additional workcart at the end. You can add as many wagons and workcarts as you want, in any order, as long as there is enough space for them on the tracks.
 6. If you want to add a conductor to the train, aim at the trigger and run `awt.update Conductor Fwd Hi` then `awt.respawn`.
 
 ## Permission
@@ -119,7 +118,7 @@ many wagons and workcarts as you want, in any order, as long as there is enough 
   - Speed options: `Hi` | `Med` | `Lo` | `Zero`.
   - Direction options: `Fwd` | `Rev` | `Invert`.
   - Track selection options: `Default` | `Left` | `Right` | `Swap`.
-  - Train car options: `Workcart` | `WorkcartCovered` | `WagonA` | `WagonB` | `WagonC` | `WagonD`
+  - Train car options: `Locomotive` | `Workcart` | `WorkcartCovered` | `WagonA` | `WagonB` | `WagonC` | `WagonFuel` | `WagonLoot` | `WagonResource`
   - Other options:
     - `Conductor` -- Adds a conductor to the train if not already present. A good place to put `Conductor` triggers is on workcart spawn locations, such as the vanilla spawns in the underground maintenance tunnels. This option can also be combined with the `Spawn` option to automatically spawn an automated train.
       - Note: Player-owned trains cannot receive conductors. Vanilla trains don't have owners, but most plugins that spawn vehicles for players will assign ownership by setting the `OwnerID` property of the vehicle.
@@ -142,7 +141,7 @@ many wagons and workcarts as you want, in any order, as long as there is enough 
 - `aw.removetrigger <id>` (alias: `awt.remove`) -- Removes the specified trigger.
 - `aw.enabletrigger <id>` (alias: `awt.enable`) -- Enables the specified trigger. This is identical to `aw.updatetrigger <id> enabled`.
 - `aw.disabletrigger <id>` (alias: `awt.disable`) -- Disables the specified trigger. This is identical to `aw.updatetrigger <id> disabled`. Disabled triggers are ignored by trains and are colored gray.
-- `aw.settriggertrain <id> <wagon1> <wagon2> ...` (alias: `awt.train`) -- Assigns zero or more train cars to the trigger, replacing the current list of train cars, causing this trigger to automatically spawn a train with the specified workcarts and wagons, connected in order. The wagons will be automatically coupled to the workcart. Allowed values: `Workcart`, `WorkcartCovered`, `WagonA`, `WagonB`, `WagonC`, `WagonD`. To remove all train cars, run the command without specifying any train cars.
+- `aw.settriggertrain <id> <wagon1> <wagon2> ...` (alias: `awt.train`) -- Assigns zero or more train cars to the trigger, replacing the current list of train cars, causing this trigger to automatically spawn a train with the specified workcarts and wagons, connected in order. The wagons will be automatically coupled to the workcart. Allowed values: `Locomotive`, `Workcart`, `WorkcartCovered`, `WagonA`, `WagonB`, `WagonC`, `WagonFuel`, `WagonLoot`, `WagonResource`,. To remove all train cars, run the command without specifying any train cars.
 - `aw.respawntrigger <id>` (alias: `awt.respawn`) -- Despawns and respawns the train for the specified trigger. When used at a tunnel trigger, trains will be respawned at all instances of the tunnel trigger.
 - `aw.addtriggercommand <id> <command>` (alias: `awt.addcmd`) -- Adds the specified command to the trigger. which will be executed whenever a train passes through the trigger. You can use the magic variable `$id` in the command which will be replaced by the primary workcart's Net ID.
 - `aw.removetriggercommand <id> <number>` (alias: `awt.removecmd`) -- Removes the specified command from the trigger. The command number will be 1, 2, 3, etc. and will be visible on the trigger info when using `aw.showtriggers`.
@@ -184,7 +183,7 @@ Spawn exmaples:
 - `awt.train Workcart WagonA WagonB` -- Updates the trigger to spawn a workcart with one `WagonA` and one `WagonB` wagon coupled behind it.
 - `awt.train Workcart WagonC WagonC` -- Updates the trigger to spawn a workcart with two `WagonC` wagons coupled behind it.
 - `awt.train Workcart Workcart` -- Updates the trigger to spawn two workcarts coupled together.
-- `awt.train Workcart WagonA WagonB WagonC WagonD WorkcartCovered` -- Updates the trigger to spawn a workcart with all possible train car types coupled behind it.
+- `awt.train Locomotive Workcart WagonA WagonB WagonC WagonFuel WagonLoot WagonResource WorkcartCovered` -- Updates the trigger to spawn a workcart with all possible train car types coupled behind it.
 
 ## Configuration
 

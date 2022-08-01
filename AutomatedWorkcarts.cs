@@ -20,7 +20,7 @@ using static TrainTrackSpline;
 
 namespace Oxide.Plugins
 {
-    [Info("Automated Workcarts", "WhiteThunder", "0.28.0")]
+    [Info("Automated Workcarts", "WhiteThunder", "0.29.0")]
     [Description("Automates workcarts with NPC conductors.")]
     internal class AutomatedWorkcarts : CovalencePlugin
     {
@@ -35,8 +35,7 @@ namespace Oxide.Plugins
         private const string PermissionManageTriggers = "automatedworkcarts.managetriggers";
 
         private const string ClassicWorkcartPrefab = "assets/content/vehicles/workcart/workcart.entity.prefab";
-        private const string AboveGroundWorkcartPrefab = "assets/content/vehicles/workcart/workcart_aboveground.entity.prefab";
-        private const string AboveGroundWorkcartCoveredPrefab = "assets/content/vehicles/workcart/workcart_aboveground2.entity.prefab";
+
         private const string ShopkeeperPrefab = "assets/prefabs/npc/bandit/shopkeepers/bandit_shopkeeper.prefab";
         private const string GenericMapMarkerPrefab = "assets/prefabs/tools/map/genericradiusmarker.prefab";
         private const string VendingMapMarkerPrefab = "assets/prefabs/deployable/vendingmachine/vending_mapmarker.prefab";
@@ -1235,7 +1234,7 @@ namespace Oxide.Plugins
             };
 
             var finalDistance = Math.Abs(trainCar.rearCoupling.localPosition.z) + GetTrainCarFrontCouplingOffsetZ(prefabName);
-            var spawnDistance = Mathf.Max(finalDistance, 18);
+            var spawnDistance = Mathf.Max(finalDistance, 22);
 
             SplineInfo finalSplineInfo;
             var finalPosition = GetPositionAlongTrack(splineInfo, finalDistance, trackSelection, out finalSplineInfo);
@@ -1247,6 +1246,12 @@ namespace Oxide.Plugins
             var rearTrainCar = SpawnTrainCar(prefabName, resultPosition, resultRotation);
             if (rearTrainCar != null)
             {
+                if (rearTrainCar.FrontTrackSection == null)
+                {
+                    rearTrainCar.Kill();
+                    return null;
+                }
+
                 rearTrainCar.MoveFrontWheelsAlongTrackSpline(
                     rearTrainCar.FrontTrackSection,
                     rearTrainCar.FrontWheelSplineDist,
@@ -1580,12 +1585,15 @@ namespace Oxide.Plugins
 
             private static readonly Dictionary<string, TrainCarPrefab> AllowedPrefabs = new Dictionary<string, TrainCarPrefab>(StringComparer.InvariantCultureIgnoreCase)
             {
-                [WorkcartAlias] = new TrainCarPrefab(WorkcartAlias, AboveGroundWorkcartPrefab),
-                ["WorkcartCovered"] = new TrainCarPrefab("WorkcartCovered", AboveGroundWorkcartCoveredPrefab),
+                [WorkcartAlias] = new TrainCarPrefab(WorkcartAlias, "assets/content/vehicles/workcart/workcart_aboveground.entity.prefab"),
+                ["WorkcartCovered"] = new TrainCarPrefab("WorkcartCovered", "assets/content/vehicles/workcart/workcart_aboveground2.entity.prefab"),
+                ["Locomotive"] = new TrainCarPrefab("Locomotive", "assets/content/vehicles/locomotive/locomotive.entity.prefab"),
                 ["WagonA"] = new TrainCarPrefab("WagonA", "assets/content/vehicles/train/trainwagona.entity.prefab"),
                 ["WagonB"] = new TrainCarPrefab("WagonB", "assets/content/vehicles/train/trainwagonb.entity.prefab"),
                 ["WagonC"] = new TrainCarPrefab("WagonC", "assets/content/vehicles/train/trainwagonc.entity.prefab"),
-                ["WagonD"] = new TrainCarPrefab("WagonD", "assets/content/vehicles/train/trainwagond.entity.prefab"),
+                ["WagonFuel"] = new TrainCarPrefab("WagonFuel", "assets/content/vehicles/train/trainwagonunloadablefuel.entity.prefab"),
+                ["WagonLoot"] = new TrainCarPrefab("WagonLoot", "assets/content/vehicles/train/trainwagonunloadableloot.entity.prefab"),
+                ["WagonResource"] = new TrainCarPrefab("WagonResource", "assets/content/vehicles/train/trainwagonunloadable.entity.prefab"),
             };
 
             public static TrainCarPrefab FindPrefab(string trainCarAlias)
