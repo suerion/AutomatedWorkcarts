@@ -14,6 +14,7 @@ using System.Linq;
 using System.Reflection;
 using System.Text.RegularExpressions;
 using UnityEngine;
+using static TrainCar;
 using static TrainEngine;
 using static TrainTrackSpline;
 
@@ -1465,7 +1466,7 @@ namespace Oxide.Plugins
 
             TrainTrackSpline spline;
             float distanceResult;
-            if (!TrainTrackSpline.TryFindTrackNearby(hitPosition, 5, out spline, out distanceResult))
+            if (!TrainTrackSpline.TryFindTrackNear(hitPosition, 5, out spline, out distanceResult))
             {
                 trackPosition = Vector3.zero;
                 return false;
@@ -1537,7 +1538,7 @@ namespace Oxide.Plugins
             if (trainCar.IsDestroyed)
                 return;
 
-            if (!trainCar.IsEngine)
+            if (trainCar.CarType != TrainCarType.Engine)
             {
                 Effect.server.Run(BradleyExplosionEffectPrefab, trainCar.GetExplosionPos(), Vector3.up, sourceConnection: null, broadcast: true);
             }
@@ -2324,7 +2325,7 @@ namespace Oxide.Plugins
 
                 TrainTrackSpline spline;
                 float distanceOnSpline;
-                if (TrainTrackSpline.TryFindTrackNearby(WorldPosition, 2, out spline, out distanceOnSpline))
+                if (TrainTrackSpline.TryFindTrackNear(WorldPosition, 2, out spline, out distanceOnSpline))
                 {
                     Spline = spline;
                     DistanceOnSpline = distanceOnSpline;
