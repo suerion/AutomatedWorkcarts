@@ -1450,7 +1450,7 @@ namespace Oxide.Plugins
         private static bool TryGetHitPosition(BasePlayer player, out Vector3 position, float maxDistance)
         {
             RaycastHit hit;
-            if (Physics.Raycast(player.eyes.HeadRay(), out hit, maxDistance, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore))
+            if (Physics.Raycast(player.eyes.HeadRay(), out hit, maxDistance, Rust.Layers.Solid, QueryTriggerInteraction.Ignore))
             {
                 position = hit.point;
                 return true;
