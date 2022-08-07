@@ -820,19 +820,11 @@ namespace Oxide.Plugins
             return false;
         }
 
-        private bool VerifyValidTrigger(IPlayer player, string cmd, string[] args, string errorMessageName, out TriggerData triggerData, out string[] optionArgs)
+        private bool VerifyTriggerWhereAiming(IPlayer player, string cmd, string[] args, string errorMessageName, out TriggerData triggerData, out string[] optionArgs)
         {
             var basePlayer = player.Object as BasePlayer;
             optionArgs = args;
             triggerData = null;
-
-            int triggerId;
-            WorkcartTriggerType triggerType;
-            if (args.Length > 0 && IsTriggerArg(player, args[0], out triggerId, out triggerType))
-            {
-                optionArgs = args.Skip(1).ToArray();
-                return VerifyTriggerExists(player, triggerId, triggerType, out triggerData);
-            }
 
             triggerData = _triggerManager.FindNearestTriggerWhereAiming(basePlayer);
             if (triggerData != null)
@@ -848,12 +840,26 @@ namespace Oxide.Plugins
             triggerData = null;
             optionArgs = null;
 
-            if (player.IsServer
-                || !VerifyPermission(player, PermissionManageTriggers)
+            if (!VerifyPermission(player, PermissionManageTriggers)
                 || !VerifyAnyTriggers(player))
                 return false;
 
-            return VerifyValidTrigger(player, cmd, args, errorMessageName, out triggerData, out optionArgs);
+            int triggerId;
+            WorkcartTriggerType triggerType;
+            if (args.Length > 0 && IsTriggerArg(player, args[0], out triggerId, out triggerType))
+            {
+                optionArgs = args.Skip(1).ToArray();
+                return VerifyTriggerExists(player, triggerId, triggerType, out triggerData);
+            }
+
+            if (player.IsServer)
+            {
+                // Server commands must specify a trigger id.
+                ReplyToPlayer(player, errorMessageName, cmd, GetTriggerOptions(player));
+                return false;
+            }
+
+            return VerifyTriggerWhereAiming(player, cmd, args, errorMessageName, out triggerData, out optionArgs);
         }
 
         private bool VerifySupportedNearbyTrainTunnel(IPlayer player, Vector3 trackPosition, out DungeonCellWrapper dungeonCellWrapper)
@@ -3002,6 +3008,12 @@ namespace Oxide.Plugins
 
             public void ShowAllRepeatedly(BasePlayer player, int duration = -1)
             {
+                // Some commands can be run from the server, in which case the BasePlayer will be null.
+                if (player == null)
+                {
+                    return;
+                }
+
                 var playerInfo = GetOrCreatePlayerInfo(player);
 
                 ShowNearbyTriggers(player, player.transform.position, playerInfo.Route);
