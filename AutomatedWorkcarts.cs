@@ -1229,22 +1229,30 @@ namespace Oxide.Plugins
             return distanceOnSpline;
         }
 
-        private static TrainCar AddTrainCar(TrainCar trainCar, string prefabName, TrackSelection trackSelection, bool allowRearCoupling = true)
+        private static TrainCar AddTrainCar(TrainCar frontTrainCar, TrainCarPrefab frontTrainCarPrefab, TrainCarPrefab trainCarPrefab, TrackSelection trackSelection, bool allowRearCoupling = true)
         {
-            var rearSpline = trainCar.FrontTrackSection;
-            var position = trainCar.transform.position;
-            var distanceOnSpline = GetSplineDistance(rearSpline, position);
+            var frontSpline = frontTrainCar.FrontTrackSection;
+            var position = frontTrainCar.transform.position;
+            var distanceOnSpline = GetSplineDistance(frontSpline, position);
 
-            var askerIsForward = rearSpline.IsForward(trainCar.transform.forward, distanceOnSpline);
+            var frontTrainCarForward = frontTrainCarPrefab.Reverse
+                ? -frontTrainCar.transform.forward
+                : frontTrainCar.transform.forward;
+
+            var askerIsForward = frontSpline.IsForward(frontTrainCarForward, distanceOnSpline);
             var splineInfo = new SplineInfo
             {
-                Spline = rearSpline,
+                Spline = frontSpline,
                 Distance = distanceOnSpline,
                 Ascending = !askerIsForward,
                 IsForward = askerIsForward,
             };
 
-            var finalDistance = Math.Abs(trainCar.rearCoupling.localPosition.z) + GetTrainCarFrontCouplingOffsetZ(prefabName);
+            var rearCouplingTransform = frontTrainCarPrefab.Reverse
+                ? frontTrainCar.frontCoupling
+                : frontTrainCar.rearCoupling;
+
+            var finalDistance = Math.Abs(rearCouplingTransform.localPosition.z) + GetTrainCarFrontCouplingOffsetZ(trainCarPrefab.PrefabPath);
             var spawnDistance = Mathf.Max(finalDistance, 22);
 
             SplineInfo finalSplineInfo;
@@ -1252,9 +1260,16 @@ namespace Oxide.Plugins
 
             SplineInfo spawnSplineInfo;
             var resultPosition = GetPositionAlongTrack(finalSplineInfo, spawnDistance - finalDistance, trackSelection, out spawnSplineInfo);
-            var resultRotation = GetSplineTangentRotation(spawnSplineInfo.Spline, spawnSplineInfo.Distance, trainCar.transform.rotation);
+            var resultRotation = GetSplineTangentRotation(spawnSplineInfo.Spline, spawnSplineInfo.Distance, frontTrainCar.transform.rotation);
 
-            var rearTrainCar = SpawnTrainCar(prefabName, resultPosition, resultRotation);
+            if (trainCarPrefab.Reverse != frontTrainCarPrefab.Reverse)
+            {
+                resultRotation = Quaternion.LookRotation(resultRotation * -Vector3.forward);
+            }
+
+            // TODO: Fix issue where workcarts jump on start, when first two are both reverse
+
+            var rearTrainCar = SpawnTrainCar(trainCarPrefab.PrefabPath, resultPosition, resultRotation);
             if (rearTrainCar != null)
             {
                 if (rearTrainCar.FrontTrackSection == null)
@@ -1272,15 +1287,19 @@ namespace Oxide.Plugins
                 );
 
                 rearTrainCar.transform.position = finalPosition;
-                TryCoupleTrainCars(trainCar, rearTrainCar);
+
+                var frontCoupling = frontTrainCarPrefab.Reverse
+                    ? frontTrainCar.coupling.frontCoupling
+                    : frontTrainCar.coupling.rearCoupling;
+
+                var rearCoupling = trainCarPrefab.Reverse
+                    ? rearTrainCar.coupling.rearCoupling
+                    : rearTrainCar.coupling.frontCoupling;
+
+                frontCoupling.TryCouple(rearCoupling, reflect: true);
             }
 
             return rearTrainCar;
-        }
-
-        private static void TryCoupleTrainCars(TrainCar front, TrainCar rear)
-        {
-            front.coupling.rearCoupling.TryCouple(rear.coupling.frontCoupling, reflect: true);
         }
 
         private static float GetTrainCarFrontCouplingOffsetZ(string prefabName)
@@ -1594,17 +1613,37 @@ namespace Oxide.Plugins
         {
             public const string WorkcartAlias = "Workcart";
 
+            private const string WorkcartPrefab = "assets/content/vehicles/workcart/workcart_aboveground.entity.prefab";
+            private const string WorkcartCoveredPrefab = "assets/content/vehicles/workcart/workcart_aboveground2.entity.prefab";
+            private const string LocomotivePrefab = "assets/content/vehicles/locomotive/locomotive.entity.prefab";
+            private const string WagonAPrefab = "assets/content/vehicles/train/trainwagona.entity.prefab";
+            private const string WagonBPrefab = "assets/content/vehicles/train/trainwagonb.entity.prefab";
+            private const string WagonCPrefab = "assets/content/vehicles/train/trainwagonc.entity.prefab";
+            private const string WagonFuelPrefab = "assets/content/vehicles/train/trainwagonunloadablefuel.entity.prefab";
+            private const string WagonLootPrefab = "assets/content/vehicles/train/trainwagonunloadableloot.entity.prefab";
+            private const string WagonResourcePrefab = "assets/content/vehicles/train/trainwagonunloadable.entity.prefab";
+
             private static readonly Dictionary<string, TrainCarPrefab> AllowedPrefabs = new Dictionary<string, TrainCarPrefab>(StringComparer.InvariantCultureIgnoreCase)
             {
-                [WorkcartAlias] = new TrainCarPrefab(WorkcartAlias, "assets/content/vehicles/workcart/workcart_aboveground.entity.prefab"),
-                ["WorkcartCovered"] = new TrainCarPrefab("WorkcartCovered", "assets/content/vehicles/workcart/workcart_aboveground2.entity.prefab"),
-                ["Locomotive"] = new TrainCarPrefab("Locomotive", "assets/content/vehicles/locomotive/locomotive.entity.prefab"),
-                ["WagonA"] = new TrainCarPrefab("WagonA", "assets/content/vehicles/train/trainwagona.entity.prefab"),
-                ["WagonB"] = new TrainCarPrefab("WagonB", "assets/content/vehicles/train/trainwagonb.entity.prefab"),
-                ["WagonC"] = new TrainCarPrefab("WagonC", "assets/content/vehicles/train/trainwagonc.entity.prefab"),
-                ["WagonFuel"] = new TrainCarPrefab("WagonFuel", "assets/content/vehicles/train/trainwagonunloadablefuel.entity.prefab"),
-                ["WagonLoot"] = new TrainCarPrefab("WagonLoot", "assets/content/vehicles/train/trainwagonunloadableloot.entity.prefab"),
-                ["WagonResource"] = new TrainCarPrefab("WagonResource", "assets/content/vehicles/train/trainwagonunloadable.entity.prefab"),
+                [WorkcartAlias] = new TrainCarPrefab(WorkcartAlias, WorkcartPrefab),
+                ["WorkcartCovered"] = new TrainCarPrefab("WorkcartCovered", WorkcartCoveredPrefab),
+                ["Locomotive"] = new TrainCarPrefab("Locomotive", LocomotivePrefab),
+                ["WagonA"] = new TrainCarPrefab("WagonA", WagonAPrefab),
+                ["WagonB"] = new TrainCarPrefab("WagonB", WagonBPrefab),
+                ["WagonC"] = new TrainCarPrefab("WagonC", WagonCPrefab),
+                ["WagonFuel"] = new TrainCarPrefab("WagonFuel", WagonFuelPrefab),
+                ["WagonLoot"] = new TrainCarPrefab("WagonLoot", WagonLootPrefab),
+                ["WagonResource"] = new TrainCarPrefab("WagonResource", WagonResourcePrefab),
+
+                [$"{WorkcartAlias}_R"] = new TrainCarPrefab($"{WorkcartAlias}_R", WorkcartPrefab, reverse: true),
+                ["WorkcartCovered_R"] = new TrainCarPrefab("WorkcartCovered_R", WorkcartCoveredPrefab, reverse: true),
+                ["Locomotive_R"] = new TrainCarPrefab("Locomotive_R", LocomotivePrefab, reverse: true),
+                ["WagonA_R"] = new TrainCarPrefab("WagonA_R", WagonAPrefab, reverse: true),
+                ["WagonB_R"] = new TrainCarPrefab("WagonB_R", WagonBPrefab, reverse: true),
+                ["WagonC_R"] = new TrainCarPrefab("WagonC_R", WagonCPrefab, reverse: true),
+                ["WagonFuel_R"] = new TrainCarPrefab("WagonFuel_R", WagonFuelPrefab, reverse: true),
+                ["WagonLoot_R"] = new TrainCarPrefab("WagonLoot_R", WagonLootPrefab, reverse: true),
+                ["WagonResource_R"] = new TrainCarPrefab("WagonResource_R", WagonResourcePrefab, reverse: true),
             };
 
             public static TrainCarPrefab FindPrefab(string trainCarAlias)
@@ -1622,11 +1661,13 @@ namespace Oxide.Plugins
 
             public string TrainCarAlias;
             public string PrefabPath;
+            public bool Reverse;
 
-            public TrainCarPrefab(string trainCarAlias, string prefabPath)
+            public TrainCarPrefab(string trainCarAlias, string prefabPath, bool reverse = false)
             {
                 TrainCarAlias = trainCarAlias;
                 PrefabPath = prefabPath;
+                Reverse = reverse;
             }
         }
 
@@ -2465,6 +2506,7 @@ namespace Oxide.Plugins
                 var trackSelection = ApplyTrackSelection(TrackSelection.Default, TriggerData.GetTrackSelectionInstruction());
 
                 TrainCar previousTrainCar = null;
+                TrainCarPrefab previousTrainCarPrefab = null;
 
                 foreach (var trainCarAlias in TriggerData.TrainCars)
                 {
@@ -2486,15 +2528,23 @@ namespace Oxide.Plugins
                             }
                         }
 
-                        previousTrainCar = SpawnTrainCar(workcartPrefab, worldPosition, SpawnRotation);
+                        var rotation = SpawnRotation;
+                        if (trainCarPrefab.Reverse)
+                        {
+                            rotation = Quaternion.LookRotation(rotation * -Vector3.forward);
+                        }
+
+                        previousTrainCar = SpawnTrainCar(workcartPrefab, worldPosition, rotation);
                     }
                     else
                     {
-                        previousTrainCar = AddTrainCar(previousTrainCar, trainCarPrefab.PrefabPath, trackSelection);
+                        previousTrainCar = AddTrainCar(previousTrainCar, previousTrainCarPrefab, trainCarPrefab, trackSelection);
                     }
 
                     if ((object)previousTrainCar == null)
                         break;
+
+                    previousTrainCarPrefab = trainCarPrefab;
 
                     _spawnedTrainCars.Add(previousTrainCar);
                     SpawnedTrainCarComponent.AddToEntity(previousTrainCar, this);
