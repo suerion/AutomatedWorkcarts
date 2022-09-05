@@ -14,6 +14,7 @@ using System.Linq;
 using System.Reflection;
 using System.Text.RegularExpressions;
 using UnityEngine;
+using static BaseEntity;
 using static TrainCar;
 using static TrainEngine;
 using static TrainTrackSpline;
@@ -48,6 +49,8 @@ namespace Oxide.Plugins
         private static readonly object False = false;
         private static readonly Regex IdRegex = new Regex("\\$id", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
+        private readonly BasePlayer[] _playerQueryResults = new BasePlayer[64];
+
         private Configuration _pluginConfig;
         private StoredPluginData _pluginData;
         private StoredTunnelData _tunnelData;
@@ -78,7 +81,9 @@ namespace Oxide.Plugins
             Unsubscribe(nameof(OnEntitySpawned));
 
             if (!_pluginConfig.GenericMapMarker.Enabled)
+            {
                 Unsubscribe(nameof(OnPlayerConnected));
+            }
         }
 
         private void OnServerInitialized()
@@ -3538,6 +3543,9 @@ namespace Oxide.Plugins
                 }
             }
 
+            private bool IsStopped => _trainState is StoppedState;
+            private bool IsStopping => (_trainState as BrakingState)?.IsStopping ?? false;
+
             private SpawnedTrainCarTracker _spawnedTrainCarTracker => TrainManager.SpawnedTrainCarTracker;
 
             private readonly List<WorkcartController> _workcartControllers = new List<WorkcartController>();
@@ -3546,6 +3554,7 @@ namespace Oxide.Plugins
             private TrainState _trainState;
             private WorkcartData _workcartData;
 
+            private Func<BasePlayer, bool> _nearbyPlayerFilter;
             private TrainCollisionTrigger _collisionTriggerA;
             private TrainCollisionTrigger _collisionTriggerB;
             private MapMarkerGenericRadius _genericMarker;
@@ -3566,6 +3575,7 @@ namespace Oxide.Plugins
             {
                 TrainManager = workcartManager;
                 _workcartData = workcarData;
+                _nearbyPlayerFilter = NearbyPlayerFilter;
             }
 
             public void AddTrainCarComponent(ITrainCarComponent trainCarComponent)
@@ -3617,6 +3627,11 @@ namespace Oxide.Plugins
 
                 SetThrottle(throttle);
                 SetTrackSelection(_workcartData.TrackSelection ?? PluginConfig.GetDefaultTrackSelection());
+
+                if (PluginConfig.PlayHornForNearbyPlayersInRadius > 0)
+                {
+                    PrimaryWorkcartController.InvokeRandomized(MaybeToggleHorn, 1f, 1f, 0.15f);
+                }
             }
 
             public void SetThrottle(EngineSpeeds throttle)
@@ -3790,6 +3805,48 @@ namespace Oxide.Plugins
                 }
 
                 TrainManager.UnregisterTrainController(this);
+            }
+
+            private bool IsPlayerOnboardTrain(BasePlayer player)
+            {
+                var trainCar = player.GetParentEntity() as TrainCar
+                    ?? player.GetMountedVehicle() as TrainCar;
+
+                if ((object)trainCar == null)
+                    return false;
+
+                return TrainManager.GetTrainController(trainCar) == this;
+            }
+
+            private bool NearbyPlayerFilter(BasePlayer player)
+            {
+                if (player.IsDestroyed || !player.IsConnected || !player.userID.IsSteamId() || player.IsDead() || player.IsSleeping() || player.IsSpectating())
+                    return false;
+
+                if (IsPlayerOnboardTrain(player))
+                    return false;
+
+                return true;
+            }
+
+            private bool ShouldPlayHorn()
+            {
+                if (IsStopped || IsStopping)
+                    return false;
+
+                return Query.Server.GetPlayersInSphere(
+                    PrimaryWorkcartController.Position,
+                    PluginConfig.PlayHornForNearbyPlayersInRadius,
+                    _pluginInstance._playerQueryResults,
+                    _nearbyPlayerFilter
+                ) > 0;
+            }
+
+            private void MaybeToggleHorn()
+            {
+                _pluginInstance.TrackStart();
+                PrimaryWorkcart.SetFlag(TrainEngine.Flag_Horn, ShouldPlayHorn());
+                _pluginInstance.TrackEnd();
             }
 
             private void MaybeAddMapMarkers()
@@ -4655,6 +4712,9 @@ namespace Oxide.Plugins
         {
             [JsonProperty("EnableTerrainCollision")]
             public bool EnableTerrainCollision = true;
+
+            [JsonProperty("PlayHornForNearbyPlayersInRadius")]
+            public float PlayHornForNearbyPlayersInRadius = 0f;
 
             [JsonProperty("DefaultSpeed")]
             public string DefaultSpeed = EngineSpeeds.Fwd_Hi.ToString();

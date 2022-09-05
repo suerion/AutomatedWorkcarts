@@ -192,6 +192,7 @@ Default configuration:
 ```json
 {
   "EnableTerrainCollision": true,
+  "PlayHornForNearbyPlayersInRadius": 0.0,
   "DefaultSpeed": "Fwd_Hi",
   "DefaultTrackSelection": "Left",
   "BulldozeOffendingWorkcarts": false,
@@ -234,6 +235,7 @@ Default configuration:
 ```
 
 - `EnableTerrainCollision` (`true` or `false`) -- While `true` (default), trains will be unable to travel through terrain or terrain triggers. This doesn't matter for procedural maps because vanilla train tracks never pass through terrain, but if you have a custom map which has train tunnels that pass through terrain, you should set this to `false` to allow trains to travel through those tunnels. This option affects all trains, regardless of whether they were spawned or controlled by this plugin.
+- `PlayHornForNearbyPlayersInRadius` -- Distance from nearby players required to automatically play the train horn. Set to `0.0` to disable the horn.
 - `DefaultSpeed` -- Default speed to use when a train starts being automated.
   - Allowed values: `"Rev_Hi"` | `"Rev_Med"` | `"Rev_Lo"` | `"Zero"` | `"Fwd_Lo"` | `"Fwd_Med"` | `"Fwd_Hi"`.
   - This value is ignored if the train is on a trigger that specifies speed.
