@@ -226,7 +226,7 @@ Default configuration:
   },
   "VendingMapMarker": {
     "Enabled": false,
-    "Name": "Automated Workcart"
+    "Name": "Automated Train"
   },
   "MapMarkerUpdateInveralSeconds": 5.0,
   "TriggerDisplayDistance": 150.0

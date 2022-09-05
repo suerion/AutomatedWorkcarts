@@ -4639,7 +4639,7 @@ namespace Oxide.Plugins
             public bool Enabled = false;
 
             [JsonProperty("Name")]
-            public string Name = "Automated Workcart";
+            public string Name = "Automated Train";
         }
 
         private class CustomMarkerOptions
